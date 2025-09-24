@@ -1,4 +1,7 @@
 package com.questify.domain;
 
-public class Role {
+public enum Role {
+    USER,
+    REVIEWER,
+    ADMIN
 }
