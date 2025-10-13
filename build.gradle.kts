@@ -89,8 +89,8 @@ sonar {
     properties {
         property("sonar.projectKey", "MihaiCatalin22_Questify")
         property("sonar.organization", "mihaicatalin22")
-        property("sonar.organization", System.getenv("SONAR_ORG") ?: "local")
-        property("sonar.host.url", System.getenv("SONAR_HOST_URL") ?: "http://localhost:9000")
+//        property("sonar.organization", System.getenv("SONAR_ORG") ?: "local")
+        property("sonar.host.url", "https://sonarcloud.io")
         property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
         property("sonar.qualitygate.wait", "true")
     }
