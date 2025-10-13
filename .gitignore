@@ -40,3 +40,17 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### backend ###
+QuestifyBE/.gradle/
+
+QuestifyBE/out/
+
+### frontend ###
+QuestifyFE/node_modules/
+QuestifyFE/dist/
+QuestifyFE/.vite/
+QuestifyFE/.turbo/
+
+.DS_Store
+.idea/
