@@ -1,7 +1,7 @@
 package com.questify.tests.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.questify.Main;
+import com.questify.Questify;
 import com.questify.domain.User;
 import com.questify.dto.UserDtos;
 import com.questify.persistence.UserRepository;
@@ -21,7 +21,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(classes = Main.class)
+@SpringBootTest(classes = Questify.class)
 @AutoConfigureMockMvc(addFilters = false)
 class UserControllerTest {
 

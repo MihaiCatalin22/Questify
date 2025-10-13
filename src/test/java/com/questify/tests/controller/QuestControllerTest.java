@@ -1,7 +1,7 @@
 package com.questify.tests.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.questify.Main;
+import com.questify.Questify;
 import com.questify.domain.QuestStatus;
 import com.questify.dto.QuestDtos;
 import com.questify.service.QuestService;
@@ -23,7 +23,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(classes = Main.class)
+@SpringBootTest(classes = Questify.class)
 @AutoConfigureMockMvc(addFilters = false)
 class QuestControllerTest {
 

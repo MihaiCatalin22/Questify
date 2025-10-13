@@ -3,7 +3,7 @@ plugins {
     id("org.springframework.boot") version "3.5.5"
     id("io.spring.dependency-management") version "1.1.7"
     id("jacoco")
-    id("org.sonarqube") version "4.4.1.3373"
+    id("org.sonarqube") version "6.3.1.5724"
 }
 
 group = "com.questify"
@@ -87,7 +87,8 @@ tasks.jacocoTestReport {
 
 sonar {
     properties {
-        property("sonar.projectKey", "questify")
+        property("sonar.projectKey", "MihaiCatalin22_Questify")
+        property("sonar.organization", "mihaicatalin22")
         property("sonar.organization", System.getenv("SONAR_ORG") ?: "local")
         property("sonar.host.url", System.getenv("SONAR_HOST_URL") ?: "http://localhost:9000")
         property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
