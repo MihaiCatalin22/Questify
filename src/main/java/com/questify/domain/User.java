@@ -40,6 +40,7 @@ public class User {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
     @Enumerated(EnumType.STRING)
+    @Builder.Default
     private Set<Role> roles = new HashSet<>();
 
     @Column(nullable = false, updatable = false)

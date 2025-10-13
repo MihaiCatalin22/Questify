@@ -15,7 +15,7 @@ public class UserDtos {
             Long id,
             String username,
             String email,
-            String displayName
+            String displayName,
             // String avatarUrl
-    ) {}
+            Object o) {}
 }

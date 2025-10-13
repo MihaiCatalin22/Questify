@@ -4,7 +4,7 @@ import com.questify.domain.Submission;
 import com.questify.dto.SubmissionDtos;
 import org.mapstruct.*;
 
-@Mapper(componentModel = "spring")
+@Mapper(componentModel = "spring", builder = @Builder(disableBuilder = true))
 public interface SubmissionMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "quest", ignore = true)

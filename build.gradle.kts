@@ -46,16 +46,18 @@ dependencies {
     annotationProcessor("org.mapstruct:mapstruct-processor:1.6.3")
     compileOnly("org.projectlombok:lombok:1.18.42")
     annotationProcessor("org.projectlombok:lombok:1.18.42")
-
-    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
+    testImplementation("org.springframework.boot:spring-boot-starter-test") {
+        exclude(group = "org.junit.vintage", module = "junit-vintage-engine")
+    }
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")
 
-    testImplementation(platform("org.testcontainers:testcontainers-bom:1.21.3"))
-    testImplementation("org.testcontainers:junit-jupiter")
-    testImplementation("org.testcontainers:mysql")
-    testImplementation("org.testcontainers:kafka")
-    testImplementation("org.testcontainers:redis")
+//    testImplementation(platform("org.testcontainers:testcontainers-bom:1.21.3"))
+//    testImplementation("org.testcontainers:junit-jupiter")
+//    testImplementation("org.testcontainers:mysql")
+//    testImplementation("org.testcontainers:kafka")
+//    testImplementation("org.testcontainers:redis")
 
     testRuntimeOnly("com.h2database:h2")
 

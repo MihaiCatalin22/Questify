@@ -29,6 +29,7 @@ public class Quest {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 24)
+    @Builder.Default
     private QuestStatus status = QuestStatus.DRAFT;
 
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
