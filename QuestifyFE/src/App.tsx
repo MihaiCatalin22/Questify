@@ -4,6 +4,13 @@ import UsersList from './pages/users/UsersList';
 import UsersForm from './pages/users/UsersForm';
 import Login from './pages/auth/Login';
 
+import QuestsList from './pages/quests/QuestsList';
+import QuestForm from './pages/quests/QuestForm';
+import QuestDetail from './pages/quests/QuestDetail';
+
+import SubmissionsList from './pages/submissions/SubmissionsList';
+import SubmissionDetail from './pages/submissions/SubmissionDetail';
+
 function Shell() {
   return (
     <div className="min-h-screen">
@@ -11,6 +18,8 @@ function Shell() {
         <Link to="/" className="font-semibold">Questify</Link>
         <nav className="flex gap-3 text-sm">
           <Link to="/users" className="underline">Users</Link>
+          <Link to="/quests" className="underline">Quests</Link>
+          <Link to="/submissions" className="underline">Submissions</Link>
         </nav>
       </header>
       <main>
@@ -25,10 +34,22 @@ export default function App() {
     <Routes>
       <Route element={<Shell />}>
         <Route path="/login" element={<Login />} />
-        <Route element={<ProtectedRoute />}>
+        // <Route element={<ProtectedRoute />}>
+          {/* Users */}
           <Route path="/users" element={<UsersList />} />
-          <Route path="/users/:id" element={<UsersForm />} />
           <Route path="/users/new" element={<UsersForm />} />
+          <Route path="/users/:id" element={<UsersForm />} />
+
+          {/* Quests */}
+          <Route path="/quests" element={<QuestsList />} />
+          <Route path="/quests/new" element={<QuestForm />} />
+          <Route path="/quests/:id" element={<QuestDetail />} />
+          <Route path="/quests/:id/edit" element={<QuestForm />} />
+
+          {/* Submissions */}
+          <Route path="/submissions" element={<SubmissionsList />} />
+          <Route path="/submissions/:id" element={<SubmissionDetail />} />
+
           <Route index element={<div className="p-6">Welcome to Questify</div>} />
         </Route>
       </Route>
