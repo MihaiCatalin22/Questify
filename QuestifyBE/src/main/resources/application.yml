@@ -1,0 +1,29 @@
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    key-store: classpath:certs/questify-local.p12
+    key-store-type: PKCS12
+    key-store-password: changeit
+    key-alias: questify-local
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  cache:
+    type: redis
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+questify:
+  storage:
+    endpoint: https://localhost:9000
+    accessKey: questify
+    secretKey: questifysecret
+    bucket: questify-proofs
+    region: nl-1
+    publicBaseUrl: https://localhost:9000/questify-proofs

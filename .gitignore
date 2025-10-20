@@ -45,6 +45,8 @@ bin/
 QuestifyBE/.gradle/
 
 QuestifyBE/out/
+QuestifyBE/src/main/resources/certs/
+infra/minio/certs/
 
 ### frontend ###
 QuestifyFE/node_modules/
@@ -54,3 +56,4 @@ QuestifyFE/.turbo/
 
 .DS_Store
 .idea/
+*.pem

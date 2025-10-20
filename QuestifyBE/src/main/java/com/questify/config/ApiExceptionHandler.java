@@ -1,6 +1,7 @@
 package com.questify.config;
 
 import com.questify.config.NotFoundException;
+import com.questify.config.security.RateLimitService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -27,5 +28,10 @@ public class ApiExceptionHandler {
         var first = ex.getBindingResult().getAllErrors().stream()
                 .findFirst().map(e -> e.getDefaultMessage()).orElse("Validation error");
         return ResponseEntity.badRequest().body(Map.of("error", first));
+    }
+
+    @ExceptionHandler(RateLimitService.TooManyRequestsException.class)
+    public ResponseEntity<Map<String,String>> tooMany(RateLimitService.TooManyRequestsException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of("error", e.getMessage()));
     }
 }

@@ -32,7 +32,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
     implementation("org.springframework.kafka:spring-kafka")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
-
+    implementation("org.springframework.boot:spring-boot-starter-cache")
+    implementation("software.amazon.awssdk:s3:2.25.39")
+    implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.13")
 
     implementation("org.flywaydb:flyway-core:11.13.0")

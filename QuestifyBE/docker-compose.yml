@@ -1,0 +1,22 @@
+version: "3.8"
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - "./infra/redis/data:/data"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: questify
+      MINIO_ROOT_PASSWORD: questifysecret   # ⬅ matches application.yml now
+    ports:
+      - "9000:9000"   # HTTPS S3 API (certs mounted)
+      - "9001:9001"   # Console (HTTP by default; ok for dev)
+    volumes:
+      - "./infra/minio/data:/data"
+      - "./infra/minio/certs:/root/.minio/certs"  # public.crt + private.key live here
