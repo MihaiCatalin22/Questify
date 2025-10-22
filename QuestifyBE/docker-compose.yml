@@ -1,4 +1,5 @@
 version: "3.8"
+
 services:
   redis:
     image: redis:7-alpine
@@ -7,16 +8,48 @@ services:
       - "6379:6379"
     volumes:
       - "./infra/redis/data:/data"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
 
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
+      # dev creds; do NOT use in prod
       MINIO_ROOT_USER: questify
-      MINIO_ROOT_PASSWORD: questifysecret   # ⬅ matches application.yml now
+      MINIO_ROOT_PASSWORD: questifysecret
     ports:
-      - "9000:9000"   # HTTPS S3 API (certs mounted)
-      - "9001:9001"   # Console (HTTP by default; ok for dev)
+      - "9000:9000"   # S3 API (HTTP or HTTPS if certs mounted)
+      - "9001:9001"   # Console (HTTP; ok for dev)
     volumes:
       - "./infra/minio/data:/data"
-      - "./infra/minio/certs:/root/.minio/certs"  # public.crt + private.key live here
+      - "./infra/minio/certs:/root/.minio/certs"
+    restart: unless-stopped
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
+#      interval: 3s
+#      timeout: 3s
+#      retries: 30
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: >
+      /bin/sh -c "
+      until wget -q --spider --no-check-certificate https://minio:9000/minio/health/ready; do
+        echo 'waiting for minio...'; sleep 2;
+      done &&
+      mc alias set local https://minio:9000 ${MINIO_ROOT_USER:-questify} ${MINIO_ROOT_PASSWORD:-questifysecret} --insecure &&
+      mc mb -p local/questify || true &&
+      printf '[{\"AllowedOrigin\":[\"https://localhost:5173\"],\"AllowedMethod\":[\"GET\",\"PUT\",\"POST\",\"DELETE\",\"HEAD\"],\"AllowedHeader\":[\"*\"],\"ExposeHeader\":[\"ETag\"],\"MaxAgeSeconds\":3600}]' > /tmp/cors.json &&
+      mc bucket cors set local/questify /tmp/cors.json &&
+      echo \"✔ questify bucket ensured + CORS set\" &&
+      exit 0
+      "
+      restart: "no"

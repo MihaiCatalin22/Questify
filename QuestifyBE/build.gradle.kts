@@ -13,10 +13,6 @@ java{
     toolchain {languageVersion.set(JavaLanguageVersion.of(21))}
 }
 
-repositories {
-    mavenCentral()
-}
-
 configurations{
     compileOnly {
         extendsFrom(configurations.annotationProcessor.get())
@@ -40,6 +36,11 @@ dependencies {
     implementation("org.flywaydb:flyway-core:11.13.0")
     runtimeOnly("com.mysql:mysql-connector-j")
 
+    implementation("io.jsonwebtoken:jjwt-api:0.11.5")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.11.5")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.11.5")
+    runtimeOnly("com.h2database:h2")
+    testRuntimeOnly("com.h2database:h2")
     implementation("io.micrometer:micrometer-registry-prometheus:1.15.1")
     implementation("io.micrometer:micrometer-tracing-bridge-otel:1.5.3")
     implementation("io.opentelemetry:opentelemetry-exporter-otlp:1.54.0")
@@ -66,6 +67,8 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+
 }
 
 tasks.test {

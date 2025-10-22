@@ -1,8 +1,11 @@
-import { Link, Outlet, Route, Routes } from 'react-router-dom';
+import { Link, Outlet, Route, Routes, Navigate } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
+
+import Login from './pages/auth/LoginPage';
+import RegisterPage from './pages/auth/RegisterPage';
+
 import UsersList from './pages/users/UsersList';
 import UsersForm from './pages/users/UsersForm';
-import Login from './pages/auth/Login';
 
 import QuestsList from './pages/quests/QuestsList';
 import QuestForm from './pages/quests/QuestForm';
@@ -15,7 +18,7 @@ function Shell() {
   return (
     <div className="min-h-screen">
       <header className="px-6 py-3 border-b flex items-center gap-4">
-        <Link to="/" className="font-semibold">Questify</Link>
+        <Link to="/quests" className="font-semibold">Questify</Link>
         <nav className="flex gap-3 text-sm">
           <Link to="/users" className="underline">Users</Link>
           <Link to="/quests" className="underline">Quests</Link>
@@ -32,9 +35,14 @@ function Shell() {
 export default function App() {
   return (
     <Routes>
-      <Route element={<Shell />}>
-        <Route path="/login" element={<Login />} />
-        // <Route element={<ProtectedRoute />}>
+      {/* Public routes */}
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<RegisterPage />} />
+
+      {/* Protected app routes */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<Shell />}>
           {/* Users */}
           <Route path="/users" element={<UsersList />} />
           <Route path="/users/new" element={<UsersForm />} />
@@ -50,9 +58,13 @@ export default function App() {
           <Route path="/submissions" element={<SubmissionsList />} />
           <Route path="/submissions/:id" element={<SubmissionDetail />} />
 
-          <Route index element={<div className="p-6">Welcome to Questify</div>} />
+          {/* Default inside shell (optional) */}
+          <Route index element={<Navigate to="/quests" replace />} />
         </Route>
       </Route>
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
