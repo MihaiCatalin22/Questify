@@ -12,4 +12,5 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     Page<Submission> findByQuest(Quest quest, Pageable pageable);
     Page<Submission> findByUser(User user, Pageable pageable);
     Page<Submission> findByQuestAndReviewStatus(Quest quest, ReviewStatus reviewStatus, Pageable pageable);
+    Page<Submission> findByReviewStatus(ReviewStatus status, Pageable pageable);
 }

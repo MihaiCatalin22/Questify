@@ -1,6 +1,5 @@
 package com.questify.controller;
 
-
 import com.questify.config.security.JwtUtil;
 import com.questify.domain.Role;
 import com.questify.domain.User;
@@ -15,12 +14,11 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 
 @RestController
 public class AuthController {
+
     private final UserRepository users;
     private final PasswordEncoder encoder;
     private final JwtUtil jwt;
@@ -32,11 +30,10 @@ public class AuthController {
     }
 
     public record LoginReq(String usernameOrEmail, String password) {}
-    public record LoginRes(Long userId, String username, String jwt, String expiresAt) {}
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public AuthDtos.AuthRes register (@RequestBody @Validated AuthDtos.RegisterReq req) {
+    public AuthDtos.AuthRes register(@RequestBody @Validated AuthDtos.RegisterReq req) {
         if (users.existsByUsername(req.username()))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already taken.");
         if (users.existsByEmail(req.email()))
@@ -51,20 +48,15 @@ public class AuthController {
 
         var saved = users.save(u);
 
-        var claims = Map.<String,Object>of(
-                "roles", saved.getRoles().stream().map(Role::name).toList(), // map enum to names
-                "uid",   saved.getId()
-        );
-        var token = jwt.generate(saved.getUsername(), claims);
+        String token = jwt.generateToken(saved.getUsername());
 
         var userOut = new AuthDtos.UserOut(
                 saved.getId(), saved.getUsername(), saved.getEmail(), saved.getDisplayName(),
                 saved.getRoles(), saved.getCreatedAt(), saved.getUpdatedAt()
         );
 
-        return new AuthDtos.AuthRes(userOut, token, jwt.expiration(token).toInstant().toString());
+        return new AuthDtos.AuthRes(userOut, token, null);
     }
-
 
     @PostMapping("/login")
     public AuthDtos.AuthRes login(@RequestBody LoginReq req) {
@@ -81,12 +73,8 @@ public class AuthController {
                 user.getRoles(), user.getCreatedAt(), user.getUpdatedAt()
         );
 
-        var claims = Map.<String,Object>of(
-                "roles", user.getRoles().stream().map(Role::name).toList(),
-                "uid",   user.getId()
-        );
+        String token = jwt.generateToken(user.getUsername());
 
-        var token = jwt.generate(user.getUsername(), claims);
-        return new AuthDtos.AuthRes(userOut, token, jwt.expiration(token).toInstant().toString());
+        return new AuthDtos.AuthRes(userOut, token, null);
     }
 }

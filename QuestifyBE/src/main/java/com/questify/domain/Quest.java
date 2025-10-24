@@ -1,10 +1,13 @@
 package com.questify.domain;
 
 import com.questify.domain.QuestStatus;
+import com.questify.domain.QuestCategory;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 
 
 @Entity
@@ -32,11 +35,25 @@ public class Quest {
     @Builder.Default
     private QuestStatus status = QuestStatus.DRAFT;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
+    @Builder.Default
+    private QuestCategory category = QuestCategory.OTHER;
+
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     private User createdBy;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
+
+    @ManyToMany
+    @JoinTable(
+            name = "quest_participants",
+            joinColumns = @JoinColumn(name = "quest_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
+    @Builder.Default
+    private Set<User> participants = new HashSet<>();
 
     @PrePersist void onCreate() { createdAt = Instant.now(); }
 }

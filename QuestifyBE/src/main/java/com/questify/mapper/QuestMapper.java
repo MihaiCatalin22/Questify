@@ -13,6 +13,7 @@ public interface QuestMapper {
     @Mapping(target = "createdBy", ignore = true)
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "participants", ignore = true)
     Quest toEntity(QuestDtos.CreateQuestReq req);
 
     @Mapping(target = "createdByUserId", source = "createdBy.id")

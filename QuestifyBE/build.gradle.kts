@@ -33,13 +33,11 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.13")
 
-    implementation("org.flywaydb:flyway-core:11.13.0")
     runtimeOnly("com.mysql:mysql-connector-j")
 
     implementation("io.jsonwebtoken:jjwt-api:0.11.5")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.11.5")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.11.5")
-    runtimeOnly("com.h2database:h2")
     testRuntimeOnly("com.h2database:h2")
     implementation("io.micrometer:micrometer-registry-prometheus:1.15.1")
     implementation("io.micrometer:micrometer-tracing-bridge-otel:1.5.3")
@@ -73,6 +71,7 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    systemProperty("spring.profiles.active", "test")
     finalizedBy(tasks.jacocoTestReport)
 }
 
