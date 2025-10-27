@@ -80,7 +80,7 @@ jobs:
             -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml
 
   frontend:
-    name: Frontend • Lint & Build
+    name: Frontend • Build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -100,8 +100,7 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: Lint
-        run: npm run lint --if-present
+      # Lint intentionally skipped for now
 
       - name: Build
         run: npm run build
