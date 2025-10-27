@@ -2,7 +2,6 @@ import http from "./https";
 
 export type Role = "USER" | "REVIEWER" | "ADMIN";
 
-/** Canonical DTO for the app (id is normalized to string) */
 export interface UserDTO {
   id: string;
   username: string;

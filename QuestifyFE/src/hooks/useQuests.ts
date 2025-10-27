@@ -16,7 +16,6 @@ function normalizeList<T>(payload: any): T[] {
   return found ?? [];
 }
 
-/** Quests I own or have joined */
 export function useMyQuests() {
   return useQuery<QuestDTO[]>({
     queryKey: KEY.mine,
@@ -27,7 +26,6 @@ export function useMyQuests() {
   });
 }
 
-/** Public quests I can join (I’m not owner/participant) */
 export function useDiscoverQuests() {
   return useQuery<QuestDTO[]>({
     queryKey: KEY.discover,

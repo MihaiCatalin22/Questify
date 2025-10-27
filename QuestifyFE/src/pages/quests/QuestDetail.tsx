@@ -70,7 +70,6 @@ function SubmissionPreview({ submission }: { submission: any }) {
   );
 }
 
-/** Tiny modal (no external deps) */
 function InfoModal({
   open, onClose, title, children,
 }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -229,7 +228,6 @@ export default function QuestDetail() {
           <div className="p-6 text-red-600">{(error as any)?.message || 'Failed to load quest'}</div>
         ) : (
           <div className="space-y-6">
-            {/* Header / summary card */}
             <div className="rounded-2xl border bg-white shadow-sm dark:bg-[#0f1115]">
               <div className="p-5">
                 <div className="flex items-start justify-between gap-4">
@@ -283,7 +281,6 @@ export default function QuestDetail() {
                   </div>
 
                   <div className="shrink-0 flex items-center gap-2">
-                    {/* Edit only for owners, active, not completed */}
                     {isOwner && !completed && status !== 'ARCHIVED' && (
                       <Link
                         to={`/quests/${quest.id}/edit`}
@@ -293,7 +290,6 @@ export default function QuestDetail() {
                       </Link>
                     )}
 
-                    {/* Join/Leave */}
                     {canJoin && (
                       <button
                         onClick={onJoin}
@@ -369,12 +365,10 @@ export default function QuestDetail() {
                 </div>
               </section>
 
-              {/* New submission */}
               <aside className="rounded-2xl border bg-white shadow-sm dark:bg-[#0f1115]">
                 <div className="p-5">
                   <h2 className="font-semibold mb-3">New Submission</h2>
 
-                  {/* Feedback ladder */}
                   {!joinedByMe ? (
                     <div className="text-sm text-gray-600 space-y-2">
                       <p>You don’t have this quest yet, so you can’t submit to it.</p>
@@ -467,7 +461,6 @@ export default function QuestDetail() {
         )}
       </div>
 
-      {/* Owner leave modal */}
       <InfoModal
         open={showOwnerLeaveModal}
         onClose={() => setShowOwnerLeaveModal(false)}

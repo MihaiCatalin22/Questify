@@ -150,7 +150,6 @@ export default function SubmissionDetail() {
         </div>
       </section>
 
-      {/* Review actions */}
       {canReview && status === 'PENDING' && (
         <section className="card">
           <div className="card-body space-y-3">

@@ -2,7 +2,7 @@ import React from "react";
 
 type Props = {
   url?: string | null;
-  mediaType?: string | null; // e.g. "image/jpeg", "video/mp4"
+  mediaType?: string | null;
   className?: string;
 };
 
