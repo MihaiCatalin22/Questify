@@ -1,0 +1,45 @@
+server:
+  port: 8080
+  ssl:
+    enabled: true
+    key-store: classpath:certs/questify-local.p12
+    key-store-password: questifypassword
+    key-store-type: PKCS12
+
+spring:
+  application.name: questify
+  jackson:
+    default-property-inclusion: non_null
+
+
+questify:
+  storage:
+    bucket: questify
+    publicBaseUrl: ""
+    endpoint: ${S3_ENDPOINT:https://localhost:9000}
+    region: ${S3_REGION:us-east-1}
+    accessKey: ${S3_ACCESS_KEY}
+    secretKey: ${S3_SECRET_KEY}
+    pathStyle: true
+
+redis:
+  host: ${REDIS_HOST:localhost}
+  port: ${REDIS_PORT:6379}
+  ssl: false
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:}
+    ttl-seconds: ${JWT_TTL_SECONDS:3600}
+
+management:
+  endpoints.web.exposure.include: health,info,metrics,prometheus
+  endpoint.health.show-details: when_authorized
+
+rate-limit:
+  auth:
+    window-seconds: 60
+    max-requests: 5
+  uploads:
+    window-seconds: 60
+    max-requests: 10

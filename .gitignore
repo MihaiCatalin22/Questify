@@ -40,3 +40,39 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### backend ###
+QuestifyBE/.gradle/
+
+QuestifyBE/out/
+QuestifyBE/src/main/resources/certs/
+infra/minio/certs/
+
+### frontend ###
+QuestifyFE/node_modules/
+QuestifyFE/dist/
+QuestifyFE/.vite/
+QuestifyFE/.turbo/
+
+.DS_Store
+.idea/
+*.pem
+QuestifyBE/infra/minio/certs/private.key
+QuestifyBE/infra/minio/certs/public.crt
+QuestifyBE/src/main/resources/application-dev.yml
+QuestifyBE/src/main/resources/application-prod.yml
+QuestifyBE/src/main/resources/application-test.yml
+QuestifyBE/src/main/resources/application.yml
+QuestifyBE/src/main/resources/application.yml
+
+infra/**/data/**
+infra/**/logs/**
+infra/**/tmp/**
+infra/minio/data/**
+infra/minio/**/.minio.sys/**
+infra/redis/data/**
+infra/redis/**/appendonly*.aof*
+infra/redis/**/dump.rdb
+/QuestifyBE/infra/minio/data
+/QuestifyBE/infra/redis/data/appendonlydir
+QuestifyBE/infra/redis/data/dump.rdb
