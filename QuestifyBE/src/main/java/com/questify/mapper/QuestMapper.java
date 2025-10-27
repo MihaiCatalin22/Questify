@@ -16,6 +16,9 @@ public interface QuestMapper {
     @Mapping(target = "participants", ignore = true)
     Quest toEntity(QuestDtos.CreateQuestReq req);
 
-    @Mapping(target = "createdByUserId", source = "createdBy.id")
+    @Mapping(target = "createdById", source = "createdBy.id")
+    @Mapping(target = "participantsCount",
+            expression = "java(q.getParticipants() == null ? 0 : q.getParticipants().size())")
+    @Mapping(target = "completedByCurrentUser", ignore = true)
     QuestDtos.QuestRes toRes(Quest q);
 }

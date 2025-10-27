@@ -7,24 +7,40 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.security.Key;
+import java.time.Instant;
 import java.util.Date;
 import java.util.function.Function;
 
 @Component
 public class JwtUtil {
+
     @Value("${security.jwt.secret}")
     private String secretKey;
+
+    @Value("${security.jwt.ttlMillis:36000000}")
+    private long ttlMillis;
+
+    @Value("${security.jwt.clockSkewSeconds:120}")
+    private long clockSkewSeconds;
 
     private Key getSigningKey() {
         byte[] keyBytes = Decoders.BASE64.decode(secretKey);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
+    private JwtParser getParser() {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .setAllowedClockSkewSeconds(clockSkewSeconds)
+                .build();
+    }
+
     public String generateToken(String username) {
+        long now = System.currentTimeMillis();
         return Jwts.builder()
                 .setSubject(username)
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 10))
+                .setIssuedAt(new Date(now))
+                .setExpiration(new Date(now + ttlMillis))
                 .signWith(getSigningKey())
                 .compact();
     }
@@ -32,21 +48,34 @@ public class JwtUtil {
     public boolean validateToken(String token, String username) {
         try {
             final String usernameFromToken = extractUsername(token);
-            return username.equals(usernameFromToken) && !isTokenExpired(token);
+            return username != null
+                    && username.equals(usernameFromToken)
+                    && !isTokenExpired(token);
         } catch (Exception e) {
             return false;
         }
     }
 
     private boolean isTokenExpired(String token) {
-        final Date expiration = extractAllClaims(token).getExpiration();
-        return expiration.before(new Date());
+        try {
+            final Date expiration = extractAllClaims(token).getExpiration();
+            return expiration.before(new Date());
+        } catch (ExpiredJwtException e) {
+            return true;
+        } catch (JwtException e) {
+            return true;
+        }
     }
 
-
-
     public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
+        try {
+            return extractClaim(token, Claims::getSubject);
+        } catch (ExpiredJwtException ex) {
+            // expired but otherwise valid -> subject still available
+            return ex.getClaims() != null ? ex.getClaims().getSubject() : null;
+        } catch (JwtException ex) {
+            return null;
+        }
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
@@ -55,10 +84,16 @@ public class JwtUtil {
     }
 
     private Claims extractAllClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
-                .build()
+        return getParser()
                 .parseClaimsJws(token)
                 .getBody();
+    }
+
+    public Instant expiration(String token) {
+        try {
+            return extractAllClaims(token).getExpiration().toInstant();
+        } catch (JwtException e) {
+            return Instant.EPOCH;
+        }
     }
 }

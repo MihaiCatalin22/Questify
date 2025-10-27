@@ -46,6 +46,14 @@ public class Quest {
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    private Instant updatedAt;
+    private Instant startDate;
+    private Instant endDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private QuestVisibility visibility = QuestVisibility.PRIVATE;
+
     @ManyToMany
     @JoinTable(
             name = "quest_participants",

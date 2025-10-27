@@ -1,11 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   UsersApi,
   type UserDTO,
   type CreateUserInput,
   type UpdateUserInput,
 } from "../api/users";
-
 
 const KEY = {
   all: ["users"] as const,
@@ -25,9 +24,10 @@ function sanitize<T extends object>(obj: T): Partial<T> {
 export function useUsers() {
   return useQuery<UserDTO[]>({
     queryKey: KEY.all,
-    queryFn: UsersApi.list, 
-    initialData: [],
-    staleTime: 30_000,
+    queryFn: () => UsersApi.list(),
+    placeholderData: [] as UserDTO[],
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -36,6 +36,8 @@ export function useUser(id: string) {
     queryKey: KEY.detail(id),
     queryFn: () => UsersApi.get(id),
     enabled: !!id,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -64,9 +66,10 @@ export function useUpdateUser(id: string) {
 export function useDeleteUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => UsersApi.remove(id),
+    mutationFn: (id: string | number) => UsersApi.remove(String(id)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEY.all });
     },
   });
 }
+

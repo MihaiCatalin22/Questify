@@ -2,14 +2,21 @@ package com.questify.dto;
 
 import com.questify.domain.ReviewStatus;
 import jakarta.validation.constraints.*;
+
 import java.time.Instant;
 
 public class SubmissionDtos {
+
     public record CreateSubmissionReq(
-       @NotNull Long questId,
-       @NotNull Long userId,
-       @Size(max = 2000) String proofText,
-       @Size(max = 2000) @Pattern(regexp = "^(https?://).+", message = "The proof URL must start with http:// or https://") String proofUrl
+            @NotNull Long questId,
+            @NotNull Long userId,
+
+            @Size(max = 2000) String proofText,
+            @Size(max = 2000)
+            @Pattern(regexp = "^(https?://).+", message = "The proof URL must start with http:// or https://")
+            String proofUrl,
+
+            @Size(max = 2000) String comment
     ) {}
 
     public record ReviewSubmissionReq(
@@ -21,10 +28,24 @@ public class SubmissionDtos {
             Long id,
             Long questId,
             Long userId,
+
             String proofText,
             String proofUrl,
+
+            String comment,
+
             ReviewStatus reviewStatus,
             String reviewNote,
-            Instant createdAt
+
+            Instant createdAt,
+            Instant updatedAt,
+
+
+            String mediaType,
+            Long fileSize,
+
+            Instant reviewedAt,
+            Long reviewerUserId,
+            Boolean closed
     ) {}
 }

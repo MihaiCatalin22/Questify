@@ -5,15 +5,14 @@ export interface SubmissionDTO {
   questId: string;
   userId?: string;
   comment?: string;
-  proofUrl?: string; // where the file/image/video is stored
+  proofUrl?: string; 
   status: SubmissionStatus;
-  createdAt: string; // ISO
+  createdAt: string; 
 }
 
 export interface CreateSubmissionInput {
   questId: string;
   comment?: string;
-  // when uploading a file we’ll send as multipart
   file?: File | null;
-  proofUrl?: string; // alternative to file if backend expects URL
+  proofUrl?: string; 
 }

@@ -3,11 +3,11 @@ import { QuestsApi } from "../api/quests";
 import type { QuestDTO, CreateQuestInput, UpdateQuestInput } from "../types/quest";
 
 export const KEY = {
-  all: ["quests"] as const,
+  mine: ["quests", "mine"] as const,
+  discover: ["quests", "discover"] as const,
   detail: (id: string) => ["quests", id] as const,
 };
 
-// Normalize any backend list shape to a plain array
 function normalizeList<T>(payload: any): T[] {
   if (Array.isArray(payload)) return payload;
   if (!payload || typeof payload !== "object") return [];
@@ -16,13 +16,24 @@ function normalizeList<T>(payload: any): T[] {
   return found ?? [];
 }
 
-export function useQuests() {
+/** Quests I own or have joined */
+export function useMyQuests() {
   return useQuery<QuestDTO[]>({
-    queryKey: KEY.all,
-    queryFn: async () => normalizeList<QuestDTO>(await QuestsApi.list()),
-    initialData: [],
-    staleTime: 30_000,
-    // optional: if you don’t want refetch on tab focus
+    queryKey: KEY.mine,
+    queryFn: async () => normalizeList<QuestDTO>(await QuestsApi.listMine()),
+    placeholderData: [] as QuestDTO[],
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+}
+
+/** Public quests I can join (I’m not owner/participant) */
+export function useDiscoverQuests() {
+  return useQuery<QuestDTO[]>({
+    queryKey: KEY.discover,
+    queryFn: async () => normalizeList<QuestDTO>(await QuestsApi.listDiscover()),
+    placeholderData: [] as QuestDTO[],
+    refetchOnMount: "always",
     refetchOnWindowFocus: false,
   });
 }
@@ -32,10 +43,8 @@ export function useQuest(id: string) {
     queryKey: KEY.detail(id),
     queryFn: () => QuestsApi.get(id),
     enabled: !!id,
-    // 👇 ensure a fresh fetch each time you navigate to the detail page
     refetchOnMount: "always",
     refetchOnWindowFocus: false,
-    staleTime: 0,
   });
 }
 
@@ -44,7 +53,8 @@ export function useCreateQuest() {
   return useMutation({
     mutationFn: (input: CreateQuestInput) => QuestsApi.create(input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY.all });
+      qc.invalidateQueries({ queryKey: KEY.mine });
+      qc.invalidateQueries({ queryKey: KEY.discover });
     },
   });
 }
@@ -54,7 +64,8 @@ export function useUpdateQuest(id: string) {
   return useMutation({
     mutationFn: (input: UpdateQuestInput) => QuestsApi.update(id, input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY.all });
+      qc.invalidateQueries({ queryKey: KEY.mine });
+      qc.invalidateQueries({ queryKey: KEY.discover });
       qc.invalidateQueries({ queryKey: KEY.detail(id) });
     },
   });
@@ -65,7 +76,32 @@ export function useDeleteQuest() {
   return useMutation({
     mutationFn: (id: string | number) => QuestsApi.remove(String(id)),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY.all });
+      qc.invalidateQueries({ queryKey: KEY.mine });
+      qc.invalidateQueries({ queryKey: KEY.discover });
+    },
+  });
+}
+
+export function useJoinQuest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string | number) => QuestsApi.join(id),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: KEY.mine });
+      qc.invalidateQueries({ queryKey: KEY.discover });
+      qc.invalidateQueries({ queryKey: KEY.detail(String(id)) });
+    },
+  });
+}
+
+export function useLeaveQuest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string | number) => QuestsApi.leave(id),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: KEY.mine });
+      qc.invalidateQueries({ queryKey: KEY.discover });
+      qc.invalidateQueries({ queryKey: KEY.detail(String(id)) });
     },
   });
 }

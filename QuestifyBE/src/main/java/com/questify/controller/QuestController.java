@@ -1,9 +1,13 @@
 package com.questify.controller;
 
 import com.questify.domain.QuestStatus;
+import com.questify.domain.ReviewStatus;
 import com.questify.dto.QuestDtos;
+import com.questify.dto.SubmissionDtos.SubmissionRes;
 import com.questify.service.QuestService;
+import com.questify.service.SubmissionService;
 import jakarta.validation.Valid;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
@@ -15,9 +19,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/quests")
 public class QuestController {
     private final QuestService service;
+    private final SubmissionService submissions;
 
-    public QuestController(QuestService service) {
+    public QuestController(QuestService service, SubmissionService submissions) {
         this.service = service;
+        this.submissions = submissions;
     }
 
     @PostMapping
@@ -35,19 +41,49 @@ public class QuestController {
 
     @GetMapping("/by-user/{userId}")
     public Page<QuestDtos.QuestRes> listByCreator(@PathVariable Long userId,
-                                                  @org.springdoc.core.annotations.ParameterObject Pageable pageable) {
+                                                  @ParameterObject Pageable pageable) {
         return service.listByCreator(userId, pageable);
     }
 
     @GetMapping("/search")
     public Page<QuestDtos.QuestRes> search(@RequestParam String q,
-                                           @org.springdoc.core.annotations.ParameterObject Pageable pageable) {
+                                           @ParameterObject Pageable pageable) {
         return service.search(q, pageable);
     }
 
     @GetMapping("/{id}")
     public QuestDtos.QuestRes get (@PathVariable Long id) {
         return service.getOrThrow(id);
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("@questService.canEditQuest(#id, authentication)")
+    public QuestDtos.QuestRes update(@PathVariable Long id,
+                                     @Valid @RequestBody QuestDtos.UpdateQuestReq req) {
+        return service.update(id, req);
+    }
+
+    @GetMapping("/mine")
+    @PreAuthorize("isAuthenticated()")
+    public Page<QuestDtos.QuestRes> listMine(@ParameterObject Pageable pageable) {
+        return service.listMine(pageable);
+    }
+
+    @GetMapping("/discover")
+    public Page<QuestDtos.QuestRes> listDiscover(@ParameterObject Pageable pageable) {
+        return service.listDiscover(pageable);
+    }
+
+    @PostMapping("/{id}/join")
+    @PreAuthorize("isAuthenticated()")
+    public QuestDtos.QuestRes join(@PathVariable Long id) {
+        return service.join(id);
+    }
+
+    @DeleteMapping("/{id}/join")
+    @PreAuthorize("isAuthenticated()")
+    public QuestDtos.QuestRes leave(@PathVariable Long id) {
+        return service.leave(id);
     }
 
     @PatchMapping("/{id}/status")
@@ -61,5 +97,13 @@ public class QuestController {
     @PostMapping("/{id}/archive")
     public QuestDtos.QuestRes archive(@PathVariable Long id) {
         return service.archive(id);
+    }
+
+    @GetMapping("/{questId}/submissions")
+    @PreAuthorize("isAuthenticated()")
+    public Page<SubmissionRes> submissionsForQuest(@PathVariable Long questId,
+                                                   @RequestParam(required = false) ReviewStatus status,
+                                                   @ParameterObject Pageable pageable) {
+        return submissions.listForQuest(questId, status, pageable);
     }
 }
