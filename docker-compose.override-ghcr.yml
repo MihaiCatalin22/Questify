@@ -1,8 +1,54 @@
+# docker-compose.override-ghcr.yml
 services:
   backend:
     image: ghcr.io/mihaicatalin22/questify-backend:${TAG:-dev}
     build: null
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    volumes:
+      - ./QuestifyBE/infra/backend/certs:/etc/questify/certs:ro
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+
+      SECURITY_JWT_SECRET: ${SECURITY_JWT_SECRET}
+
+      SPRING_SSL_BUNDLE_JKS_QUESTIFYLOCAL_KEYSTORE_LOCATION: "file:/etc/questify/certs/questify-local.p12"
+      SPRING_SSL_BUNDLE_JKS_QUESTIFYLOCAL_KEYSTORE_PASSWORD: ${KEYSTORE_PASSWORD}
+      SPRING_SSL_BUNDLE_JKS_QUESTIFYLOCAL_KEY_PASSWORD: ${KEY_PASSWORD}
+      SPRING_SSL_BUNDLE_JKS_QUESTIFYLOCAL_KEY_ALIAS: ${KEY_ALIAS}
+      SERVER_SSL_BUNDLE: "questifylocal"
+
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/questify?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASS}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+
+      QUESTIFY_STORAGE_ENDPOINT: "http://minio:9000"
+      QUESTIFY_STORAGE_REGION: "us-east-1"
+      QUESTIFY_STORAGE_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      QUESTIFY_STORAGE_SECRET_KEY: ${MINIO_SECRET_KEY}
+      QUESTIFY_STORAGE_BUCKET: ${MINIO_BUCKET}
+      QUESTIFY_STORAGE_PUBLIC_BASE_URL: "/s3/questify"
+
+      JAVA_TOOL_OPTIONS: "-Daws.s3.forcePathStyle=true"
 
   frontend:
     image: ghcr.io/mihaicatalin22/questify-frontend:${TAG:-dev}
     build: null
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: questify-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_POLL_INTERVAL: "120"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_ROLLING_RESTART: "true"
+    command: --label-enable
