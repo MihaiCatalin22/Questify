@@ -1,0 +1,8 @@
+services:
+  backend:
+    image: ghcr.io/mihaicatalin22/questify-backend:${TAG:-dev}
+    build: null
+
+  frontend:
+    image: ghcr.io/mihaicatalin22/questify-frontend:${TAG:-dev}
+    build: null
