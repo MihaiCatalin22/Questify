@@ -9,6 +9,25 @@ import http from '../../api/https';
 function isImageType(mt?: string | null) { return !!mt && mt.startsWith('image/'); }
 function isVideoType(mt?: string | null) { return !!mt && mt.startsWith('video/'); }
 
+function toSameOriginS3(url?: string | null): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+
+    if (u.hostname === 'minio') {
+      return `/s3${u.pathname}${u.search || ''}`;
+    }
+
+    if (u.hostname === 'localhost' && (u.port === '9000' || u.port === '9003')) {
+      return `/s3${u.pathname}${u.search || ''}`;
+    }
+
+    return url; 
+  } catch {
+    return url;
+  }
+}
+
 function SubmissionPreview({ submission }: { submission: any }) {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [fail, setFail] = useState<string | null>(null);
@@ -34,16 +53,18 @@ function SubmissionPreview({ submission }: { submission: any }) {
     return () => { alive = false; };
   }, [submission?.id]);
 
+  const displayUrl = toSameOriginS3(signedUrl);
+
   return (
     <div className="mt-3 space-y-2">
       <div className="font-semibold text-sm">Proof</div>
 
       {fail && <div className="text-sm text-red-600">{fail}</div>}
-      {!fail && !signedUrl && <div className="text-sm text-gray-500">Generating secure link…</div>}
+      {!fail && !displayUrl && <div className="text-sm text-gray-500">Generating secure link…</div>}
 
-      {signedUrl && isImg && (
+      {displayUrl && isImg && (
         <img
-          src={signedUrl}
+          src={displayUrl}
           alt="proof"
           className="rounded-xl border"
           style={{ maxWidth: '100%', maxHeight: 560, objectFit: 'contain' }}
@@ -51,18 +72,18 @@ function SubmissionPreview({ submission }: { submission: any }) {
           referrerPolicy="no-referrer"
         />
       )}
-      {signedUrl && isVid && (
+      {displayUrl && isVid && (
         <video
           className="rounded-xl border"
           style={{ maxWidth: '100%', maxHeight: 560 }}
-          src={signedUrl}
+          src={displayUrl}
           controls
           playsInline
           preload="metadata"
         />
       )}
-      {signedUrl && !isImg && !isVid && (
-        <a className="text-sm underline" href={signedUrl} target="_blank" rel="noreferrer noopener">
+      {displayUrl && !isImg && !isVid && (
+        <a className="text-sm underline" href={displayUrl} target="_blank" rel="noreferrer noopener">
           Open proof
         </a>
       )}
@@ -100,7 +121,6 @@ export default function QuestDetail() {
 
   const { user } = useAuthContext();
 
-  // Queries (unconditional to keep hook order stable)
   const { data: quest, isLoading, isError, error } = useQuest(safeQuestId);
   const { data: submissions } = useSubmissionsForQuest(safeQuestId);
   const { data: myQuests } = useMyQuests();
@@ -113,10 +133,8 @@ export default function QuestDetail() {
   const [file, setFile] = useState<File | null>(null);
   const [proofUrl, setProofUrl] = useState('');
 
-  // Optimistic membership flag (null = trust server; true/false override)
   const [localJoined, setLocalJoined] = useState<boolean | null>(null);
 
-  // Owner / membership
   const ownerId =
     (quest as any)?.createdByUserId ??
     (quest as any)?.createdBy?.id ??
@@ -127,13 +145,11 @@ export default function QuestDetail() {
   const joinedFromServer = isOwner || !!myQuests?.some((q) => String(q.id) === String((quest as any)?.id));
   const joinedByMe = (localJoined == null) ? joinedFromServer : localJoined;
 
-  // Dates (submission gating)
   const startDate = (quest as any)?.startDate ? new Date((quest as any).startDate) : null;
   const endDate   = (quest as any)?.endDate   ? new Date((quest as any).endDate)   : null;
   const now = new Date();
 
-  const notStartedYet = !!(startDate && now < startDate); // cannot submit before start
-  // End is inclusive: if now is on or after the end date, submission is closed
+  const notStartedYet = !!(startDate && now < startDate);
   const ended = !!(endDate && now >= endDate);
 
   const visibility = (quest as any)?.visibility ?? 'PRIVATE';
@@ -154,21 +170,14 @@ export default function QuestDetail() {
 
   const completed = Boolean((quest as any)?.completedByCurrentUser);
 
-  // Submission enablement
   const canSubmit = Boolean(
-    joinedByMe &&
-    !completed &&
-    status !== 'ARCHIVED' &&
-    !notStartedYet &&
-    !ended
+    joinedByMe && !completed && status !== 'ARCHIVED' && !notStartedYet && !ended
   );
 
   const canSend = !!(file || (proofUrl && proofUrl.trim().length > 0));
   const canJoin = !joinedByMe && visibility === 'PUBLIC' && status !== 'ARCHIVED' && !!safeQuestId;
-  // Show a leave button even to owners, but block with modal (feedback)
   const showLeaveButton = !ended && status !== 'ARCHIVED' && !!safeQuestId && joinedByMe;
 
-  // Leave-block modal if owner tries to leave
   const [showOwnerLeaveModal, setShowOwnerLeaveModal] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
@@ -216,7 +225,6 @@ export default function QuestDetail() {
     }
   };
 
-  // --- Render
   return (
     <div className="p-6">
       <div className="mx-auto" style={{ maxWidth: 1100 }}>

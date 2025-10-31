@@ -8,6 +8,25 @@ import { toast } from 'react-hot-toast';
 function isImageType(mt?: string | null) { return !!mt && mt.startsWith('image/'); }
 function isVideoType(mt?: string | null) { return !!mt && mt.startsWith('video/'); }
 
+function toSameOriginS3(url?: string | null): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+
+    if (u.hostname === 'minio') {
+      return `/s3${u.pathname}${u.search || ''}`;
+    }
+
+    if (u.hostname === 'localhost' && (u.port === '9000' || u.port === '9003')) {
+      return `/s3${u.pathname}${u.search || ''}`;
+    }
+
+    return url; 
+  } catch {
+    return url;
+  }
+}
+
 export default function SubmissionDetail() {
   const { id } = useParams();
   const { data: s, isLoading, isError, error } = useSubmission(id ?? '');
@@ -51,6 +70,7 @@ export default function SubmissionDetail() {
 
   const img = isImageType(mediaType);
   const vid = isVideoType(mediaType);
+  const displayUrl = toSameOriginS3(signedUrl);
 
   const onApprove = async () => {
     if (!id) return;
@@ -116,13 +136,13 @@ export default function SubmissionDetail() {
 
           {fail && <div className="text-sm text-red-600">{fail}</div>}
 
-          {!fail && !signedUrl && (
+          {!fail && !displayUrl && (
             <div className="text-sm muted">Generating secure link…</div>
           )}
 
-          {signedUrl && img && (
+          {displayUrl && img && (
             <img
-              src={signedUrl}
+              src={displayUrl}
               alt="proof"
               className="rounded-xl border"
               style={{ maxWidth: '100%', maxHeight: 560, objectFit: 'contain' }}
@@ -131,19 +151,19 @@ export default function SubmissionDetail() {
             />
           )}
 
-          {signedUrl && vid && (
+          {displayUrl && vid && (
             <video
               className="rounded-xl border"
               style={{ maxWidth: '100%', maxHeight: 560 }}
-              src={signedUrl}
+              src={displayUrl}
               controls
               playsInline
               preload="metadata"
             />
           )}
 
-          {signedUrl && !img && !vid && (
-            <a className="link" href={signedUrl} target="_blank" rel="noreferrer">
+          {displayUrl && !img && !vid && (
+            <a className="link" href={displayUrl} target="_blank" rel="noreferrer">
               Open proof
             </a>
           )}

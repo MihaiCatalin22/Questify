@@ -1,12 +1,29 @@
+name: CI
+
 on:
   push:
-    branches: ["*"]
+    branches: ["**"]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-    name: Build & Test
+  backend:
+    name: Backend • Build & Test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: QuestifyBE
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+      SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
 
     steps:
       - name: Checkout
@@ -27,35 +44,125 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build & Run Tests
-        run: ./gradlew --no-daemon clean test jacocoTestReport --stacktrace
+      - name: Build & Test (with coverage)
+        run: ./gradlew --no-daemon clean test jacocoTestReport
 
-      - name: Upload Test Reports (JUnit)
-        uses: actions/upload-artifact@v4
+      - name: Upload JUnit report
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: test-reports
-          path: build/reports/tests/test/
+          name: be-tests
+          path: QuestifyBE/build/reports/tests/test/**
           if-no-files-found: ignore
 
-      - name: Upload Coverage Report (JaCoCo)
-        uses: actions/upload-artifact@v4
+      - name: Upload JaCoCo coverage xml
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: jacoco-report
-          path: build/reports/jacoco/test/jacocoTestReport.xml
+          name: be-jacoco-xml
+          path: QuestifyBE/build/reports/jacoco/test/jacocoTestReport.xml
           if-no-files-found: ignore
 
       - name: SonarCloud Analysis
+        if: ${{ env.SONAR_TOKEN != '' }}
         uses: SonarSource/sonarcloud-github-action@v3
         env:
-          SONAR_TOKEN:  ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
         with:
+          projectBaseDir: QuestifyBE
           args: >
-            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
-            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }}
+            -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
+            -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
             -Dsonar.sources=src/main/java
             -Dsonar.tests=src/test/java
             -Dsonar.host.url=https://sonarcloud.io
             -Dsonar.java.binaries=build/classes/java/main,build/classes/java/test
             -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml
+
+  frontend:
+    name: Frontend • Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: QuestifyFE
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: QuestifyFE/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      # Lint intentionally skipped for now
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload FE build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fe-dist
+          path: QuestifyFE/dist
+          if-no-files-found: ignore
+
+  images:
+    name: Container Images • Build & Push (GHCR)
+    needs: [backend, frontend]
+    # Don’t push images for PRs (esp. from forks with restricted token perms)
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set OWNER (lowercase) and BRANCH tag
+        run: |
+          echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+          # docker tag cannot contain '/', replace with '-'
+          echo "BRANCH=${GITHUB_REF_NAME//\//-}" >> $GITHUB_ENV
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./QuestifyBE
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER }}/questify-backend:${{ github.sha }}
+            ghcr.io/${{ env.OWNER }}/questify-backend:${{ env.BRANCH }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build & push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./QuestifyFE
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER }}/questify-frontend:${{ github.sha }}
+            ghcr.io/${{ env.OWNER }}/questify-frontend:${{ env.BRANCH }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}

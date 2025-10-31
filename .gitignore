@@ -76,3 +76,7 @@ infra/redis/**/dump.rdb
 /QuestifyBE/infra/minio/data
 /QuestifyBE/infra/redis/data/appendonlydir
 QuestifyBE/infra/redis/data/dump.rdb
+QuestifyFE/infra/frontend/certs/private.key
+QuestifyFE/infra/frontend/certs/public.crt
+.env
+QuestifyBE/infra/backend/certs/questify-local.p12
