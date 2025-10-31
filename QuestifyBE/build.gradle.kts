@@ -97,5 +97,12 @@ sonar {
         property("sonar.host.url", "https://sonarcloud.io")
         property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
         property("sonar.qualitygate.wait", "true")
+        property(
+            "sonar.coverage.inclusions",
+            listOf(
+                "src/main/java/com/questify/controller/**",
+                "src/main/java/com/questify/service/**"
+            ).joinToString(",")
+        )
     }
 }
