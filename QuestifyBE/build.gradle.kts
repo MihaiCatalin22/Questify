@@ -97,12 +97,16 @@ sonar {
         property("sonar.host.url", "https://sonarcloud.io")
         property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
         property("sonar.qualitygate.wait", "true")
-        property(
-            "sonar.coverage.inclusions",
-            listOf(
-                "src/main/java/com/questify/controller/**",
-                "src/main/java/com/questify/service/**"
-            ).joinToString(",")
-        )
+        property("sonar.coverage.exclusions", listOf(
+            "src/main/java/com/questify/config/**",
+            "src/main/java/com/questify/domain/**",
+            "src/main/java/com/questify/dto/**",
+            "src/main/java/com/questify/mapper/**",
+            "src/main/java/com/questify/persistence/**",
+            "src/main/java/com/questify/storage/**",
+            "src/main/java/com/questify/Questify.java",
+            "build/**",
+            "src/main/**/generated/**"
+        ).joinToString(","))
     }
 }
