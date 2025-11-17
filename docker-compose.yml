@@ -1,94 +1,52 @@
 name: questify
 
 services:
-  backend:
-    build:
-      context: ./QuestifyBE
-      dockerfile: Dockerfile
-      args: { SKIP_TESTS: "true" }
-    image: questify/backend:dev
-    container_name: questify-backend
-    environment:
-      SPRING_PROFILES_ACTIVE: dev
-      # --- DB ---
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/questify?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      SPRING_DATASOURCE_USERNAME: questify
-      SPRING_DATASOURCE_PASSWORD: questifypw
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      # --- Redis ---
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: "6379"
-      # --- MinIO / S3 (HTTP for local dev) ---
-      S3_ENDPOINT: http://minio:9000
-      AWS_REGION: us-east-1
-      BUCKET_NAME: questify
-      AWS_ACCESS_KEY_ID: questify
-      AWS_SECRET_ACCESS_KEY: questifysecret
-      S3_USE_PATH_STYLE: "true"
-      PUBLIC_BASE_URL: /s3/questify
-    ports: ["8081:8080"]
-    depends_on:
-      mysql: { condition: service_healthy }
-      redis: { condition: service_healthy }
-      minio: { condition: service_healthy }
-      minio-init: { condition: service_completed_successfully }
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: ./QuestifyFE
-      dockerfile: Dockerfile
-    image: questify/frontend:dev
-    container_name: questify-frontend
-    ports: ["5173:8443"]
-    volumes: 
-      - ./QuestifyFE/infra/frontend/certs:/etc/nginx/certs:ro
-    depends_on:
-      backend: { condition: service_started }
-    restart: unless-stopped
-
   mysql:
     image: mysql:8.4
-    container_name: questify-mysql
     environment:
-      MYSQL_DATABASE: questify
-      MYSQL_USER: questify
-      MYSQL_PASSWORD: questifypw
       MYSQL_ROOT_PASSWORD: root
     ports: ["3307:3306"]
-    volumes: [ "mysql_data:/var/lib/mysql" ]
+    volumes:
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"]
       interval: 5s
       timeout: 5s
       retries: 30
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
-    container_name: questify-redis
-    command: ["redis-server", "--appendonly", "yes"]
-    ports: ["6380:6379"]
-    volumes: [ "redis_data:/data" ]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 3s
-      timeout: 3s
-      retries: 30
-    restart: unless-stopped
+  # one-shot DB/user bootstrap (no external files needed)
+  mysql-init:
+    image: mysql:8.4
+    depends_on:
+      mysql: { condition: service_healthy }
+    entrypoint:
+      - sh
+      - -lc
+      - |
+        echo 'waiting for mysql...' ;
+        until mysqladmin ping -hmysql -uroot -proot --silent; do sleep 1; done ;
+        echo 'initializing schemas/users...' ;
+        mysql -hmysql -uroot -proot -e "
+          CREATE DATABASE IF NOT EXISTS keycloak   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE DATABASE IF NOT EXISTS quest      CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE DATABASE IF NOT EXISTS submission CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE DATABASE IF NOT EXISTS userdb     CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE USER IF NOT EXISTS 'keycloak'@'%' IDENTIFIED BY 'keycloakpw';
+          GRANT ALL PRIVILEGES ON keycloak.* TO 'keycloak'@'%';
+          FLUSH PRIVILEGES;"
+        echo 'mysql init done.'
+    restart: "no"
 
   minio:
     image: minio/minio:latest
-    container_name: questify-minio
-    hostname: minio
-    environment:
-      MINIO_ROOT_USER: questify
-      MINIO_ROOT_PASSWORD: questifysecret
     command: server /data --console-address ":9001"
-    # HTTP only (no cert mount)
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio12345
     ports:
-      - "9002:9000"   # API (HTTP)
-      - "9003:9001"   # Console
+      - "9002:9000"  # API
+      - "9003:9001"  # Console
     volumes:
       - minio_data:/data
     healthcheck:
@@ -98,32 +56,149 @@ services:
       retries: 60
     restart: unless-stopped
 
-  minio-init:
+  minio-setup:
     image: minio/mc:latest
-    container_name: questify-minio-init
     depends_on:
       minio: { condition: service_healthy }
-    environment:
-      MINIO_ROOT_USER: questify
-      MINIO_ROOT_PASSWORD: questifysecret
-    entrypoint: |
-      /bin/sh -eu
-      echo "Waiting for MinIO @ http://minio:9000"
-      until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" >/dev/null 2>&1; do
-        echo "MinIO not ready yet..."; sleep 2
-        mc alias rm local >/dev/null 2>&1 || true
-      done
-      echo "MinIO is ready. Creating bucket and applying CORS..."
-      mc mb -p local/questify || true
-      # Optional: CORS (adjust if you actually need it)
-      cat >/tmp/cors.json <<'JSON'
-      {"CORSRules":[{"AllowedOrigins":["*"],"AllowedMethods":["GET","PUT","POST","DELETE","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3600}]}
-      JSON
-      mc anonymous set-json --file /tmp/cors.json local/questify || true
-      echo "questify bucket ensured + CORS set"
+    entrypoint: >
+      sh -c "
+      mc alias set local http://minio:9000 minio minio12345 &&
+      mc mb -p local/questify-proofs || true &&
+      printf '%s' '{\"CORSRules\":[{\"AllowedOrigins\":[\"*\"],\"AllowedMethods\":[\"GET\",\"PUT\",\"POST\",\"DELETE\",\"HEAD\"],\"AllowedHeaders\":[\"*\"],\"ExposeHeaders\":[\"ETag\",\"Location\"],\"MaxAgeSeconds\":3600}]}' >/tmp/cors.json &&
+      mc anonymous set-json --file /tmp/cors.json local/questify-proofs || true
+      "
     restart: "no"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: questify-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: mysql
+      KC_DB_URL: jdbc:mysql://mysql:3306/keycloak?useSSL=false&allowPublicKeyRetrieval=true
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloakpw
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: https://localhost:5443/auth
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+    ports: ["8081:8080"]
+    depends_on:
+      mysql-init: { condition: service_completed_successfully }
+    volumes:
+      - ./infra/keycloak/realm-export:/opt/keycloak/data/import:ro
+    restart: unless-stopped
+
+  gateway:
+    build: ./gateway
+    # Gateway just proxies; it should NOT validate JWTs.
+    environment: { }
+    ports: ["8080:8080"]
+    depends_on:
+      keycloak: { condition: service_started }
+    restart: unless-stopped
+
+  quest-service:
+    build: ./quest-service
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/quest?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      # JWT validation (issuer = browser URL, JWKs = internal Keycloak)
+      OIDC_ISSUER: https://localhost:5443/auth/realms/questify
+      OIDC_JWKS:   http://keycloak:8080/realms/questify/protocol/openid-connect/certs
+      # internal comms with submission-service if needed
+      SUBMISSION_SERVICE_URL: http://submission-service:8080
+      # shared internal token for /internal/* endpoints (quest <-> submission)
+      INTERNAL_TOKEN: dev-internal-token
+    depends_on:
+      mysql: { condition: service_healthy }
+      keycloak: { condition: service_started }
+    restart: unless-stopped
+
+  submission-service:
+    build: ./submission-service
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/submission?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      OIDC_ISSUER: https://localhost:5443/auth/realms/questify
+      OIDC_JWKS:   http://keycloak:8080/realms/questify/protocol/openid-connect/certs
+      INTERNAL_TOKEN: dev-internal-token
+      SECURITY_INTERNAL_TOKEN: dev-internal-token
+      QUEST_SERVICE_BASE: http://quest-service:8080
+      SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE: 100MB
+      SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: 100MB
+      SERVER_TOMCAT_MAX_HTTP_FORM_POST_SIZE: 100MB
+      SERVER_TOMCAT_MAX_SWALLOW_SIZE: -1
+    depends_on:
+      mysql: { condition: service_healthy }
+      keycloak: { condition: service_started }
+    restart: unless-stopped
+
+  user-service:
+    build: ./user-service
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/userdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      # JWT validation (issuer = browser URL, JWKs = internal Keycloak)
+      OIDC_ISSUER: https://localhost:5443/auth/realms/questify
+      OIDC_JWKS:   http://keycloak:8080/realms/questify/protocol/openid-connect/certs
+    depends_on:
+      mysql: { condition: service_healthy }
+      keycloak: { condition: service_started }
+    restart: unless-stopped
+
+  proof-service:
+    build: ./proof-service
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      # JWT validation (issuer = browser URL, JWKs = internal Keycloak)
+      OIDC_ISSUER: https://localhost:5443/auth/realms/questify
+      OIDC_JWKS:   http://keycloak:8080/realms/questify/protocol/openid-connect/certs
+      STORAGE_ENDPOINT:  http://minio:9000
+      STORAGE_REGION:    us-east-1
+      STORAGE_ACCESS_KEY: minio
+      STORAGE_SECRET_KEY: minio12345
+      STORAGE_BUCKET:    questify-proofs
+      STORAGE_PUBLIC_BASE_URL: /s3/questify-proofs
+      SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE: 100MB
+      SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: 100MB
+      SPRING_TOMCAT_MAX_HTTP_FORM_POST_SIZE: 104857600
+      SPRING_TOMCAT_MAX_SWALLOW_SIZE: -1
+      SECURITY_INTERNAL_TOKEN: dev-internal-token
+    depends_on:
+      minio: { condition: service_healthy }
+      minio-setup: { condition: service_completed_successfully }
+      keycloak: { condition: service_started }
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_BASE: /api
+      VITE_OIDC_ISSUER: https://questify.tail03c40b.ts.net/auth/realms/questify
+      VITE_OIDC_CLIENT_ID: questify-frontend
+      VITE_OIDC_REDIRECT_URI: https://questify.tail03c40b.ts.net/
+    ports:
+      - "5443:8443"
+    volumes:
+      - ./frontend/infra/frontend/certs:/etc/nginx/certs:ro
+    depends_on:
+      gateway: { condition: service_started }
+    restart: unless-stopped
 
 volumes:
   mysql_data:
-  redis_data:
   minio_data:

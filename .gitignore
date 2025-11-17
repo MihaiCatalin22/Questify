@@ -80,3 +80,14 @@ QuestifyFE/infra/frontend/certs/private.key
 QuestifyFE/infra/frontend/certs/public.crt
 .env
 QuestifyBE/infra/backend/certs/questify-local.p12
+frontend/infra/frontend/certs/private.key
+frontend/infra/frontend/certs/public.crt
+user-service/src/main/resources/application.yml
+tailscale-values.yaml
+submission-service/src/main/resources/application.yml
+quest-service/src/main/resources/application.yml
+proof-service/src/main/resources/application.yml
+kc-export/questify-realm.json
+/k8s
+ingress-tailscale.yaml
+gateway/src/main/resources/application.yml
