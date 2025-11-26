@@ -14,35 +14,36 @@ permissions:
   contents: read
 
 # ───────────────────────────
-# Java microservices (JDK 21)
+# Quest Service
 # ───────────────────────────
-
 jobs:
-  quest:
+  quest-service:
     name: Quest Service • Build & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-
-      - name: Validate Gradle Wrapper
-        uses: gradle/actions/wrapper-validation@v3
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
-          cache: gradle
 
-      - name: Make gradlew executable
-        run: chmod +x gradlew
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.10.2
 
-      - name: Build & Test (quest-service)
+      - name: Build & Test
         run: |
-          ./gradlew --no-daemon -p quest-service clean test
-          # Run JaCoCo only if present (won't fail if plugin missing)
-          ./gradlew --no-daemon -p quest-service -q tasks --all | grep -q jacocoTestReport && ./gradlew --no-daemon -p quest-service jacocoTestReport || echo "JaCoCo not configured"
+          gradle --no-daemon -p quest-service clean test
+          if gradle -q -p quest-service tasks --all | grep -q '^jacocoTestReport'; then
+            gradle --no-daemon -p quest-service jacocoTestReport
+          else
+            echo "JaCoCo not configured in quest-service"
+          fi
 
       - name: Upload JUnit report
         if: always()
@@ -52,7 +53,7 @@ jobs:
           path: quest-service/build/reports/tests/test/**
           if-no-files-found: ignore
 
-      - name: Upload JaCoCo coverage xml
+      - name: Upload JaCoCo XML
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -60,23 +61,30 @@ jobs:
           path: quest-service/build/reports/jacoco/test/jacocoTestReport.xml
           if-no-files-found: ignore
 
-  user:
+# ───────────────────────────
+# User Service
+# ───────────────────────────
+  user-service:
     name: User Service • Build & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: gradle/actions/wrapper-validation@v3
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
-          cache: gradle
-      - run: chmod +x gradlew
-      - name: Build & Test (user-service)
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.10.2
+      - name: Build & Test
         run: |
-          ./gradlew --no-daemon -p user-service clean test
-          ./gradlew --no-daemon -p user-service -q tasks --all | grep -q jacocoTestReport && ./gradlew --no-daemon -p user-service jacocoTestReport || echo "JaCoCo not configured"
+          gradle --no-daemon -p user-service clean test
+          if gradle -q -p user-service tasks --all | grep -q '^jacocoTestReport'; then
+            gradle --no-daemon -p user-service jacocoTestReport
+          else
+            echo "JaCoCo not configured in user-service"
+          fi
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -90,23 +98,30 @@ jobs:
           path: user-service/build/reports/jacoco/test/jacocoTestReport.xml
           if-no-files-found: ignore
 
-  proof:
+# ───────────────────────────
+# Proof Service
+# ───────────────────────────
+  proof-service:
     name: Proof Service • Build & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: gradle/actions/wrapper-validation@v3
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
-          cache: gradle
-      - run: chmod +x gradlew
-      - name: Build & Test (proof-service)
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.10.2
+      - name: Build & Test
         run: |
-          ./gradlew --no-daemon -p proof-service clean test
-          ./gradlew --no-daemon -p proof-service -q tasks --all | grep -q jacocoTestReport && ./gradlew --no-daemon -p proof-service jacocoTestReport || echo "JaCoCo not configured"
+          gradle --no-daemon -p proof-service clean test
+          if gradle -q -p proof-service tasks --all | grep -q '^jacocoTestReport'; then
+            gradle --no-daemon -p proof-service jacocoTestReport
+          else
+            echo "JaCoCo not configured in proof-service"
+          fi
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -120,23 +135,30 @@ jobs:
           path: proof-service/build/reports/jacoco/test/jacocoTestReport.xml
           if-no-files-found: ignore
 
-  submission:
+# ───────────────────────────
+# Submission Service
+# ───────────────────────────
+  submission-service:
     name: Submission Service • Build & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: gradle/actions/wrapper-validation@v3
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
-          cache: gradle
-      - run: chmod +x gradlew
-      - name: Build & Test (submission-service)
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.10.2
+      - name: Build & Test
         run: |
-          ./gradlew --no-daemon -p submission-service clean test
-          ./gradlew --no-daemon -p submission-service -q tasks --all | grep -q jacocoTestReport && ./gradlew --no-daemon -p submission-service jacocoTestReport || echo "JaCoCo not configured"
+          gradle --no-daemon -p submission-service clean test
+          if gradle -q -p submission-service tasks --all | grep -q '^jacocoTestReport'; then
+            gradle --no-daemon -p submission-service jacocoTestReport
+          else
+            echo "JaCoCo not configured in submission-service"
+          fi
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -151,9 +173,8 @@ jobs:
           if-no-files-found: ignore
 
 # ────────────────
-# Frontend (Node)
+# Frontend
 # ────────────────
-
   frontend:
     name: Frontend • Build
     runs-on: ubuntu-latest
@@ -163,16 +184,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+
       - name: Use Node 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Create CI HTTPS certs
+        run: |
+          mkdir -p .cert
+          openssl req -x509 -nodes -newkey rsa:2048 \
+            -keyout .cert/localhost-key.pem \
+            -out .cert/localhost.pem \
+            -subj "/CN=localhost" -days 1
+
       - name: Install deps
         run: npm ci
+
       - name: Build
         run: npm run build
+
       - name: Upload FE build artifact
         if: always()
         uses: actions/upload-artifact@v4
