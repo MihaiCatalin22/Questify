@@ -15,9 +15,12 @@ public class QuestAccessClient {
     private final String token;
 
     public QuestAccessClient(
-            @Value("${quest.service.base:http://quest-service:8080}") String base,
-            @Value("${internal.token:}") String token,
-            WebClient.Builder builder) {
+            // accept either env var style or old dotted key, default to cluster service DNS
+            @Value("${QUEST_SERVICE_BASE:${quest.service.base:http://quest-service:8080}}") String base,
+            // unify on INTERNAL_TOKEN; also accept SECURITY_INTERNAL_TOKEN or old internal.token if present
+            @Value("${SECURITY_INTERNAL_TOKEN:${INTERNAL_TOKEN:${internal.token:dev-internal-token}}}") String token,
+            WebClient.Builder builder
+    ) {
         this.webClient = builder.baseUrl(base).build();
         this.token = token;
     }
@@ -38,6 +41,6 @@ public class QuestAccessClient {
                 )
                 .onErrorReturn(false);
 
-        return call.block(Duration.ofSeconds(3));
+        return call.block(Duration.ofSeconds(5));
     }
 }

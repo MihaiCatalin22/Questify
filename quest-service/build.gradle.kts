@@ -33,7 +33,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("software.amazon.awssdk:s3:2.25.39")
     implementation("com.fasterxml.jackson.core:jackson-databind")
-
+    implementation("org.springframework.kafka:spring-kafka")
     runtimeOnly("com.mysql:mysql-connector-j")
 
     implementation("io.jsonwebtoken:jjwt-api:0.11.5")

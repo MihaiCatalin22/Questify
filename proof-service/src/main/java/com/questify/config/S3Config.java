@@ -27,12 +27,9 @@ public class S3Config {
 
     @Bean
     public S3Client s3Client() {
-        var s3conf = S3Configuration.builder()
-                .pathStyleAccessEnabled(true)
-                .build();
-
+        var s3conf = S3Configuration.builder().pathStyleAccessEnabled(true).build();
         return S3Client.builder()
-                .endpointOverride(URI.create(props.getEndpoint()))
+                .endpointOverride(URI.create(props.getEndpoint()))             // internal
                 .region(Region.of(props.getRegion()))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))
@@ -43,12 +40,12 @@ public class S3Config {
 
     @Bean
     public S3Presigner s3Presigner() {
-        var s3conf = S3Configuration.builder()
-                .pathStyleAccessEnabled(true)
-                .build();
-
+        var s3conf = S3Configuration.builder().pathStyleAccessEnabled(true).build();
+        String presignEndpoint = (props.getPublicEndpoint() != null && !props.getPublicEndpoint().isBlank())
+                ? props.getPublicEndpoint()
+                : props.getEndpoint();
         return S3Presigner.builder()
-                .endpointOverride(URI.create(props.getEndpoint()))
+                .endpointOverride(URI.create(presignEndpoint))                 // 🔁 public (tailscale) host
                 .region(Region.of(props.getRegion()))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))
@@ -77,23 +74,27 @@ public class S3Config {
     }
 
     @Bean
-    @Profile("dev")
-    public CommandLineRunner setDevCors(S3Client s3) {
+    @Profile({"dev","tailscale","minio"}) // choose profiles that make sense in your env
+    public CommandLineRunner setBucketCors(S3Client s3) {
         return args -> {
+            var origins = props.getCorsAllowedOrigins();
+            if (origins == null || origins.isEmpty()) {
+                log.info("No storage.cors.allowed-origins configured; skipping bucket CORS.");
+                return;
+            }
             var rule = CORSRule.builder()
-                    .allowedOrigins("http://localhost:5173","https://localhost:5173")
+                    .allowedOrigins(origins)                 // e.g. https://questify.tail03c40b.ts.net
                     .allowedMethods("GET","PUT","HEAD","POST","DELETE")
                     .allowedHeaders("*")
                     .exposeHeaders("ETag","Location")
                     .maxAgeSeconds(3600)
                     .build();
             try {
-                s3.putBucketCors(b -> b
-                        .bucket(props.getBucket())
+                s3.putBucketCors(b -> b.bucket(props.getBucket())
                         .corsConfiguration(c -> c.corsRules(rule)));
-                log.info("Applied dev CORS to bucket '{}'.", props.getBucket());
+                log.info("Applied bucket CORS for origins: {}", origins);
             } catch (Exception e) {
-                log.warn("Could not apply CORS to bucket '{}': {}", props.getBucket(), e.toString());
+                log.warn("Could not apply bucket CORS: {}", e.toString());
             }
         };
     }

@@ -2,8 +2,10 @@ package com.questify.service;
 
 import com.questify.domain.*;
 import com.questify.dto.QuestDtos.*;
+import com.questify.kafka.EventPublisher;
 import com.questify.repository.*;
 import jakarta.persistence.EntityNotFoundException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -11,14 +13,21 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
+
 @Service
 public class QuestService {
     private final QuestRepository quests;
     private final QuestParticipantRepository participants;
+    private final EventPublisher events;
 
-    public QuestService(QuestRepository quests, QuestParticipantRepository participants) {
+    @Value("${app.kafka.topics.quests:quests}")
+    private String questsTopic;
+
+    public QuestService(QuestRepository quests, QuestParticipantRepository participants, EventPublisher events) {
         this.quests = quests;
         this.participants = participants;
+        this.events = events;
     }
 
     @Transactional
@@ -36,7 +45,26 @@ public class QuestService {
                 .visibility(req.visibility())
                 .createdByUserId(req.createdByUserId())
                 .build();
-        return quests.save(q);
+        var saved = quests.save(q);
+
+        events.publish(
+                questsTopic,
+                String.valueOf(saved.getId()),
+                "QuestCreated", 1, "quest-service",
+                Map.of(
+                        "questId", saved.getId(),
+                        "createdByUserId", saved.getCreatedByUserId(),
+                        "title", saved.getTitle(),
+                        "description", saved.getDescription(),
+                        "category", saved.getCategory().name(),
+                        "visibility", saved.getVisibility().name(),
+                        "status", saved.getStatus().name(),
+                        "startDate", saved.getStartDate(),
+                        "endDate", saved.getEndDate()
+                )
+        );
+
+        return saved;
     }
 
     public Quest get(Long id) {
@@ -55,7 +83,24 @@ public class QuestService {
         q.setStartDate(req.startDate());
         q.setEndDate(req.endDate());
         q.setVisibility(req.visibility());
-        return quests.save(q);
+        var saved = quests.save(q);
+
+        events.publish(
+                questsTopic,
+                String.valueOf(saved.getId()),
+                "QuestUpdated", 1, "quest-service",
+                Map.of(
+                        "questId", saved.getId(),
+                        "title", saved.getTitle(),
+                        "description", saved.getDescription(),
+                        "category", saved.getCategory().name(),
+                        "visibility", saved.getVisibility().name(),
+                        "startDate", saved.getStartDate(),
+                        "endDate", saved.getEndDate()
+                )
+        );
+
+        return saved;
     }
 
     @Transactional
@@ -65,7 +110,19 @@ public class QuestService {
             throw new AccessDeniedException("Only owner can update status.");
         }
         q.setStatus(req.status());
-        return quests.save(q);
+        var saved = quests.save(q);
+
+        events.publish(
+                questsTopic,
+                String.valueOf(saved.getId()),
+                "QuestStatusUpdated", 1, "quest-service",
+                Map.of(
+                        "questId", saved.getId(),
+                        "status", saved.getStatus().name()
+                )
+        );
+
+        return saved;
     }
 
     @Transactional
@@ -75,7 +132,19 @@ public class QuestService {
             throw new AccessDeniedException("Only owner can archive.");
         }
         q.setStatus(QuestStatus.ARCHIVED);
-        return quests.save(q);
+        var saved = quests.save(q);
+
+        events.publish(
+                questsTopic,
+                String.valueOf(saved.getId()),
+                "QuestArchived", 1, "quest-service",
+                Map.of(
+                        "questId", saved.getId(),
+                        "status", saved.getStatus().name()
+                )
+        );
+
+        return saved;
     }
 
     public Page<Quest> listByStatus(QuestStatus status, Pageable pageable) {
@@ -104,18 +173,33 @@ public class QuestService {
         if (q.getVisibility() != QuestVisibility.PUBLIC) {
             throw new AccessDeniedException("This quest is private.");
         }
-        // idempotent
         if (participants.findByQuest_IdAndUserId(questId, userId).isPresent()) return;
         try {
             participants.save(new QuestParticipant(q, userId));
+
+            events.publish(
+                    questsTopic,
+                    String.valueOf(questId),
+                    "ParticipantJoined", 1, "quest-service",
+                    Map.of("questId", questId, "userId", userId)
+            );
         } catch (DataIntegrityViolationException ignored) {
-            // unique constraint race -> treated as joined
         }
     }
 
     @Transactional
     public void leave(Long questId, String userId) {
-        participants.findByQuest_IdAndUserId(questId, userId).ifPresent(participants::delete);
+        var existing = participants.findByQuest_IdAndUserId(questId, userId);
+        if (existing.isPresent()) {
+            participants.delete(existing.get());
+
+            events.publish(
+                    questsTopic,
+                    String.valueOf(questId),
+                    "ParticipantLeft", 1, "quest-service",
+                    Map.of("questId", questId, "userId", userId)
+            );
+        }
     }
 
     public int participantsCount(Long questId) {

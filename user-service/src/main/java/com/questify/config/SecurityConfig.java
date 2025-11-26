@@ -41,7 +41,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         var cfg = new CorsConfiguration();
-        cfg.setAllowedOrigins(List.of("https://localhost:5443"));
+        cfg.setAllowedOriginPatterns(List.of("https://*.ts.net", "https://questify.tail03c40b.ts.net", "https://localhost:5443"));
         cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setAllowCredentials(true);

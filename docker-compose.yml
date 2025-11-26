@@ -83,7 +83,8 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
       KC_HTTP_ENABLED: "true"
-      KC_HOSTNAME: https://localhost:5443/auth
+      KC_HOSTNAME: https://questify.tail03c40b.ts.net
+      KC_HTTP_RELATIVE_PATH: /auth
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
     ports: ["8081:8080"]
@@ -111,7 +112,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       # JWT validation (issuer = browser URL, JWKs = internal Keycloak)
-      OIDC_ISSUER: https://localhost:5443/auth/realms/questify
+      OIDC_ISSUER: https://questify.tail03c40b.ts.net/auth/realms/questify
       OIDC_JWKS:   http://keycloak:8080/realms/questify/protocol/openid-connect/certs
       # internal comms with submission-service if needed
       SUBMISSION_SERVICE_URL: http://submission-service:8080
@@ -130,7 +131,7 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      OIDC_ISSUER: https://localhost:5443/auth/realms/questify
+      OIDC_ISSUER: https://questify.tail03c40b.ts.net/auth/realms/questify
       OIDC_JWKS:   http://keycloak:8080/realms/questify/protocol/openid-connect/certs
       INTERNAL_TOKEN: dev-internal-token
       SECURITY_INTERNAL_TOKEN: dev-internal-token
@@ -153,7 +154,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       # JWT validation (issuer = browser URL, JWKs = internal Keycloak)
-      OIDC_ISSUER: https://localhost:5443/auth/realms/questify
+      OIDC_ISSUER: https://questify.tail03c40b.ts.net/auth/realms/questify
       OIDC_JWKS:   http://keycloak:8080/realms/questify/protocol/openid-connect/certs
     depends_on:
       mysql: { condition: service_healthy }
@@ -165,7 +166,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: dev
       # JWT validation (issuer = browser URL, JWKs = internal Keycloak)
-      OIDC_ISSUER: https://localhost:5443/auth/realms/questify
+      OIDC_ISSUER: https://questify.tail03c40b.ts.net/auth/realms/questify
       OIDC_JWKS:   http://keycloak:8080/realms/questify/protocol/openid-connect/certs
       STORAGE_ENDPOINT:  http://minio:9000
       STORAGE_REGION:    us-east-1
@@ -190,13 +191,11 @@ services:
       VITE_API_BASE: /api
       VITE_OIDC_ISSUER: https://questify.tail03c40b.ts.net/auth/realms/questify
       VITE_OIDC_CLIENT_ID: questify-frontend
-      VITE_OIDC_REDIRECT_URI: https://questify.tail03c40b.ts.net/
+      VITE_OIDC_REDIRECT_URI: https://questify.tail03c40b.ts.net/oidc-callback
     ports:
       - "5443:8443"
     volumes:
       - ./frontend/infra/frontend/certs:/etc/nginx/certs:ro
-    depends_on:
-      gateway: { condition: service_started }
     restart: unless-stopped
 
 volumes:

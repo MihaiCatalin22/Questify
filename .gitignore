@@ -91,3 +91,5 @@ kc-export/questify-realm.json
 /k8s
 ingress-tailscale.yaml
 gateway/src/main/resources/application.yml
+docker-compose.yml
+frontend/nginx.conf

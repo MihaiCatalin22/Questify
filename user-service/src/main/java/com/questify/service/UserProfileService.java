@@ -2,18 +2,28 @@ package com.questify.service;
 
 import com.questify.domain.UserProfile;
 import com.questify.dto.ProfileDtos.UpsertMeReq;
+import com.questify.kafka.EventPublisher;
 import com.questify.repository.UserProfileRepository;
 import jakarta.persistence.EntityNotFoundException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class UserProfileService {
     private final UserProfileRepository repo;
+    private final EventPublisher events;
 
-    public UserProfileService(UserProfileRepository repo) { this.repo = repo; }
+    @Value("${app.kafka.topics.users:users}")
+    private String usersTopic;
+
+    public UserProfileService(UserProfileRepository repo, EventPublisher events) {
+        this.repo = repo;
+        this.events = events;
+    }
 
     @Transactional
     public UserProfile ensure(String userId, String username, String displayName, String email, String avatar) {
@@ -26,7 +36,22 @@ public class UserProfileService {
                     .avatarUrl(avatar)
                     .bio(null)
                     .build();
-            return repo.save(p);
+            var saved = repo.save(p);
+
+            events.publish(
+                    usersTopic,
+                    saved.getUserId(),
+                    "UserRegistered", 1, "user-service",
+                    Map.of(
+                            "userId", saved.getUserId(),
+                            "username", saved.getUsername(),
+                            "displayName", saved.getDisplayName(),
+                            "email", saved.getEmail(),
+                            "avatarUrl", saved.getAvatarUrl()
+                    )
+            );
+
+            return saved;
         });
     }
 
@@ -38,7 +63,23 @@ public class UserProfileService {
         if (req.email() != null) p.setEmail(req.email());
         if (req.avatarUrl() != null) p.setAvatarUrl(req.avatarUrl());
         if (req.bio() != null) p.setBio(req.bio());
-        return repo.save(p);
+        var saved = repo.save(p);
+
+        events.publish(
+                usersTopic,
+                saved.getUserId(),
+                "UserProfileUpdated", 1, "user-service",
+                Map.of(
+                        "userId", saved.getUserId(),
+                        "username", saved.getUsername(),
+                        "displayName", saved.getDisplayName(),
+                        "email", saved.getEmail(),
+                        "avatarUrl", saved.getAvatarUrl(),
+                        "bio", saved.getBio()
+                )
+        );
+
+        return saved;
     }
 
     public UserProfile get(String id) {

@@ -19,7 +19,7 @@ public class QuestProgressClient {
     private final String internalToken;
 
     public QuestProgressClient(
-            @Value("${QUEST_SERVICE_BASE:http://quest-service:8080}") String questBase,
+            @Value("${QUEST_SERVICE_BASE:http://quest-service:8080/api}") String questBase,
             @Value("${INTERNAL_TOKEN:dev-internal-token}") String internalToken
     ) {
         this.http = WebClient.builder()
@@ -35,15 +35,11 @@ public class QuestProgressClient {
                     .uri("/internal/quests/{id}/completion", questId)
                     .header("X-Internal-Token", internalToken)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(Map.of(
-                            "userId", userId,
-                            "submissionId", submissionId
-                    ))
+                    .bodyValue(Map.of("userId", userId, "submissionId", submissionId))
                     .retrieve()
                     .toBodilessEntity()
                     .block(Duration.ofSeconds(5));
         } catch (Exception e) {
-            // Don’t fail the approval if quest-service is temporarily down.
             log.warn("Failed to notify quest completion: questId={}, userId={}, submissionId={}, err={}",
                     questId, userId, submissionId, e.toString());
         }

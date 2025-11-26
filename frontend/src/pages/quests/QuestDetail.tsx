@@ -1,46 +1,99 @@
-import React from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuest, useJoinQuest, useLeaveQuest, useMyQuests } from '../../hooks/useQuests';
 import { useCreateSubmission, useSubmissionsForQuest } from '../../hooks/useSubmissions';
-import { useState, useMemo, useEffect } from 'react';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import http from '../../api/https';
 
 // ---- helpers --------------------------------------------------------------
 
-/** Same-origin rewrite for MinIO presigned URLs */
+/**
+ * IMPORTANT: Do NOT rewrite presigned URLs (SigV4 is path-sensitive).
+ * Return URLs exactly as provided. Relative fallbacks (e.g. /api/...) are fine as-is.
+ */
 function toSameOriginS3(url?: string | null): string | null {
   if (!url) return null;
-  try {
-    if (!/^https?:\/\//i.test(url)) return url;
-    const u = new URL(url);
-    const host = u.hostname;
-    const port = u.port;
-    const isMinioHost =
-      (host === 'minio' || host === 'localhost' || host === '127.0.0.1' || host === 'host.docker.internal') &&
-      (!port || port === '9000' || port === '9003');
-    if (isMinioHost) return `/s3${u.pathname}${u.search || ''}`;
-    return url;
-  } catch { return url; }
+  return url;
 }
 
-/** Fixed-box inline renderer used by previews */
-function ProofInline({
-  url,
-  mediaType,
-  height = 560,
-}: { url: string; mediaType?: string | null; height?: number }) {
-  const [mode, setMode] = useState<'img' | 'video' | 'link'>(
-    mediaType?.startsWith('video/') ? 'video' : 'img'
-  );
+/** Quick magic-number sniff for common image formats */
+async function looksLikeImage(blob: Blob): Promise<boolean> {
+  try {
+    const head = await blob.slice(0, 16).arrayBuffer();
+    const b = new Uint8Array(head);
+    // JPEG FF D8
+    if (b[0] === 0xff && b[1] === 0xd8) return true;
+    // PNG 89 50 4E 47 0D 0A 1A 0A
+    if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return true;
+    // GIF "GIF8"
+    if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return true;
+    // WEBP "RIFF....WEBP"
+    if (
+      b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
+    ) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
 
+/**
+ * Fetch bytes for a URL and return a guaranteed-renderable src:
+ *  - Prefer a decoded canvas dataURL (via createImageBitmap) so headers can't interfere.
+ *  - Fallback to blob: URL if canvas path isn't available.
+ *  - If bytes aren't an image, throw with a short text preview for debugging.
+ */
+async function materializeRenderableSrc(url: string): Promise<{ src: string; revoke?: () => void }> {
+  const res = await fetch(url, {
+    credentials: 'same-origin',
+    cache: 'no-store',
+    redirect: 'follow',
+    headers: { 'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8' },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const blob = await res.blob();
+  const ct = res.headers.get('content-type') ?? '';
+  const imageish = /^image\//i.test(ct) || (await looksLikeImage(blob));
+  if (!imageish) {
+    let excerpt = '';
+    try { excerpt = (await blob.text()).slice(0, 300); } catch {}
+    throw new Error(excerpt ? `Non-image response:\n${excerpt}` : 'Non-image response (no preview)');
+  }
+
+  try {
+    // @ts-ignore: older TS libs may not know createImageBitmap
+    const bmp = await createImageBitmap(blob);
+    const canvas = document.createElement('canvas');
+    canvas.width = bmp.width || 1;
+    canvas.height = bmp.height || 1;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('No 2D context');
+    ctx.drawImage(bmp, 0, 0);
+    const dataUrl = canvas.toDataURL('image/png');
+    if (bmp.close) try { bmp.close(); } catch {}
+    return { src: dataUrl };
+  } catch {
+    const obj = URL.createObjectURL(blob);
+    return { src: obj, revoke: () => URL.revokeObjectURL(obj) };
+  }
+}
+
+/** Image-only renderer with robust Blob+Canvas fallback and debug output */
+function ProofImage({
+  url,
+  height = 560,
+  eager = false,
+}: { url: string; height?: number; eager?: boolean }) {
   const box: React.CSSProperties = {
     width: '100%',
     height,
     overflow: 'hidden',
     borderRadius: 12,
     border: '1px solid var(--border, #2f3545)',
+    background: 'var(--card, #0f1115)',
   };
   const media: React.CSSProperties = {
     width: '100%',
@@ -49,44 +102,77 @@ function ProofInline({
     display: 'block',
   };
 
-  if (mode === 'img') {
-    return (
-      <div style={box}>
+  const [src, setSrc] = useState(url);
+  const [triedFallback, setTriedFallback] = useState(false);
+  const [debug, setDebug] = useState<string | null>(null);
+  const revokeRef = useRef<(() => void) | null>(null);
+
+  // Reset when URL changes
+  useEffect(() => {
+    setSrc(url);
+    setDebug(null);
+    setTriedFallback(false);
+    if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
+  }, [url]);
+
+  // Cleanup any object URL on unmount
+  useEffect(() => {
+    return () => { if (revokeRef.current) revokeRef.current(); };
+  }, []);
+
+  const handleError = async () => {
+    if (triedFallback) {
+      setDebug((d) => d ?? 'Image decode failed after fallback.');
+      return;
+    }
+    setTriedFallback(true);
+    try {
+      const { src: safeSrc, revoke } = await materializeRenderableSrc(url);
+      if (revokeRef.current) revokeRef.current();
+      revokeRef.current = revoke ?? null;
+      setSrc(safeSrc);
+      setDebug(null);
+    } catch (e: any) {
+      setDebug(String(e?.message || e) || 'Failed to fetch image.');
+    }
+  };
+
+  return (
+    <div style={box}>
+      {!debug ? (
         <img
-          src={url}
+          src={src}
           alt="proof"
           style={media}
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={() => setMode('video')}
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+          onError={handleError}
         />
-      </div>
-    );
-  }
-  if (mode === 'video') {
-    return (
-      <div style={box}>
-        <video
-          src={url}
-          style={media}
-          controls
-          playsInline
-          preload="metadata"
-          onError={() => setMode('link')}
-        />
-      </div>
-    );
-  }
-  return (
-    <a className="text-sm underline" href={url} target="_blank" rel="noreferrer noopener">
-      Open proof
-    </a>
+      ) : (
+        <div
+          style={{
+            ...media,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 13,
+            opacity: 0.8,
+            whiteSpace: 'pre-wrap',
+            padding: 16,
+            textAlign: 'center',
+          }}
+          title={debug}
+        >
+          Unable to display image
+          {debug ? `\n\n${debug}` : null}
+        </div>
+      )}
+    </div>
   );
 }
 
 function SubmissionPreview({ submission }: { submission: any }) {
   const [displayUrl, setDisplayUrl] = useState<string | null>(null);
-  const [contentType, setContentType] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -98,12 +184,10 @@ function SubmissionPreview({ submission }: { submission: any }) {
         );
         if (!alive) return;
         setDisplayUrl(toSameOriginS3(data.url));
-        setContentType((submission?.mediaType as string | undefined) ?? null);
       } catch {
         const fallback = `/api/submissions/${submission.id}/proof`;
         if (!alive) return;
         setDisplayUrl(toSameOriginS3(fallback));
-        setContentType((submission?.mediaType as string | undefined) ?? null);
       }
     })();
     return () => { alive = false; };
@@ -116,7 +200,7 @@ function SubmissionPreview({ submission }: { submission: any }) {
   return (
     <div className="mt-3 space-y-2">
       <div className="font-semibold text-sm">Proof</div>
-      <ProofInline url={displayUrl} mediaType={contentType} />
+      <ProofImage url={displayUrl} />
     </div>
   );
 }
@@ -166,7 +250,6 @@ export default function QuestDetail() {
 
   const [comment, setComment] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const [proofUrl, setProofUrl] = useState('');
 
   const [localJoined, setLocalJoined] = useState<boolean | null>(null);
   const [showOwnerLeaveModal, setShowOwnerLeaveModal] = useState(false);
@@ -210,7 +293,7 @@ export default function QuestDetail() {
     joinedByMe && !completed && status !== 'ARCHIVED' && !notStartedYet && !ended
   );
 
-  const canSend = !!(file || (proofUrl && proofUrl.trim().length > 0));
+  const canSend = !!file; // image file required now
   const canJoin = !joinedByMe && visibility === 'PUBLIC' && status !== 'ARCHIVED' && !!safeQuestId;
   const showLeaveButton = !ended && status !== 'ARCHIVED' && !!safeQuestId && joinedByMe;
 
@@ -220,11 +303,10 @@ export default function QuestDetail() {
       await create.mutateAsync({
         questId: safeQuestId,
         comment: comment || undefined,
-        file,
-        proofUrl: file ? undefined : (proofUrl || undefined),
+        file, // URL uploads removed — images only
       });
       toast.success('Submission sent!');
-      setComment(''); setFile(null); setProofUrl('');
+      setComment(''); setFile(null);
     } catch (err: any) {
       const msg =
         err?.response?.data?.message ||
@@ -455,25 +537,15 @@ export default function QuestDetail() {
                       </div>
 
                       <div className="text-xs text-gray-500">
-                        Attach a file <span className="opacity-60">or</span> paste a URL
+                        Attach an image
                       </div>
 
                       <div className="space-y-2">
                         <input
                           type="file"
-                          accept="image/*,video/*"
+                          accept="image/*"
                           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                           className="block text-sm"
-                          disabled={create.isPending || !!proofUrl || !canSubmit}
-                        />
-                        <input
-                          placeholder="https://example.com/my-proof"
-                          className="field"
-                          value={proofUrl}
-                          onChange={(e) => {
-                            setProofUrl(e.target.value);
-                            if (e.target.value) setFile(null);
-                          }}
                           disabled={create.isPending || !canSubmit}
                         />
                       </div>
@@ -483,13 +555,13 @@ export default function QuestDetail() {
                           type="submit"
                           className="btn-primary disabled:opacity-60"
                           disabled={create.isPending || !canSend || !canSubmit}
-                          title={!canSend ? 'Attach a file or paste a URL' : 'Submit'}
+                          title={!canSend ? 'Attach an image' : 'Submit'}
                         >
                           {create.isPending ? 'Submitting…' : 'Submit'}
                         </button>
                         {!canSend && (
                           <span className="text-xs text-gray-500">
-                            Provide a file or URL to submit.
+                            Provide an image to submit.
                           </span>
                         )}
                       </div>

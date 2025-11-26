@@ -32,9 +32,9 @@ public class ProofClient {
     public record UploadRes(String key, String putUrl) {}
 
     public ProofClient(
-            @Value("${proof.base-url:http://proof-service:8080}") String base,
-            @Value("${proof.public-base-url:/s3/questify-proofs}") String publicBase,
-            @Value("${SECURITY_INTERNAL_TOKEN:${INTERNAL_TOKEN:}}") String internalToken
+            @Value("${PROOF_SERVICE_BASE:http://proof-service:8080/api}") String base,
+            @Value("${PROOF_PUBLIC_BASE_URL:https://questify.tail03c40b.ts.net/s3/questify-proofs}") String publicBase,
+            @Value("${INTERNAL_TOKEN:dev-internal-token}") String internalToken
     ) {
         HttpClient hc = HttpClient.create()
                 .responseTimeout(Duration.ofSeconds(90))
@@ -58,6 +58,7 @@ public class ProofClient {
             Map<?, ?> res = proofApi.get()
                     .uri(uri -> uri.path("/internal/presign/get").queryParam("key", key).build())
                     .header("X-Internal-Token", internalToken)
+                    .header("X-Security-Token", internalToken)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .block(Duration.ofSeconds(10));

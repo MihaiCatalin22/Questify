@@ -13,7 +13,7 @@ public class SubmissionClient {
     private final String internalToken;
 
     public SubmissionClient(
-            @Value("${SUBMISSION_SERVICE_BASE:http://submission-service:8080}") String base,
+            @Value("${SUBMISSION_SERVICE_BASE:http://submission-service:8080/api}") String base,
             @Value("${INTERNAL_TOKEN:dev-internal-token}") String internalToken
     ) {
         this.http = WebClient.builder()

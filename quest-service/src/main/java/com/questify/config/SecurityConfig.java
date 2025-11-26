@@ -31,38 +31,38 @@ public class SecurityConfig {
     @Value("${INTERNAL_TOKEN:dev-internal-token}")
     private String internalToken;
 
+    /** Simple header token filter for /internal/** */
     static class InternalTokenFilter extends OncePerRequestFilter {
         private final String token;
-
-        InternalTokenFilter(String token) {
-            this.token = token;
-        }
+        InternalTokenFilter(String token) { this.token = token; }
 
         @Override
         protected boolean shouldNotFilter(HttpServletRequest request) {
-            String path = request.getRequestURI();
-            return path == null || !path.startsWith("/internal/");
+            // use servletPath to ignore contextPath (e.g. "/api")
+            String p = request.getServletPath();
+            return p == null || !p.startsWith("/internal/");
         }
 
         @Override
         protected void doFilterInternal(HttpServletRequest request,
                                         HttpServletResponse response,
-                                        FilterChain filterChain) throws ServletException, IOException {
+                                        FilterChain chain) throws ServletException, IOException {
             String hdr = request.getHeader("X-Internal-Token");
             if (hdr != null && !hdr.isBlank() && hdr.equals(token)) {
-                filterChain.doFilter(request, response);
+                chain.doFilter(request, response);
             } else {
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
             }
         }
     }
 
+    /** Internal chain: only header token, no JWT */
     @Bean
     @Order(0)
     SecurityFilterChain internalChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher(req -> {
-                    String p = req.getRequestURI();
+                    String p = req.getServletPath();
                     return p != null && p.startsWith("/internal/");
                 })
                 .csrf(csrf -> csrf.disable())
@@ -70,11 +70,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a.anyRequest().permitAll())
                 .httpBasic(h -> h.disable())
                 .formLogin(f -> f.disable())
-                .oauth2ResourceServer(o -> o.jwt(jwt -> { /* not used for /internal */ }))
                 .addFilterBefore(new InternalTokenFilter(internalToken), BasicAuthenticationFilter.class);
         return http.build();
     }
 
+    /** Public API chain: JWT */
     @Bean
     @Order(1)
     SecurityFilterChain apiChain(HttpSecurity http) throws Exception {
@@ -101,7 +101,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         var cfg = new CorsConfiguration();
-        cfg.setAllowedOrigins(List.of("https://localhost:5443"));
+        cfg.setAllowedOriginPatterns(List.of("https://*.ts.net", "https://questify.tail03c40b.ts.net", "https://localhost:5443"));
         cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setAllowCredentials(true);

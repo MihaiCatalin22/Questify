@@ -18,7 +18,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
-
+    implementation("org.springframework.kafka:spring-kafka")
     implementation(platform("software.amazon.awssdk:bom:2.25.70"))
     implementation("software.amazon.awssdk:s3")
     implementation("software.amazon.awssdk:auth")
