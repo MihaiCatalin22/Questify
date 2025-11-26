@@ -20,6 +20,9 @@ jobs:
   quest-service:
     name: Quest Service • Build & Test
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,12 +64,33 @@ jobs:
           path: quest-service/build/reports/jacoco/test/jacocoTestReport.xml
           if-no-files-found: ignore
 
+      - name: SonarCloud Analysis (main only)
+        if: ${{ github.ref == 'refs/heads/main' && env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarcloud-github-action@v3
+        env:
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+        with:
+          projectBaseDir: quest-service
+          args: >
+            -Dsonar.projectKey=questify-quest-service
+            -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
+            -Dsonar.sources=src/main/java
+            -Dsonar.tests=src/test/java
+            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.java.binaries=build/classes/java/main
+            -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml
+            -Dsonar.exclusions=**/build/**
+            -Dsonar.coverage.exclusions=src/main/java/**/client/**,src/main/java/**/config/**,src/main/java/**/controller/InternalCompletionController.java,src/main/java/**/controller/InternalQuestAccessController.java,src/main/java/**/controller/InternalQuestProgressController.java,src/main/java/**/domain/**,src/main/java/**/dto/**,src/main/java/**/kafka/**,src/main/java/**/mapper/**,src/main/java/**/repository/**
+
 # ───────────────────────────
 # User Service
 # ───────────────────────────
   user-service:
     name: User Service • Build & Test
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -77,6 +101,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.10.2
+
       - name: Build & Test
         run: |
           gradle --no-daemon -p user-service clean test
@@ -85,12 +110,14 @@ jobs:
           else
             echo "JaCoCo not configured in user-service"
           fi
+
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: user-tests
           path: user-service/build/reports/tests/test/**
           if-no-files-found: ignore
+
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -98,8 +125,26 @@ jobs:
           path: user-service/build/reports/jacoco/test/jacocoTestReport.xml
           if-no-files-found: ignore
 
+      - name: SonarCloud Analysis (main only)
+        if: ${{ github.ref == 'refs/heads/main' && env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarcloud-github-action@v3
+        env:
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+        with:
+          projectBaseDir: user-service
+          args: >
+            -Dsonar.projectKey=questify-user-service
+            -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
+            -Dsonar.sources=src/main/java
+            -Dsonar.tests=src/test/java
+            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.java.binaries=build/classes/java/main
+            -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml
+            -Dsonar.exclusions=**/build/**
+            -Dsonar.coverage.exclusions=src/main/java/**/config/**,src/main/java/**/domain/**,src/main/java/**/dto/**,src/main/java/**/kafka/**,src/main/java/**/mapper/**,src/main/java/**/repository/**
+
 # ───────────────────────────
-# Proof Service
+# Proof Service 
 # ───────────────────────────
   proof-service:
     name: Proof Service • Build & Test
@@ -114,6 +159,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.10.2
+
       - name: Build & Test
         run: |
           gradle --no-daemon -p proof-service clean test
@@ -122,12 +168,14 @@ jobs:
           else
             echo "JaCoCo not configured in proof-service"
           fi
+
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: proof-tests
           path: proof-service/build/reports/tests/test/**
           if-no-files-found: ignore
+
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -141,6 +189,9 @@ jobs:
   submission-service:
     name: Submission Service • Build & Test
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -151,6 +202,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.10.2
+
       - name: Build & Test
         run: |
           gradle --no-daemon -p submission-service clean test
@@ -159,18 +211,38 @@ jobs:
           else
             echo "JaCoCo not configured in submission-service"
           fi
+
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: submission-tests
           path: submission-service/build/reports/tests/test/**
           if-no-files-found: ignore
+
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: submission-jacoco-xml
           path: submission-service/build/reports/jacoco/test/jacocoTestReport.xml
           if-no-files-found: ignore
+
+      - name: SonarCloud Analysis (main only)
+        if: ${{ github.ref == 'refs/heads/main' && env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarcloud-github-action@v3
+        env:
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+        with:
+          projectBaseDir: submission-service
+          args: >
+            -Dsonar.projectKey=questify-submission-service
+            -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
+            -Dsonar.sources=src/main/java
+            -Dsonar.tests=src/test/java
+            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.java.binaries=build/classes/java/main
+            -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml
+            -Dsonar.exclusions=**/build/**
+            -Dsonar.coverage.exclusions=src/main/java/**/client/**,src/main/java/**/config/**,src/main/java/**/domain/**,src/main/java/**/dto/**,src/main/java/**/kafka/**,src/main/java/**/mapper/**,src/main/java/**/repository/**
 
 # ────────────────
 # Frontend
@@ -181,6 +253,9 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -213,3 +288,17 @@ jobs:
           name: fe-dist
           path: frontend/dist
           if-no-files-found: ignore
+
+      - name: SonarCloud Analysis (main only)
+        if: ${{ github.ref == 'refs/heads/main' && env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarcloud-github-action@v3
+        env:
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+        with:
+          projectBaseDir: frontend
+          args: >
+            -Dsonar.projectKey=questify-frontend
+            -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
+            -Dsonar.sources=src
+            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.exclusions=**/dist/**,**/.vite/**,**/node_modules/**
