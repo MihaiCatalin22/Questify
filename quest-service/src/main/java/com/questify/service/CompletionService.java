@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 
 @Service
@@ -29,6 +30,7 @@ public class CompletionService {
     public QuestCompletion upsertCompleted(Long questId, String userId, Long submissionId) {
         var existing = completions.findByQuestIdAndUserId(questId, userId).orElse(null);
         QuestCompletion saved;
+
         if (existing == null) {
             var c = QuestCompletion.builder()
                     .questId(questId)
@@ -40,20 +42,26 @@ public class CompletionService {
             saved = completions.save(c);
         } else {
             existing.setStatus(QuestStatus.COMPLETED);
-            if (submissionId != null) existing.setSubmissionId(submissionId);
+            if (submissionId != null) {
+                existing.setSubmissionId(submissionId);
+            }
+            if (existing.getCompletedAt() == null) {
+                existing.setCompletedAt(Instant.now());
+            }
             saved = completions.save(existing);
         }
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("questId", saved.getQuestId());
+        payload.put("userId", saved.getUserId());
+        payload.put("submissionId", saved.getSubmissionId());
+        payload.put("completedAt", saved.getCompletedAt());
 
         events.publish(
                 streaksTopic,
                 String.valueOf(saved.getQuestId()),
                 "QuestCompleted", 1, "quest-service",
-                Map.of(
-                        "questId", saved.getQuestId(),
-                        "userId", saved.getUserId(),
-                        "submissionId", saved.getSubmissionId(),
-                        "completedAt", saved.getCompletedAt()
-                )
+                payload
         );
 
         return saved;

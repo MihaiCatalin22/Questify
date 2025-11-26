@@ -14,7 +14,7 @@ import java.time.Instant;
                 @Index(name="idx_up_display_name", columnList="displayName")
         })
 @Getter @Setter
-@AllArgsConstructor @NoArgsConstructor @Builder
+@AllArgsConstructor @NoArgsConstructor @Builder(toBuilder = true)
 public class UserProfile {
 
     @Id

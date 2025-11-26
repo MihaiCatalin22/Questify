@@ -23,6 +23,7 @@ public class UserProfileService {
     public UserProfileService(UserProfileRepository repo, EventPublisher events) {
         this.repo = repo;
         this.events = events;
+        this.usersTopic = (usersTopic == null || usersTopic.isBlank()) ? "users" : usersTopic;
     }
 
     @Transactional
