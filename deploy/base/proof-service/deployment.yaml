@@ -17,7 +17,7 @@ spec:
       serviceAccountName: proof-service
       containers:
         - name: proof-service
-          image: ghcr.io/MihaiCatalin22/questify-proof-service:latest
+          image: ghcr.io/mihaicatalin22/questify-proof-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
