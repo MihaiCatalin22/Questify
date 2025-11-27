@@ -1,16 +1,21 @@
 name: Images
 
 on:
-  # Auto-run only after the "CI" workflow completes
+  # Auto-run after the "CI" workflow completes
   workflow_run:
     workflows: ["CI"]
     types: [completed]
-  # Allow manual runs
+  # Also allow manual runs and branch push fallback (useful before this file is on main)
   workflow_dispatch:
+  push:
+    branches:
+      - main
+      - dev
+      - feat/CICD2
 
 permissions:
   contents: read
-  packages: write   # needed to push to GHCR
+  packages: write   # required to push to GHCR
 
 concurrency:
   group: images-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
@@ -20,15 +25,21 @@ jobs:
   build-and-push:
     name: Build & Push • ${{ matrix.service }}
     runs-on: ubuntu-latest
-    # Gate: CI must have succeeded on main/dev/feat/CICD2, or manual dispatch
+
+    # Gate:
+    #  - When triggered by workflow_run: CI must have succeeded and branch must be allowed
+    #  - When triggered by push: branch must be allowed (temp while iterating)
+    #  - Always allow workflow_dispatch
     if: >-
       ${{
         (github.event_name == 'workflow_run' &&
          github.event.workflow_run.conclusion == 'success' &&
-         (github.event.workflow_run.head_branch == 'main' ||
-          github.event.workflow_run.head_branch == 'dev'  ||
-          github.event.workflow_run.head_branch == 'feat/CICD2'))
-        || (github.event_name == 'workflow_dispatch')
+         contains(fromJson('["main","dev","feat/CICD2"]'), github.event.workflow_run.head_branch))
+        ||
+        (github.event_name == 'push' &&
+         contains(fromJson('["main","dev","feat/CICD2"]'), github.ref_name))
+        ||
+        (github.event_name == 'workflow_dispatch')
       }}
 
     strategy:
@@ -52,7 +63,7 @@ jobs:
       - name: Compute image naming vars (owner lc, sanitized branch, short sha)
         run: |
           echo "OWNER_LC=${OWNER,,}" >> $GITHUB_ENV
-          # turn 'feat/CICD2' into 'feat-cicd2'
+          # Replace slashes and uppercase for a Docker-safe, lower-cased tag
           echo "BRANCH_TAG=$(echo '${{ env.BRANCH_NAME }}' | tr '/A-Z' '-a-z')" >> $GITHUB_ENV
           echo "SHA7=${HEAD_SHA::7}" >> $GITHUB_ENV
 
