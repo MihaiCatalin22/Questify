@@ -17,7 +17,7 @@ spec:
       serviceAccountName: user-service
       containers:
         - name: user-service
-          image: ghcr.io/mihaicatalin22/questify-user-service:latest
+          image: ghcr.io/mihaicatalin22/questify-user-service
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

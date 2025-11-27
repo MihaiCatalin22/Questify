@@ -17,7 +17,7 @@ spec:
       serviceAccountName: submission-service
       containers:
         - name: submission-service
-          image: ghcr.io/mihaicatalin22/questify-submission-service:latest
+          image: ghcr.io/mihaicatalin22/questify-submission-service
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

@@ -17,7 +17,7 @@ spec:
       serviceAccountName: quest-service
       containers:
         - name: quest-service
-          image: ghcr.io/mihaicatalin22/questify-quest-service:latest
+          image: ghcr.io/mihaicatalin22/questify-quest-service
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
