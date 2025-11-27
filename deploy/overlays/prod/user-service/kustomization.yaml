@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: questify
+resources:
+  - ../../../base/user-service
+images:
+  - name: ghcr.io/MihaiCatalin22/questify-user-service
+    newTag: latest

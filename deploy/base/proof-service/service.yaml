@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: proof-service
+  labels:
+    app: proof-service
+spec:
+  type: ClusterIP
+  selector:
+    app: proof-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

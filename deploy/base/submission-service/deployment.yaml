@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: submission-service
+  labels:
+    app: submission-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: submission-service
+  template:
+    metadata:
+      labels:
+        app: submission-service
+    spec:
+      serviceAccountName: submission-service
+      containers:
+        - name: submission-service
+          image: ghcr.io/MihaiCatalin22/questify-submission-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+            - name: JAVA_OPTS
+              value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
