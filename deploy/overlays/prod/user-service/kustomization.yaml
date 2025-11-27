@@ -5,4 +5,4 @@ resources:
   - ../../../base/user-service
 images:
   - name: ghcr.io/MihaiCatalin22/questify-user-service
-    newTag: latest
+    newTag: main-abcdef0

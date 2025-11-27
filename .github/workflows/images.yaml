@@ -1,21 +1,16 @@
 name: Images
 
 on:
-  # Auto-run after the "CI" workflow completes
+  # Fire after the CI workflow completes
   workflow_run:
     workflows: ["CI"]
     types: [completed]
-  # Also allow manual runs and branch push fallback (useful before this file is on main)
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-      - dev
-      - feat/CICD2
+  # Allow manual runs
+  workflow_dispatch: {}
 
 permissions:
-  contents: read
-  packages: write   # required to push to GHCR
+  contents: write   # we push a commit that bumps the kustomization tag
+  packages: write   # push images to GHCR
 
 concurrency:
   group: images-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
@@ -23,24 +18,13 @@ concurrency:
 
 jobs:
   build-and-push:
-    name: Build & Push • ${{ matrix.service }}
+    # Only run when CI was successful AND branch is allowed; or when run manually
+    if: >
+      (github.event_name == 'workflow_run'
+       && github.event.workflow_run.conclusion == 'success'
+       && contains(fromJson('["main","dev","feat/CICD2"]'), github.event.workflow_run.head_branch))
+      || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-
-    # Gate:
-    #  - When triggered by workflow_run: CI must have succeeded and branch must be allowed
-    #  - When triggered by push: branch must be allowed (temp while iterating)
-    #  - Always allow workflow_dispatch
-    if: >-
-      ${{
-        (github.event_name == 'workflow_run' &&
-         github.event.workflow_run.conclusion == 'success' &&
-         contains(fromJson('["main","dev","feat/CICD2"]'), github.event.workflow_run.head_branch))
-        ||
-        (github.event_name == 'push' &&
-         contains(fromJson('["main","dev","feat/CICD2"]'), github.ref_name))
-        ||
-        (github.event_name == 'workflow_dispatch')
-      }}
 
     strategy:
       fail-fast: false
@@ -48,10 +32,8 @@ jobs:
         service: [quest-service, user-service, proof-service, submission-service]
 
     env:
-      OWNER: ${{ github.repository_owner }}
-      # Branch/SHA from the triggering CI run vs other/manual events
       BRANCH_NAME: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
-      HEAD_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      HEAD_SHA:    ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha    || github.sha }}
 
     steps:
       - name: Checkout repo at triggering commit
@@ -60,21 +42,20 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
-      - name: Compute image naming vars (owner lc, sanitized branch, short sha)
+      - name: Lowercase owner & compute tags
         run: |
-          echo "OWNER_LC=${OWNER,,}" >> $GITHUB_ENV
-          # Replace slashes and uppercase for a Docker-safe, lower-cased tag
-          echo "BRANCH_TAG=$(echo '${{ env.BRANCH_NAME }}' | tr '/A-Z' '-a-z')" >> $GITHUB_ENV
+          echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
           echo "SHA7=${HEAD_SHA::7}" >> $GITHUB_ENV
+          echo "DEPLOY_TAG=${BRANCH_NAME}-${HEAD_SHA::7}" >> $GITHUB_ENV
 
-      - name: Log in to GHCR
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Buildx
+      - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Build & push ${{ matrix.service }}
@@ -84,9 +65,30 @@ jobs:
           file: ./${{ matrix.service }}/Dockerfile
           push: true
           tags: |
+            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.DEPLOY_TAG }}
+            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_NAME }}
             ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:latest
-            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_TAG }}
-            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_TAG }}-${{ env.SHA7 }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.HEAD_SHA }}
+
+      - name: Install yq (YAML CLI)
+        run: |
+          YQ_VERSION=v4.44.3
+          curl -L https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64 -o yq
+          sudo install -m 0755 yq /usr/local/bin/yq
+
+      - name: Bump Kustomize image tag to ${{ env.DEPLOY_TAG }}
+        run: |
+          SVC="ghcr.io/${OWNER_LC}/questify-${{ matrix.service }}"
+          FILE="deploy/overlays/prod/${{ matrix.service }}/kustomization.yaml"
+
+          # Update the tag for the matching image entry
+          yq -i '(.images[] | select(.name == strenv(SVC))).newTag = strenv(DEPLOY_TAG)' "$FILE"
+
+          echo "Changed $FILE -> $SVC@${DEPLOY_TAG}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$FILE"
+          git commit -m "[skip ci] ${{ matrix.service }}: set image tag to ${DEPLOY_TAG}" || echo "No changes to commit"
+          git push
