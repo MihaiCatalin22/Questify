@@ -1,14 +1,16 @@
 name: Images
 
 on:
+  # Auto-run only after the "CI" workflow completes
   workflow_run:
     workflows: ["CI"]
     types: [completed]
+  # Allow manual runs
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write   
+  packages: write   # needed to push to GHCR
 
 concurrency:
   group: images-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
@@ -18,13 +20,14 @@ jobs:
   build-and-push:
     name: Build & Push • ${{ matrix.service }}
     runs-on: ubuntu-latest
-    # Gate: CI must have succeeded on main/dev, or manual dispatch
+    # Gate: CI must have succeeded on main/dev/feat/CICD2, or manual dispatch
     if: >-
       ${{
         (github.event_name == 'workflow_run' &&
          github.event.workflow_run.conclusion == 'success' &&
          (github.event.workflow_run.head_branch == 'main' ||
-          github.event.workflow_run.head_branch == 'dev'))
+          github.event.workflow_run.head_branch == 'dev'  ||
+          github.event.workflow_run.head_branch == 'feat/CICD2'))
         || (github.event_name == 'workflow_dispatch')
       }}
 
@@ -46,9 +49,11 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
-      - name: Lowercase owner / short SHA
+      - name: Compute image naming vars (owner lc, sanitized branch, short sha)
         run: |
           echo "OWNER_LC=${OWNER,,}" >> $GITHUB_ENV
+          # turn 'feat/CICD2' into 'feat-cicd2'
+          echo "BRANCH_TAG=$(echo '${{ env.BRANCH_NAME }}' | tr '/A-Z' '-a-z')" >> $GITHUB_ENV
           echo "SHA7=${HEAD_SHA::7}" >> $GITHUB_ENV
 
       - name: Log in to GHCR
@@ -65,12 +70,12 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./${{ matrix.service }}
-          file: ./${{ matrix.service }}/Dockerfile}
+          file: ./${{ matrix.service }}/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:latest
-            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_NAME }}
-            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_NAME }}-${{ env.SHA7 }}
+            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_TAG }}
+            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_TAG }}-${{ env.SHA7 }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.HEAD_SHA }}
