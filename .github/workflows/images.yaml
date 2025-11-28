@@ -28,6 +28,7 @@ jobs:
 
     strategy:
       fail-fast: false
+      max-parallel: 1              # serialize to avoid git push races
       matrix:
         service: [quest-service, user-service, proof-service, submission-service]
 
@@ -36,10 +37,10 @@ jobs:
       HEAD_SHA:    ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha    || github.sha }}
 
     steps:
-      - name: Checkout repo at triggering commit
+      - name: Checkout repo on the branch (not SHA)
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
           fetch-depth: 0
 
       - name: Lowercase owner & compute tags
@@ -79,16 +80,30 @@ jobs:
           sudo install -m 0755 yq /usr/local/bin/yq
 
       - name: Bump Kustomize image tag to ${{ env.DEPLOY_TAG }}
+        env:
+          SVC: ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}
+          FILE: deploy/overlays/prod/${{ matrix.service }}/kustomization.yaml
+          DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
+          BRANCH_NAME: ${{ env.BRANCH_NAME }}
         run: |
-          SVC="ghcr.io/${OWNER_LC}/questify-${{ matrix.service }}"
-          FILE="deploy/overlays/prod/${{ matrix.service }}/kustomization.yaml"
-
-          # Update the tag for the matching image entry
-          yq -i '(.images[] | select(.name == strenv(SVC))).newTag = strenv(DEPLOY_TAG)' "$FILE"
+          # Create the images list or the matching entry if not present, then set newTag
+          yq -i '
+            .images = (.images // []) |
+            if (.images[] | select(.name == strenv(SVC)) | length) then
+              (.images[] | select(.name == strenv(SVC))).newTag = strenv(DEPLOY_TAG)
+            else
+              .images += [{"name": strenv(SVC), "newTag": strenv(DEPLOY_TAG)}]
+            end
+          ' "$FILE"
 
           echo "Changed $FILE -> $SVC@${DEPLOY_TAG}"
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Rebase in case previous matrix item already pushed
+          git pull --rebase origin "$BRANCH_NAME" || true
+
           git add "$FILE"
           git commit -m "[skip ci] ${{ matrix.service }}: set image tag to ${DEPLOY_TAG}" || echo "No changes to commit"
-          git push
+          git push origin "HEAD:$BRANCH_NAME" || (git pull --rebase origin "$BRANCH_NAME" && git push origin "HEAD:$BRANCH_NAME")
+
