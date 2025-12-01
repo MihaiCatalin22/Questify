@@ -34,7 +34,7 @@ public class ProofClient {
     public ProofClient(
             @Value("${PROOF_SERVICE_BASE:http://proof-service:8080/api}") String base,
             @Value("${PROOF_PUBLIC_BASE_URL:https://questify.tail03c40b.ts.net/s3/questify-proofs}") String publicBase,
-            @Value("${INTERNAL_TOKEN:dev-internal-token}") String internalToken
+            @Value("${SECURITY_INTERNAL_TOKEN:dev-internal-token}") String internalToken
     ) {
         HttpClient hc = HttpClient.create()
                 .responseTimeout(Duration.ofSeconds(90))

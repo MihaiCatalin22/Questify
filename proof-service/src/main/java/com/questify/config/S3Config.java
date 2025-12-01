@@ -74,7 +74,7 @@ public class S3Config {
     }
 
     @Bean
-    @Profile({"dev","tailscale","minio"}) // choose profiles that make sense in your env
+    @Profile({"prod","dev","tailscale","minio"}) // choose profiles that make sense in your env
     public CommandLineRunner setBucketCors(S3Client s3) {
         return args -> {
             var origins = props.getCorsAllowedOrigins();

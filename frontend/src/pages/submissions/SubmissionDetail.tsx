@@ -7,6 +7,17 @@ import http from '../../api/https';
 
 // ---- helpers --------------------------------------------------------------
 
+/** Get the bearer token from our AuthContext. */
+function getBearer(auth: ReturnType<typeof useAuthContext> | any): string | null {
+  try {
+    const fromFn = auth?.getAuthToken?.();
+    const fromField = auth?.jwt;
+    return fromFn || fromField || null;
+  } catch {
+    return auth?.jwt ?? null;
+  }
+}
+
 function hasReviewerRole(user?: any): boolean {
   const gather = [
     ...(user?.roles ?? []),
@@ -24,16 +35,12 @@ function hasReviewerRole(user?: any): boolean {
   );
 }
 
-/**
- * IMPORTANT: Do NOT rewrite presigned URLs (SigV4 is path-sensitive).
- * Return URLs exactly as provided. Relative fallbacks (e.g. /api/...) are fine as-is.
- */
+/** IMPORTANT: Do NOT rewrite presigned URLs */
 function toSameOriginS3(url?: string | null): string | null {
   if (!url) return null;
   return url;
 }
 
-/** Quick magic-number sniff for common image formats */
 async function looksLikeImage(blob: Blob): Promise<boolean> {
   try {
     const head = await blob.slice(0, 16).arrayBuffer();
@@ -53,7 +60,7 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
     credentials: 'same-origin',
     cache: 'no-store',
     redirect: 'follow',
-    headers: { 'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8' },
+    headers: { Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8' },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -84,7 +91,17 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
   }
 }
 
-/** Image-only renderer with robust Blob+Canvas fallback and debug output */
+/** Auth-required fallback: axios → blob URL with explicit Authorization header */
+async function fetchProtectedProofAsObjectURL(submissionId: string, bearer?: string): Promise<{ src: string; revoke: () => void }> {
+  const res = await http.get(`/submissions/${submissionId}/proof`, {
+    responseType: 'blob',
+    headers: bearer ? { Authorization: `Bearer ${bearer}` } : undefined,
+  });
+  const obj = URL.createObjectURL(res.data as Blob);
+  return { src: obj, revoke: () => URL.revokeObjectURL(obj) };
+}
+
+/** Image-only renderer */
 function ProofImage({
   url,
   height = 560,
@@ -122,12 +139,12 @@ function ProofImage({
   }, []);
 
   const handleError = async () => {
-    if (triedFallback) {
-      setDebug((d) => d ?? 'Image decode failed after fallback.');
-      return;
-    }
-    setTriedFallback(true);
     try {
+      if (triedFallback) {
+        setDebug((d) => d ?? 'Image decode failed after fallback.');
+        return;
+      }
+      setTriedFallback(true);
       const { src: safeSrc, revoke } = await materializeRenderableSrc(url);
       if (revokeRef.current) revokeRef.current();
       revokeRef.current = revoke ?? null;
@@ -178,25 +195,31 @@ export default function SubmissionDetail() {
   const { id } = useParams();
   const { data: s, isLoading, isError, error } = useSubmission(id ?? '');
   const review = useReviewSubmission(id ?? '');
-  const { user } = useAuthContext();
+  const auth = useAuthContext();
+  const token = getBearer(auth);
+  const { user } = auth;
 
   const [note, setNote] = useState('');
   const [displayUrl, setDisplayUrl] = useState<string | null>(null);
   const [fail, setFail] = useState<string | null>(null);
+  const revokeRef = useRef<(() => void) | null>(null);
 
   const [mayReview, setMayReview] = useState<boolean | null>(null);
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        await http.get('/submissions/pending', { params: { size: 1 } });
+        await http.get('/submissions/pending', {
+          params: { size: 1 },
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined
+        });
         if (alive) setMayReview(true);
       } catch (e: any) {
         if (alive && e?.response?.status === 403) setMayReview(false);
       }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [token]);
   const canReview = (mayReview ?? hasReviewerRole(user));
 
   const status = (s as any)?.reviewStatus ?? (s as any)?.status ?? 'PENDING';
@@ -206,22 +229,41 @@ export default function SubmissionDetail() {
     let alive = true;
     (async () => {
       if (!id) return;
+
+      if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
+      setDisplayUrl(null);
+      setFail(null);
+
+      // Prefer presigned URL — attach Authorization explicitly
       try {
-        const { data } = await http.get<{ url: string; expiresInSeconds: number }>(`/submissions/${id}/proof-url`);
+        const { data } = await http.get<{ url: string; expiresInSeconds: number }>(
+          `/submissions/${id}/proof-url`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
+        );
         if (!alive) return;
-        const sameOrigin = toSameOriginS3(data.url);
-        setDisplayUrl(sameOrigin);
-        setFail(null);
+        setDisplayUrl(toSameOriginS3(data.url));
+        return;
       } catch {
-        const fallback = `/api/submissions/${id}/proof`;
-        const sameOrigin = toSameOriginS3(fallback);
+        // fall through
+      }
+
+      // Auth fallback: axios -> blob URL
+      try {
+        const { src, revoke } = await fetchProtectedProofAsObjectURL(String(id), token ?? undefined);
         if (!alive) return;
-        setDisplayUrl(sameOrigin);
-        setFail(null);
+        revokeRef.current = revoke;
+        setDisplayUrl(src);
+      } catch (e: any) {
+        if (!alive) return;
+        setFail(String(e?.message || e) || 'Failed to fetch proof');
       }
     })();
-    return () => { alive = false; };
-  }, [id, s?.id]);
+
+    return () => {
+      alive = false;
+      if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
+    };
+  }, [id, s?.id, token]);
 
   if (isLoading) return <div className="p-6">Loading submission…</div>;
   if (isError || !s) return <div className="p-6 text-red-600">{(error as any)?.message || 'Failed to load submission'}</div>;

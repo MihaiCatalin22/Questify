@@ -8,10 +8,18 @@ import http from '../../api/https';
 
 // ---- helpers --------------------------------------------------------------
 
-/**
- * IMPORTANT: Do NOT rewrite presigned URLs (SigV4 is path-sensitive).
- * Return URLs exactly as provided. Relative fallbacks (e.g. /api/...) are fine as-is.
- */
+/** Get the bearer token from our AuthContext. */
+function getBearer(auth: ReturnType<typeof useAuthContext> | any): string | null {
+  try {
+    const fromFn = auth?.getAuthToken?.();
+    const fromField = auth?.jwt;
+    return fromFn || fromField || null;
+  } catch {
+    return auth?.jwt ?? null;
+  }
+}
+
+/** IMPORTANT: Do NOT rewrite presigned URLs (SigV4 is path-sensitive). */
 function toSameOriginS3(url?: string | null): string | null {
   if (!url) return null;
   return url;
@@ -22,35 +30,23 @@ async function looksLikeImage(blob: Blob): Promise<boolean> {
   try {
     const head = await blob.slice(0, 16).arrayBuffer();
     const b = new Uint8Array(head);
-    // JPEG FF D8
-    if (b[0] === 0xff && b[1] === 0xd8) return true;
-    // PNG 89 50 4E 47 0D 0A 1A 0A
-    if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return true;
-    // GIF "GIF8"
-    if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return true;
-    // WEBP "RIFF....WEBP"
-    if (
-      b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
-      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
-    ) return true;
+    if (b[0] === 0xff && b[1] === 0xd8) return true; // JPEG
+    if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return true; // PNG
+    if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return true; // GIF
+    if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return true; // WEBP
     return false;
   } catch {
     return false;
   }
 }
 
-/**
- * Fetch bytes for a URL and return a guaranteed-renderable src:
- *  - Prefer a decoded canvas dataURL (via createImageBitmap) so headers can't interfere.
- *  - Fallback to blob: URL if canvas path isn't available.
- *  - If bytes aren't an image, throw with a short text preview for debugging.
- */
+/** Turn a (public/presigned) URL into a renderable image source. */
 async function materializeRenderableSrc(url: string): Promise<{ src: string; revoke?: () => void }> {
   const res = await fetch(url, {
     credentials: 'same-origin',
     cache: 'no-store',
     redirect: 'follow',
-    headers: { 'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8' },
+    headers: { Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8' },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -64,7 +60,7 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
   }
 
   try {
-    // @ts-ignore: older TS libs may not know createImageBitmap
+    // @ts-ignore
     const bmp = await createImageBitmap(blob);
     const canvas = document.createElement('canvas');
     canvas.width = bmp.width || 1;
@@ -79,6 +75,54 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
     const obj = URL.createObjectURL(blob);
     return { src: obj, revoke: () => URL.revokeObjectURL(obj) };
   }
+}
+
+/**
+ * Client-side downscale & recompress to keep uploads small and avoid 413s.
+ * Target ~0.8 MB, max side 1800 px (tweak if needed).
+ */
+async function maybeDownscaleImage(file: File, targetBytes = 0.8 * 1024 * 1024, maxSide = 1800): Promise<File> {
+  try {
+    if (file.size <= targetBytes) return file;
+
+    // @ts-ignore
+    const bmp = await createImageBitmap(file);
+    const ratio = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * ratio));
+    const h = Math.max(1, Math.round(bmp.height * ratio));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(bmp, 0, 0, w, h);
+
+    let q = 0.85;
+    let blob: Blob | null = await new Promise(res => canvas.toBlob(res, 'image/jpeg', q));
+    while (blob && blob.size > targetBytes && q > 0.5) {
+      q -= 0.1;
+      // eslint-disable-next-line no-await-in-loop
+      blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', q));
+    }
+    if (!blob) return file;
+
+    const name = file.name.replace(/\.(png|webp|gif|jpeg|jpg)$/i, '') + '.jpg';
+    return new File([blob], name, { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
+
+/** Fetch /submissions/:id/proof as blob with Authorization, return object URL */
+async function fetchProtectedProofAsObjectURL(submissionId: string, bearer?: string): Promise<{ src: string; revoke: () => void }> {
+  const res = await http.get(`/submissions/${submissionId}/proof`, {
+    responseType: 'blob',
+    headers: bearer ? { Authorization: `Bearer ${bearer}` } : undefined,
+  });
+  const blob = res.data as Blob;
+  const obj = URL.createObjectURL(blob);
+  return { src: obj, revoke: () => URL.revokeObjectURL(obj) };
 }
 
 /** Image-only renderer with robust Blob+Canvas fallback and debug output */
@@ -107,7 +151,6 @@ function ProofImage({
   const [debug, setDebug] = useState<string | null>(null);
   const revokeRef = useRef<(() => void) | null>(null);
 
-  // Reset when URL changes
   useEffect(() => {
     setSrc(url);
     setDebug(null);
@@ -115,7 +158,6 @@ function ProofImage({
     if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
   }, [url]);
 
-  // Cleanup any object URL on unmount
   useEffect(() => {
     return () => { if (revokeRef.current) revokeRef.current(); };
   }, []);
@@ -172,26 +214,50 @@ function ProofImage({
 }
 
 function SubmissionPreview({ submission }: { submission: any }) {
+  const auth = useAuthContext();
+  const token = getBearer(auth);
+
   const [displayUrl, setDisplayUrl] = useState<string | null>(null);
+  const revokeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       if (!submission?.id) return;
+
+      if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
+      setDisplayUrl(null);
+
+      // Try presigned URL — attach Authorization explicitly
       try {
         const { data } = await http.get<{ url: string; expiresInSeconds: number }>(
-          `/submissions/${submission.id}/proof-url`
+          `/submissions/${submission.id}/proof-url`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
         );
         if (!alive) return;
         setDisplayUrl(toSameOriginS3(data.url));
+        return;
       } catch {
-        const fallback = `/api/submissions/${submission.id}/proof`;
+        // fall through
+      }
+
+      // Auth-required fallback → blob URL
+      try {
+        const { src, revoke } = await fetchProtectedProofAsObjectURL(String(submission.id), token ?? undefined);
         if (!alive) return;
-        setDisplayUrl(toSameOriginS3(fallback));
+        revokeRef.current = revoke;
+        setDisplayUrl(src);
+      } catch {
+        if (!alive) return;
+        setDisplayUrl(null);
       }
     })();
-    return () => { alive = false; };
-  }, [submission?.id]);
+
+    return () => {
+      alive = false;
+      if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
+    };
+  }, [submission?.id, token]);
 
   if (!displayUrl) {
     return <div className="text-sm text-gray-500">Generating secure link…</div>;
@@ -238,7 +304,8 @@ export default function QuestDetail() {
   const rawId = id ?? '';
   const safeQuestId = /^\d+$/.test(rawId) ? rawId : '';
 
-  const { user } = useAuthContext();
+  const auth = useAuthContext();
+  const { user } = auth;
 
   const { data: quest, isLoading, isError, error } = useQuest(safeQuestId);
   const { data: submissions } = useSubmissionsForQuest(safeQuestId);
@@ -300,10 +367,15 @@ export default function QuestDetail() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      let sending: File | null = file;
+      if (sending) {
+        sending = await maybeDownscaleImage(sending);
+      }
+
       await create.mutateAsync({
         questId: safeQuestId,
         comment: comment || undefined,
-        file, // URL uploads removed — images only
+        file: sending,
       });
       toast.success('Submission sent!');
       setComment(''); setFile(null);

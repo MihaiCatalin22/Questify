@@ -16,7 +16,7 @@ spec:
             - name: QUEST_SERVICE_BASE
               value: http://quest-service
             - name: PROOF_SERVICE_BASE
-              value: http://proof-service/api
+              value: http://proof-service
             - name: INTERNAL_TOKEN
               valueFrom:
                 secretKeyRef:
