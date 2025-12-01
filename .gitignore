@@ -94,3 +94,4 @@ gateway/src/main/resources/application.yml
 docker-compose.yml
 frontend/nginx.conf
 infra/terraform-local/terraform.tfstate.1764351795.backup
+infra/k6/k6-quests-read.js
