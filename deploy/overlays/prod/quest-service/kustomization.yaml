@@ -3,6 +3,9 @@ kind: Kustomization
 namespace: questify
 resources:
   - ../../../base/quest-service
+  - hpa.yaml
 images:
   - name: ghcr.io/MihaiCatalin22/questify-quest-service
     newTag: main-abcdef0
+patchesStrategicMerge:
+  - patch-resources.yaml
