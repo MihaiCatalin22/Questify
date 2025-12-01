@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: questify-frontend
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: questify-frontend
+  template:
+    metadata:
+      labels:
+        app: questify-frontend
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: frontend
+          image: ghcr.io/mihaicatalin22/questify-frontend:latest
+          ports:
+            - containerPort: 8443
+              name: https
+          env:
+            - name: VITE_API_BASE
+              value: "/api"
+            - name: VITE_OIDC_ISSUER
+              value: "https://questify.tail03c40b.ts.net/auth/realms/questify"
+            - name: VITE_OIDC_CLIENT_ID
+              value: "questify-frontend"
+            - name: VITE_OIDC_REDIRECT_URI
+              value: "https://questify.tail03c40b.ts.net/oidc-callback"
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/nginx/certs
+              readOnly: true
+      volumes:
+        - name: tls
+          secret:
+            secretName: tls-questify-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: questify-frontend
+  namespace: default
+spec:
+  selector:
+    app: questify-frontend
+  ports:
+    - name: https
+      port: 8443
+      targetPort: 8443
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: questify-frontend
+  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - questify.tail03c40b.ts.net
+      secretName: tls-questify-app
+  rules:
+    - host: questify.tail03c40b.ts.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: questify-frontend
+                port:
+                  number: 8443

@@ -1,0 +1,9 @@
+spec:
+  template:
+    spec:
+      containers:
+        - name: frontend
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80

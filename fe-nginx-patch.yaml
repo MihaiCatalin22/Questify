@@ -1,0 +1,16 @@
+spec:
+  template:
+    spec:
+      volumes:
+        - name: fe-nginx
+          configMap:
+            name: questify-frontend-nginx
+            items:
+              - key: default.conf
+                path: default.conf
+      containers:
+        - name: frontend
+          volumeMounts:
+            - name: fe-nginx
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf

@@ -1,0 +1,7 @@
+spec:
+  template:
+    spec:
+      containers:
+      - name: frontend
+        image: questify-frontend:local
+        imagePullPolicy: IfNotPresent

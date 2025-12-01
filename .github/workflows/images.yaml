@@ -1,16 +1,14 @@
 name: Images
 
 on:
-  # Fire after the CI workflow completes
   workflow_run:
     workflows: ["CI"]
     types: [completed]
-  # Allow manual runs
   workflow_dispatch: {}
 
 permissions:
-  contents: write   # we push a commit that bumps the kustomization tag
-  packages: write   # push images to GHCR
+  contents: write
+  packages: write
 
 concurrency:
   group: images-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
@@ -18,7 +16,6 @@ concurrency:
 
 jobs:
   build-and-push:
-    # Only run when CI was successful AND branch is allowed; or when run manually
     if: >
       (github.event_name == 'workflow_run'
        && github.event.workflow_run.conclusion == 'success'
@@ -28,13 +25,18 @@ jobs:
 
     strategy:
       fail-fast: false
-      max-parallel: 1              # serialize to avoid git push races
+      max-parallel: 1
       matrix:
-        service: [quest-service, user-service, proof-service, submission-service]
+        service: [quest-service, user-service, proof-service, submission-service, frontend]
 
     env:
       BRANCH_NAME: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
       HEAD_SHA:    ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha    || github.sha }}
+
+      VITE_API_BASE: /api
+      VITE_OIDC_ISSUER: https://questify.tail03c40b.ts.net/auth/realms/questify
+      VITE_OIDC_CLIENT_ID: questify-frontend
+      VITE_OIDC_REDIRECT_URI: https://questify.tail03c40b.ts.net/oidc/callback
 
     steps:
       - name: Checkout repo on the branch (not SHA)
@@ -59,7 +61,8 @@ jobs:
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build & push ${{ matrix.service }}
+      - name: Build & push ${{ matrix.service }} (backend)
+        if: ${{ matrix.service != 'frontend' }}
         uses: docker/build-push-action@v5
         with:
           context: ./${{ matrix.service }}
@@ -69,6 +72,26 @@ jobs:
             ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.DEPLOY_TAG }}
             ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_NAME }}
             ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ env.HEAD_SHA }}
+
+      - name: Build & push frontend
+        if: ${{ matrix.service == 'frontend' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          build-args: |
+            VITE_API_BASE=${{ env.VITE_API_BASE }}
+            VITE_OIDC_ISSUER=${{ env.VITE_OIDC_ISSUER }}
+            VITE_OIDC_CLIENT_ID=${{ env.VITE_OIDC_CLIENT_ID }}
+            VITE_OIDC_REDIRECT_URI=${{ env.VITE_OIDC_REDIRECT_URI }}
+          tags: |
+            ghcr.io/${{ env.OWNER_LC }}/questify-frontend:${{ env.DEPLOY_TAG }}
+            ghcr.io/${{ env.OWNER_LC }}/questify-frontend:${{ env.BRANCH_NAME }}
+            ghcr.io/${{ env.OWNER_LC }}/questify-frontend:latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.HEAD_SHA }}
@@ -86,24 +109,25 @@ jobs:
           DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
           BRANCH_NAME: ${{ env.BRANCH_NAME }}
         run: |
-          # Create the images list or the matching entry if not present, then set newTag
-          yq -i '
-            .images = (.images // []) |
-            if (.images[] | select(.name == strenv(SVC)) | length) then
-              (.images[] | select(.name == strenv(SVC))).newTag = strenv(DEPLOY_TAG)
-            else
-              .images += [{"name": strenv(SVC), "newTag": strenv(DEPLOY_TAG)}]
-            end
-          ' "$FILE"
+          set -e
+          if [ -f "$FILE" ]; then
+            yq -i '
+              .images = (.images // []) |
+              if (.images[] | select(.name == strenv(SVC)) | length) then
+                (.images[] | select(.name == strenv(SVC))).newTag = strenv(DEPLOY_TAG)
+              else
+                .images += [{"name": strenv(SVC), "newTag": strenv(DEPLOY_TAG)}]
+              end
+            ' "$FILE"
 
-          echo "Changed $FILE -> $SVC@${DEPLOY_TAG}"
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            echo "Changed $FILE -> $SVC@${DEPLOY_TAG}"
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Rebase in case previous matrix item already pushed
-          git pull --rebase origin "$BRANCH_NAME" || true
-
-          git add "$FILE"
-          git commit -m "[skip ci] ${{ matrix.service }}: set image tag to ${DEPLOY_TAG}" || echo "No changes to commit"
-          git push origin "HEAD:$BRANCH_NAME" || (git pull --rebase origin "$BRANCH_NAME" && git push origin "HEAD:$BRANCH_NAME")
-
+            git pull --rebase origin "$BRANCH_NAME" || true
+            git add "$FILE"
+            git commit -m "[skip ci] ${{ matrix.service }}: set image tag to ${DEPLOY_TAG}" || echo "No changes to commit"
+            git push origin "HEAD:$BRANCH_NAME" || (git pull --rebase origin "$BRANCH_NAME" && git push origin "HEAD:$BRANCH_NAME")
+          else
+            echo "No kustomization file at $FILE; skipping tag bump."
+          fi

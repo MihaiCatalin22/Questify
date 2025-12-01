@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: default
+
+resources:
+  - ../../../base/frontend
+  - ingress-tailscale.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+images:
+  - name: ghcr.io/MihaiCatalin22/questify-frontend
+    newTag: main-abcdef0
+
+configMapGenerator:
+  - name: questify-frontend-nginx
+    files:
+      - default.conf=nginx/default.conf
+
+patches:
+  - patch-nginx.yaml
