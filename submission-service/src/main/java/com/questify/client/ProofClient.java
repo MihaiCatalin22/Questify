@@ -15,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -28,13 +29,15 @@ public class ProofClient {
     private final WebClient http;
     private final String publicBase;
     private final String internalToken;
+    private final String publicS3Base;
 
     public record UploadRes(String key, String putUrl) {}
 
     public ProofClient(
             @Value("${PROOF_SERVICE_BASE:http://proof-service:8080/api}") String base,
             @Value("${PROOF_PUBLIC_BASE_URL:https://questify.tail03c40b.ts.net/s3/questify-proofs}") String publicBase,
-            @Value("${SECURITY_INTERNAL_TOKEN:dev-internal-token}") String internalToken
+            @Value("${SECURITY_INTERNAL_TOKEN:dev-internal-token}") String internalToken,
+            @Value("${PUBLIC_S3_BASE:https://questify.tail03c40b.ts.net/s3}") String publicS3Base
     ) {
         HttpClient hc = HttpClient.create()
                 .responseTimeout(Duration.ofSeconds(90))
@@ -49,8 +52,9 @@ public class ProofClient {
                 .clientConnector(new ReactorClientHttpConnector(hc))
                 .build();
 
-        this.publicBase = publicBase;
+        this.publicBase = trimTrailingSlash(publicBase);
         this.internalToken = internalToken;
+        this.publicS3Base = trimTrailingSlash(publicS3Base);
     }
 
     public String signGet(String key) {
@@ -58,25 +62,35 @@ public class ProofClient {
             Map<?, ?> res = proofApi.get()
                     .uri(uri -> uri.path("/internal/presign/get").queryParam("key", key).build())
                     .header("X-Internal-Token", internalToken)
-                    .header("X-Security-Token", internalToken)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .block(Duration.ofSeconds(10));
+
             if (res == null || res.get("url") == null) {
-                throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_GATEWAY,
-                        "sign-get returned no url");
+                throw new ResponseStatusException(
+                        org.springframework.http.HttpStatus.BAD_GATEWAY,
+                        "sign-get returned no url"
+                );
             }
-            return String.valueOf(res.get("url"));
+
+            String raw = String.valueOf(res.get("url"));
+            return toPublicS3Url(raw);
+
         } catch (WebClientResponseException e) {
-            throw new ResponseStatusException(e.getStatusCode(),
-                    "proof-service sign-get failed: " + e.getResponseBodyAsString(), e);
+            throw new ResponseStatusException(
+                    e.getStatusCode(),
+                    "proof-service sign-get failed: " + e.getResponseBodyAsString(),
+                    e
+            );
         } catch (Exception e) {
-            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_GATEWAY,
-                    "proof-service sign-get unreachable", e);
+            throw new ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_GATEWAY,
+                    "proof-service sign-get unreachable",
+                    e
+            );
         }
     }
 
-    /** Upload flow: try presign+PUT; on failure, fallback to /uploads/direct with JWT. */
     public UploadRes upload(MultipartFile file, String bearer) {
         final String ct = safeContentType(file);
 
@@ -170,13 +184,33 @@ public class ProofClient {
     }
 
     public String publicUrl(String key) {
-        String base = publicBase.endsWith("/") ? publicBase.substring(0, publicBase.length() - 1) : publicBase;
+        String base = trimTrailingSlash(publicBase);
         String enc = URLEncoder.encode(key, StandardCharsets.UTF_8).replace("+", "%20");
         return base + "/" + enc;
+    }
+
+
+    private String toPublicS3Url(String raw) {
+        try {
+            URI u = URI.create(raw);
+            String path = u.getRawPath();   
+            String q = u.getRawQuery();
+            String rewritten = publicS3Base + (path != null ? path : "");
+            if (q != null && !q.isBlank()) rewritten += "?" + q;
+            return rewritten;
+        } catch (Exception e) {
+            log.warn("Could not rewrite presigned url '{}': {}", raw, e.toString());
+            return raw;
+        }
     }
 
     private static String safeContentType(MultipartFile file) {
         String t = file.getContentType();
         return (t == null || t.isBlank()) ? MediaType.APPLICATION_OCTET_STREAM_VALUE : t;
+    }
+
+    private static String trimTrailingSlash(String s) {
+        if (s == null || s.isBlank()) return "";
+        return s.endsWith("/") ? s.substring(0, s.length() - 1) : s;
     }
 }
