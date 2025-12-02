@@ -78,7 +78,7 @@ public class S3ProofStorageService implements ProofStorageService {
     }
 
     private String toPublic(String signedUrl) {
-        String pubBase = props.getPublicEndpoint();
+        String pubBase = props.getPublicEndpoint(); 
         if (!StringUtils.hasText(pubBase)) return signedUrl;
 
         URI signed = URI.create(signedUrl);
