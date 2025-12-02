@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
+import org.springframework.util.StringUtils;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.http.apache.ApacheHttpClient;
@@ -28,8 +29,10 @@ public class S3Config {
     @Bean
     public S3Client s3Client() {
         var s3conf = S3Configuration.builder().pathStyleAccessEnabled(true).build();
+        URI internal = URI.create(props.getEndpoint());
+        log.info("S3Client endpoint: {}", internal);
         return S3Client.builder()
-                .endpointOverride(URI.create(props.getEndpoint()))             // internal
+                .endpointOverride(internal)
                 .region(Region.of(props.getRegion()))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))
@@ -41,11 +44,11 @@ public class S3Config {
     @Bean
     public S3Presigner s3Presigner() {
         var s3conf = S3Configuration.builder().pathStyleAccessEnabled(true).build();
-        String presignEndpoint = (props.getPublicEndpoint() != null && !props.getPublicEndpoint().isBlank())
-                ? props.getPublicEndpoint()
-                : props.getEndpoint();
+        String ep = (StringUtils.hasText(props.getPublicEndpoint()) ? props.getPublicEndpoint() : props.getEndpoint());
+        URI presignEp = URI.create(ep);
+        log.info("S3Presigner endpoint: {}", presignEp);
         return S3Presigner.builder()
-                .endpointOverride(URI.create(presignEndpoint))                 // 🔁 public (tailscale) host
+                .endpointOverride(presignEp)
                 .region(Region.of(props.getRegion()))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))

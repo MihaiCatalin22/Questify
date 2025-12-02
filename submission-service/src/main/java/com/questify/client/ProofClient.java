@@ -193,7 +193,7 @@ public class ProofClient {
     private String toPublicS3Url(String raw) {
         try {
             URI u = URI.create(raw);
-            String path = u.getRawPath();   
+            String path = u.getRawPath();
             String q = u.getRawQuery();
             String rewritten = publicS3Base + (path != null ? path : "");
             if (q != null && !q.isBlank()) rewritten += "?" + q;

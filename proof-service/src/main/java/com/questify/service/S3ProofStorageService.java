@@ -2,7 +2,10 @@ package com.questify.service;
 
 import com.questify.config.StorageProperties;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+import org.springframework.web.util.UriComponentsBuilder;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
@@ -12,8 +15,10 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import java.io.InputStream;
+import java.net.URI;
 import java.time.Duration;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class S3ProofStorageService implements ProofStorageService {
@@ -30,7 +35,13 @@ public class S3ProofStorageService implements ProofStorageService {
                         .key(objectKey)
                         .contentType(contentType))
                 .build();
-        return presigner.presignPutObject(req).url().toString();
+
+        String signed = presigner.presignPutObject(req).url().toString();
+        String out = toPublic(signed);
+        if (!signed.equals(out)) {
+            log.debug("Rewrote presign PUT host: {} -> {}", signed, out);
+        }
+        return out;
     }
 
     @Override
@@ -39,7 +50,13 @@ public class S3ProofStorageService implements ProofStorageService {
                 .signatureDuration(Duration.ofSeconds(expiresSeconds))
                 .getObjectRequest(g -> g.bucket(props.getBucket()).key(objectKey))
                 .build();
-        return presigner.presignGetObject(req).url().toString();
+
+        String signed = presigner.presignGetObject(req).url().toString();
+        String out = toPublic(signed);
+        if (!signed.equals(out)) {
+            log.debug("Rewrote presign GET host: {} -> {}", signed, out);
+        }
+        return out;
     }
 
     @Override
@@ -55,9 +72,31 @@ public class S3ProofStorageService implements ProofStorageService {
         var put = PutObjectRequest.builder()
                 .bucket(props.getBucket())
                 .key(objectKey)
-                .contentType(contentType != null && !contentType.isBlank()
-                        ? contentType : "application/octet-stream")
+                .contentType(StringUtils.hasText(contentType) ? contentType : "application/octet-stream")
                 .build();
         s3.putObject(put, RequestBody.fromInputStream(in, contentLength));
+    }
+
+    private String toPublic(String signedUrl) {
+        String pubBase = props.getPublicEndpoint(); 
+        if (!StringUtils.hasText(pubBase)) return signedUrl;
+
+        URI signed = URI.create(signedUrl);
+        URI pub = URI.create(pubBase);
+
+        String basePath = (pub.getPath() == null) ? "" : pub.getPath();
+        String joinedPath = UriComponentsBuilder.fromPath(basePath)
+                .path(signed.getPath())
+                .build()
+                .getPath();
+
+        return UriComponentsBuilder.newInstance()
+                .scheme(pub.getScheme())
+                .host(pub.getHost())
+                .port(pub.getPort())
+                .path(joinedPath)
+                .query(signed.getQuery())
+                .build()
+                .toUriString();
     }
 }
