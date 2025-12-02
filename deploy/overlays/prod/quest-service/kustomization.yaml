@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: default
 resources:
   - ../../../base/quest-service
+  - hpa.yaml
 images:
   - name: ghcr.io/MihaiCatalin22/questify-quest-service
     newTag: main-abcdef0
