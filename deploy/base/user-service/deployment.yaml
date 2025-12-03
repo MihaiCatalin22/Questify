@@ -2,9 +2,19 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: user-service
+  namespace: default
+  labels: { app: user-service }
+  annotations:
+    argocd.argoproj.io/sync-options: Replace=true
 spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: user-service }
   template:
+    metadata:
+      labels: { app: user-service }
     spec:
+      serviceAccountName: user-service
       containers:
         - name: user-service
           image: ghcr.io/mihaicatalin22/questify-user-service:latest

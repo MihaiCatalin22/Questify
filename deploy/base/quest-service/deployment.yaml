@@ -2,9 +2,19 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: quest-service
+  namespace: default
+  labels: { app: quest-service }
+  annotations:
+    argocd.argoproj.io/sync-options: Replace=true
 spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: quest-service }
   template:
+    metadata:
+      labels: { app: quest-service }
     spec:
+      serviceAccountName: quest-service
       containers:
         - name: quest-service
           image: ghcr.io/mihaicatalin22/questify-quest-service:latest
@@ -22,7 +32,7 @@ spec:
             httpGet: { path: /actuator/health/liveness, port: http, scheme: HTTP }
             periodSeconds: 5
             timeoutSeconds: 5
-            failureThreshold: 300   # quest-service was slow; give it extra grace
+            failureThreshold: 300    # extra grace – this one was slow to boot
           readinessProbe:
             httpGet: { path: /actuator/health/readiness, port: http, scheme: HTTP }
             initialDelaySeconds: 20

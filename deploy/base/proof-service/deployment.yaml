@@ -2,9 +2,19 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: proof-service
+  namespace: default
+  labels: { app: proof-service }
+  annotations:
+    argocd.argoproj.io/sync-options: Replace=true
 spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: proof-service }
   template:
+    metadata:
+      labels: { app: proof-service }
     spec:
+      serviceAccountName: proof-service
       containers:
         - name: proof-service
           image: ghcr.io/mihaicatalin22/questify-proof-service:latest
