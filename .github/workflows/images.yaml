@@ -4,10 +4,15 @@ on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
-  workflow_dispatch: {}
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - dev
+      - feat/**
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 concurrency:
@@ -16,118 +21,58 @@ concurrency:
 
 jobs:
   build-and-push:
-    if: >
-      (github.event_name == 'workflow_run'
-       && github.event.workflow_run.conclusion == 'success'
-       && contains(fromJson('["main","dev","feat/CICD2"]'), github.event.workflow_run.head_branch))
-      || github.event_name == 'workflow_dispatch'
+    name: Build & Push • ${{ matrix.service }}
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
-        service: [quest-service, user-service, proof-service, submission-service, frontend]
+        service: [quest-service, user-service, proof-service, submission-service]
 
     env:
+      OWNER: ${{ github.repository_owner }}
       BRANCH_NAME: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
-      HEAD_SHA:    ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha    || github.sha }}
-
-      VITE_API_BASE: /api
-      VITE_OIDC_ISSUER: https://questify.tail03c40b.ts.net/auth/realms/questify
-      VITE_OIDC_CLIENT_ID: questify-frontend
-      VITE_OIDC_REDIRECT_URI: https://questify.tail03c40b.ts.net/oidc/callback
+      HEAD_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
     steps:
-      - name: Checkout repo on the branch (not SHA)
+      - name: Checkout repo at triggering commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
+          ref: ${{ env.HEAD_SHA }}
           fetch-depth: 0
 
-      - name: Lowercase owner & compute tags
+      - name: Compute image naming vars
+        id: vars
+        shell: bash
         run: |
-          echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
-          echo "SHA7=${HEAD_SHA::7}" >> $GITHUB_ENV
-          echo "DEPLOY_TAG=${BRANCH_NAME}-${HEAD_SHA::7}" >> $GITHUB_ENV
+          owner_lc="${OWNER,,}"
+          ref="${BRANCH_NAME}"
+          # make a docker-safe, lowercased tag: replace anything not [A-Za-z0-9._-] with '-'
+          branch_tag="$(echo "$ref" | sed -E 's/[^A-Za-z0-9._-]+/-/g' | tr 'A-Z' 'a-z')"
+          sha7="${HEAD_SHA:0:7}"
+          echo "OWNER_LC=$owner_lc"   >> "$GITHUB_ENV"
+          echo "BRANCH_TAG=$branch_tag" >> "$GITHUB_ENV"
+          echo "SHA7=$sha7"           >> "$GITHUB_ENV"
 
-      - name: Login to GHCR
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Buildx
+      - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build & push ${{ matrix.service }} (backend)
-        if: ${{ matrix.service != 'frontend' }}
+      - name: Build & push ${{ matrix.service }}
         uses: docker/build-push-action@v5
         with:
           context: ./${{ matrix.service }}
           file: ./${{ matrix.service }}/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.DEPLOY_TAG }}
-            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_NAME }}
-            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:latest
+            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_TAG }}-${{ env.SHA7 }}
+            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_TAG }}
+            ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main' || github.ref_name == 'main' && format('ghcr.io/{0}/questify-{1}:latest', env.OWNER_LC, matrix.service) || '' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.HEAD_SHA }}
-
-      - name: Build & push frontend
-        if: ${{ matrix.service == 'frontend' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          build-args: |
-            VITE_API_BASE=${{ env.VITE_API_BASE }}
-            VITE_OIDC_ISSUER=${{ env.VITE_OIDC_ISSUER }}
-            VITE_OIDC_CLIENT_ID=${{ env.VITE_OIDC_CLIENT_ID }}
-            VITE_OIDC_REDIRECT_URI=${{ env.VITE_OIDC_REDIRECT_URI }}
-          tags: |
-            ghcr.io/${{ env.OWNER_LC }}/questify-frontend:${{ env.DEPLOY_TAG }}
-            ghcr.io/${{ env.OWNER_LC }}/questify-frontend:${{ env.BRANCH_NAME }}
-            ghcr.io/${{ env.OWNER_LC }}/questify-frontend:latest
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ env.HEAD_SHA }}
-
-      - name: Install yq (YAML CLI)
-        run: |
-          YQ_VERSION=v4.44.3
-          curl -L https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64 -o yq
-          sudo install -m 0755 yq /usr/local/bin/yq
-
-      - name: Bump Kustomize image tag to ${{ env.DEPLOY_TAG }}
-        env:
-          SVC: ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}
-          FILE: deploy/overlays/prod/${{ matrix.service }}/kustomization.yaml
-          DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
-          BRANCH_NAME: ${{ env.BRANCH_NAME }}
-        run: |
-          set -e
-          if [ -f "$FILE" ]; then
-            yq -i '
-              .images = (.images // []) |
-              if (.images[] | select(.name == strenv(SVC)) | length) then
-                (.images[] | select(.name == strenv(SVC))).newTag = strenv(DEPLOY_TAG)
-              else
-                .images += [{"name": strenv(SVC), "newTag": strenv(DEPLOY_TAG)}]
-              end
-            ' "$FILE"
-
-            echo "Changed $FILE -> $SVC@${DEPLOY_TAG}"
-            git config user.name  "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-            git pull --rebase origin "$BRANCH_NAME" || true
-            git add "$FILE"
-            git commit -m "[skip ci] ${{ matrix.service }}: set image tag to ${DEPLOY_TAG}" || echo "No changes to commit"
-            git push origin "HEAD:$BRANCH_NAME" || (git pull --rebase origin "$BRANCH_NAME" && git push origin "HEAD:$BRANCH_NAME")
-          else
-            echo "No kustomization file at $FILE; skipping tag bump."
-          fi
