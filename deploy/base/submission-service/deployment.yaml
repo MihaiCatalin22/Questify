@@ -2,34 +2,24 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: submission-service
-  labels: { app: submission-service }
 spec:
-  replicas: 1
-  selector: { matchLabels: { app: submission-service } }
   template:
-    metadata: { labels: { app: submission-service } }
     spec:
-      serviceAccountName: submission-service
       containers:
         - name: submission-service
           image: ghcr.io/mihaicatalin22/questify-submission-service:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8080
           env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "prod"
-            - name: JAVA_OPTS
-              value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine"
-            - name: SERVER_PORT
-              value: "8080"
-            - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
-              value: "health,info,prometheus"
-            - name: MANAGEMENT_HEALTH_PROBES_ENABLED
-              value: "true"
+            - { name: SPRING_PROFILES_ACTIVE, value: "prod" }
+            - { name: JAVA_OPTS, value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine" }
+            - { name: SERVER_PORT, value: "8080" }
+            - { name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE, value: "health,info,prometheus" }
+            - { name: MANAGEMENT_HEALTH_PROBES_ENABLED, value: "true" }
           startupProbe:
-            httpGet: { path: /actuator/health, port: http, scheme: HTTP }
+            httpGet: { path: /actuator/health/liveness, port: http, scheme: HTTP }
             periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 120
