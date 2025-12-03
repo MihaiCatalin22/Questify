@@ -2,69 +2,49 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: quest-service
-  labels:
-    app: quest-service
+  labels: { app: quest-service }
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      app: quest-service
+  selector: { matchLabels: { app: quest-service } }
   template:
-    metadata:
-      labels:
-        app: quest-service
+    metadata: { labels: { app: quest-service } }
     spec:
       serviceAccountName: quest-service
       containers:
         - name: quest-service
-          image: ghcr.io/mihaicatalin22/questify-quest-service
+          image: ghcr.io/mihaicatalin22/questify-quest-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
-              containerPort: 80
+              containerPort: 8080
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: "prod"
             - name: JAVA_OPTS
               value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine"
             - name: SERVER_PORT
-              value: "80"
+              value: "8080"
             - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
               value: "health,info,prometheus"
             - name: MANAGEMENT_HEALTH_PROBES_ENABLED
               value: "true"
-            - name: MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED
-              value: "true"
           startupProbe:
-            httpGet:
-              path: /actuator/health
-              port: http
-              scheme: HTTP
+            httpGet: { path: /actuator/health, port: http, scheme: HTTP }
             periodSeconds: 5
             timeoutSeconds: 5
-            failureThreshold: 180
+            failureThreshold: 120
           readinessProbe:
-            httpGet:
-              path: /actuator/health/readiness
-              port: http
-              scheme: HTTP
+            httpGet: { path: /actuator/health/readiness, port: http, scheme: HTTP }
             initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 6
+            failureThreshold: 12
           livenessProbe:
-            httpGet:
-              path: /actuator/health/liveness
-              port: http
-              scheme: HTTP
+            httpGet: { path: /actuator/health/liveness, port: http, scheme: HTTP }
             initialDelaySeconds: 120
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
           resources:
-            requests:
-              cpu: "100m"
-              memory: "256Mi"
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
