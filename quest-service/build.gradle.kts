@@ -35,12 +35,12 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("org.springframework.kafka:spring-kafka")
     runtimeOnly("com.mysql:mysql-connector-j")
+    implementation("io.micrometer:micrometer-registry-prometheus")
 
     implementation("io.jsonwebtoken:jjwt-api:0.11.5")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.11.5")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.11.5")
     testRuntimeOnly("com.h2database:h2")
-    implementation("io.micrometer:micrometer-registry-prometheus:1.15.1")
     implementation("io.micrometer:micrometer-tracing-bridge-otel:1.5.3")
     implementation("io.opentelemetry:opentelemetry-exporter-otlp:1.54.0")
 
