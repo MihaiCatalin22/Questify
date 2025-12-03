@@ -1,0 +1,13 @@
+﻿apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: default
+resources:
+  - ../../../base/quest-service
+images:
+  - name: ghcr.io/MihaiCatalin22/questify-quest-service
+    newTag: main-abcdef0
+patches:
+  - path: patch-env.yaml
+    target:
+      kind: Deployment
+      name: quest-service

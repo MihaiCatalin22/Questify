@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: questify-frontend
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/MihaiCatalin22/Questify.git
+    path: deploy/overlays/prod/frontend
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
