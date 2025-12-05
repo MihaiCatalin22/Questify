@@ -77,26 +77,41 @@ public class S3ProofStorageService implements ProofStorageService {
         s3.putObject(put, RequestBody.fromInputStream(in, contentLength));
     }
 
+    private static String normalizeBasePath(String p) {
+        if (!StringUtils.hasText(p)) return "";
+        String out = p.startsWith("/") ? p : "/" + p;
+        if (out.length() > 1 && out.endsWith("/")) out = out.substring(0, out.length() - 1);
+        return out;
+    }
+
     private String toPublic(String signedUrl) {
-        String pubBase = props.getPublicEndpoint(); 
+        String pubBase = props.getPublicEndpoint();
         if (!StringUtils.hasText(pubBase)) return signedUrl;
 
         URI signed = URI.create(signedUrl);
         URI pub = URI.create(pubBase);
 
-        String basePath = (pub.getPath() == null) ? "" : pub.getPath();
-        String joinedPath = UriComponentsBuilder.fromPath(basePath)
-                .path(signed.getPath())
-                .build()
-                .getPath();
+        String basePath = normalizeBasePath(pub.getRawPath());
+        String signedPath = signed.getRawPath();
+
+        String finalPath;
+        if (!StringUtils.hasText(basePath) ||
+                signedPath.startsWith(basePath + "/") ||
+                signedPath.equals(basePath)) {
+            finalPath = signedPath;
+        } else {
+            boolean needSlash =
+                    !basePath.endsWith("/") && (signedPath == null || !signedPath.startsWith("/"));
+            finalPath = basePath + (needSlash ? "/" : "") + (signedPath == null ? "" : signedPath);
+        }
 
         return UriComponentsBuilder.newInstance()
                 .scheme(pub.getScheme())
                 .host(pub.getHost())
                 .port(pub.getPort())
-                .path(joinedPath)
-                .query(signed.getQuery())
-                .build()
+                .path(finalPath)
+                .query(signed.getRawQuery())
+                .build(true)
                 .toUriString();
     }
 }
