@@ -30,33 +30,43 @@ spec:
             - name: app-config
               mountPath: /config
               readOnly: true
-          env:
+            # Spring profile & config
             - { name: SPRING_PROFILES_ACTIVE, value: "prod" }
-            - { name: JAVA_OPTS, value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine" }
+            - { name: SPRING_APPLICATION_NAME, value: "proof-service" }
+            - { name: SPRING_CONFIG_ADDITIONAL_LOCATION, value: "/config/" }
             - { name: SERVER_PORT, value: "8080" }
             - { name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE, value: "health,info,prometheus" }
             - { name: MANAGEMENT_HEALTH_PROBES_ENABLED, value: "true" }
-            # S3 / MinIO
+
+            - { name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI, value: "https://questify.tail03c40b.ts.net/auth/realms/questify" }
+            # Optional explicit JWKS if your config uses it anywhere
+            - { name: OIDC_ISSUER, value: "https://questify.tail03c40b.ts.net/auth/realms/questify" }
+            - { name: OIDC_JWKS, value: "https://questify.tail03c40b.ts.net/auth/realms/questify/protocol/openid-connect/certs" }
+
             - { name: STORAGE_ENDPOINT, value: "http://minio:9000" }
             - { name: STORAGE_PUBLIC_ENDPOINT, value: "https://questify.tail03c40b.ts.net/s3" }
             - { name: STORAGE_BUCKET, value: "questify-proofs" }
+            - { name: STORAGE_REGION, value: "us-east-1" }
             - name: STORAGE_ACCESS_KEY
               valueFrom: { secretKeyRef: { name: minio-root, key: accessKey } }
             - name: STORAGE_SECRET_KEY
               valueFrom: { secretKeyRef: { name: minio-root, key: secretKey } }
+
+            - { name: JAVA_OPTS, value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine" }
+
           startupProbe:
-            httpGet: { path: /actuator/health/liveness, port: http, scheme: HTTP }
+            httpGet: { path: /actuator/health/liveness, port: http }
             periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 120
           readinessProbe:
-            httpGet: { path: /actuator/health/readiness, port: http, scheme: HTTP }
+            httpGet: { path: /actuator/health/readiness, port: http }
             initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 12
           livenessProbe:
-            httpGet: { path: /actuator/health/liveness, port: http, scheme: HTTP }
+            httpGet: { path: /actuator/health/liveness, port: http }
             initialDelaySeconds: 120
             periodSeconds: 10
             timeoutSeconds: 5
