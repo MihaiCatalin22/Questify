@@ -15,6 +15,10 @@ spec:
       labels: { app: submission-service }
     spec:
       serviceAccountName: submission-service
+      volumes:
+        - name: app-config
+          secret:
+            secretName: submission-service-app-yml
       containers:
         - name: submission-service
           image: ghcr.io/mihaicatalin22/questify-submission-service:latest
@@ -22,12 +26,24 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          volumeMounts:
+            - name: app-config
+              mountPath: /config
+              readOnly: true
           env:
             - { name: SPRING_PROFILES_ACTIVE, value: "prod" }
             - { name: JAVA_OPTS, value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine" }
             - { name: SERVER_PORT, value: "8080" }
             - { name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE, value: "health,info,prometheus" }
             - { name: MANAGEMENT_HEALTH_PROBES_ENABLED, value: "true" }
+            # Kafka (bootstrap + topic for quests)
+            - { name: SPRING_KAFKA_BOOTSTRAP_SERVERS, value: "questify-kafka-kafka-bootstrap.kafka.svc:9092" }
+            - { name: APP_KAFKA_TOPICS_QUESTS, value: "dev.questify.quests" }
+            # MySQL
+            - { name: SPRING_DATASOURCE_URL, value: "jdbc:mysql://mysql:3306/questify?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" }
+            - { name: SPRING_DATASOURCE_USERNAME, value: "root" }
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom: { secretKeyRef: { name: mysql-root, key: password } }
           startupProbe:
             httpGet: { path: /actuator/health/liveness, port: http, scheme: HTTP }
             periodSeconds: 5
