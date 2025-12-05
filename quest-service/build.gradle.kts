@@ -38,7 +38,6 @@ dependencies {
     implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("io.micrometer:micrometer-tracing-bridge-otel")
     implementation("io.opentelemetry:opentelemetry-exporter-otlp")
-    implementation("io.opentelemetry.instrumentation:opentelemetry-logback-mdc-1.0")
     implementation("io.jsonwebtoken:jjwt-api:0.11.5")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.11.5")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.11.5")
