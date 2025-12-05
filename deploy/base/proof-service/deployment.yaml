@@ -30,29 +30,49 @@ spec:
             - name: app-config
               mountPath: /config
               readOnly: true
-            # Spring profile & config
-            - { name: SPRING_PROFILES_ACTIVE, value: "prod" }
-            - { name: SPRING_APPLICATION_NAME, value: "proof-service" }
-            - { name: SPRING_CONFIG_ADDITIONAL_LOCATION, value: "/config/" }
-            - { name: SERVER_PORT, value: "8080" }
-            - { name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE, value: "health,info,prometheus" }
-            - { name: MANAGEMENT_HEALTH_PROBES_ENABLED, value: "true" }
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+            - name: SPRING_APPLICATION_NAME
+              value: "proof-service"
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: "/config/"
 
-            - { name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI, value: "https://questify.tail03c40b.ts.net/auth/realms/questify" }
-            # Optional explicit JWKS if your config uses it anywhere
-            - { name: OIDC_ISSUER, value: "https://questify.tail03c40b.ts.net/auth/realms/questify" }
-            - { name: OIDC_JWKS, value: "https://questify.tail03c40b.ts.net/auth/realms/questify/protocol/openid-connect/certs" }
+            - name: SERVER_PORT
+              value: "8080"
+            - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+              value: "health,info,prometheus"
+            - name: MANAGEMENT_HEALTH_PROBES_ENABLED
+              value: "true"
 
-            - { name: STORAGE_ENDPOINT, value: "http://minio:9000" }
-            - { name: STORAGE_PUBLIC_ENDPOINT, value: "https://questify.tail03c40b.ts.net/s3" }
-            - { name: STORAGE_BUCKET, value: "questify-proofs" }
-            - { name: STORAGE_REGION, value: "us-east-1" }
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "https://questify.tail03c40b.ts.net/auth/realms/questify"
+            - name: OIDC_ISSUER
+              value: "https://questify.tail03c40b.ts.net/auth/realms/questify"
+            - name: OIDC_JWKS
+              value: "https://questify.tail03c40b.ts.net/auth/realms/questify/protocol/openid-connect/certs"
+
+            - name: STORAGE_ENDPOINT
+              value: "http://minio:9000"
+            - name: STORAGE_PUBLIC_ENDPOINT
+              value: "https://questify.tail03c40b.ts.net/s3"
+            - name: STORAGE_BUCKET
+              value: "questify-proofs"
+            - name: STORAGE_REGION
+              value: "us-east-1"
             - name: STORAGE_ACCESS_KEY
-              valueFrom: { secretKeyRef: { name: minio-root, key: accessKey } }
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root
+                  key: accessKey
             - name: STORAGE_SECRET_KEY
-              valueFrom: { secretKeyRef: { name: minio-root, key: secretKey } }
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root
+                  key: secretKey
 
-            - { name: JAVA_OPTS, value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine" }
+            - name: JAVA_OPTS
+              value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine"
 
           startupProbe:
             httpGet: { path: /actuator/health/liveness, port: http }
