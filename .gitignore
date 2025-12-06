@@ -135,4 +135,14 @@ infra/observability/minio-pvc.yaml
 infra/observability/minio-volume-patch.json
 infra/observability/questify-observability.json
 QuestifyBE
+build.gradle.kts
+default.conf
+docker-compose.override-ghcr.yml
+docker-compose.yml
+fe-nginx-patch.yaml
+fe-patch.yaml
+fe-port.yaml
+frontend.yaml
+nginx-fixed.conf
+settings.gradle.kts
 
