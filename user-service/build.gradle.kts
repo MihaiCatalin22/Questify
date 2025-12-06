@@ -2,6 +2,7 @@ plugins {
     id("org.springframework.boot") version "3.5.7"
     id("io.spring.dependency-management") version "1.1.6"
     id("java")
+    jacoco
 }
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(21)) } }
@@ -21,6 +22,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.kafka:spring-kafka")
     implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
     runtimeOnly("com.mysql:mysql-connector-j")
 
     compileOnly("org.projectlombok:lombok:1.18.34")
@@ -31,4 +34,16 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+jacoco { toolVersion = "0.8.12" }
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
 }

@@ -24,7 +24,8 @@ dependencies {
     implementation("software.amazon.awssdk:auth")
     implementation("software.amazon.awssdk:apache-client")
     implementation("io.micrometer:micrometer-registry-prometheus")
-
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
     compileOnly("org.projectlombok:lombok:1.18.34")
     annotationProcessor("org.projectlombok:lombok:1.18.34")
 

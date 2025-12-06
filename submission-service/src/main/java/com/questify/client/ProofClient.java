@@ -35,9 +35,9 @@ public class ProofClient {
 
     public ProofClient(
             @Value("${PROOF_SERVICE_BASE:http://proof-service:8080/api}") String base,
-            @Value("${PROOF_PUBLIC_BASE_URL:https://questify.tail03c40b.ts.net/s3/questify-proofs}") String publicBase,
+            @Value("${PROOF_PUBLIC_BASE_URL:") String publicBase,
             @Value("${SECURITY_INTERNAL_TOKEN:dev-internal-token}") String internalToken,
-            @Value("${PUBLIC_S3_BASE:https://questify.tail03c40b.ts.net/s3}") String publicS3Base
+            @Value("${PUBLIC_S3_BASE:}") String publicS3Base
     ) {
         HttpClient hc = HttpClient.create()
                 .responseTimeout(Duration.ofSeconds(90))
@@ -74,7 +74,7 @@ public class ProofClient {
             }
 
             String raw = String.valueOf(res.get("url"));
-            return toPublicS3Url(raw);
+            return raw;
 
         } catch (WebClientResponseException e) {
             throw new ResponseStatusException(

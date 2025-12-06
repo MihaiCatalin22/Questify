@@ -18,7 +18,7 @@ jobs:
   # Quest Service
   # ───────────────────────────
   quest-service:
-    name: Quest Service • Build & Test
+    name: Quest Service • Build, Test & Sonar
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -61,19 +61,34 @@ jobs:
           path: quest-service/build/reports/jacoco/test/jacocoTestReport.xml
           if-no-files-found: ignore
 
+      - name: SonarCloud Scan (quest-service)
+        uses: SonarSource/sonarcloud-github-action@v2
+        if: >
+          (github.event_name == 'push' && github.ref_name == 'main') ||
+          (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+           github.event.pull_request.head.repo.full_name == github.repository) ||
+          (github.event_name == 'workflow_dispatch')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}         # PR decoration
+          SONAR_TOKEN:  ${{ secrets.SONAR_TOKEN_QUEST }}    # project token
+        with:
+          projectBaseDir: quest-service
+
   # ───────────────────────────
   # User Service
   # ───────────────────────────
   user-service:
-    name: User Service • Build & Test
+    name: User Service • Build, Test & Sonar
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
+
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.10.2
@@ -87,19 +102,34 @@ jobs:
             echo "JaCoCo not configured in user-service"
           fi
 
-      - if: always()
+      - name: Upload JUnit report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: user-tests
           path: user-service/build/reports/tests/test/**
           if-no-files-found: ignore
 
-      - if: always()
+      - name: Upload JaCoCo XML
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: user-jacoco-xml
           path: user-service/build/reports/jacoco/test/jacocoTestReport.xml
           if-no-files-found: ignore
+
+      - name: SonarCloud Scan (user-service)
+        uses: SonarSource/sonarcloud-github-action@v2
+        if: >
+          (github.event_name == 'push' && github.ref_name == 'main') ||
+          (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+           github.event.pull_request.head.repo.full_name == github.repository) ||
+          (github.event_name == 'workflow_dispatch')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN:  ${{ secrets.SONAR_TOKEN_USER }}
+        with:
+          projectBaseDir: user-service
 
   # ───────────────────────────
   # Proof Service 
@@ -127,14 +157,16 @@ jobs:
             echo "JaCoCo not configured in proof-service"
           fi
 
-      - if: always()
+      - name: Upload JUnit report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: proof-tests
           path: proof-service/build/reports/tests/test/**
           if-no-files-found: ignore
 
-      - if: always()
+      - name: Upload JaCoCo XML
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: proof-jacoco-xml
@@ -145,7 +177,7 @@ jobs:
   # Submission Service
   # ───────────────────────────
   submission-service:
-    name: Submission Service • Build & Test
+    name: Submission Service • Build, Test & Sonar
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -167,19 +199,34 @@ jobs:
             echo "JaCoCo not configured in submission-service"
           fi
 
-      - if: always()
+      - name: Upload JUnit report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: submission-tests
           path: submission-service/build/reports/tests/test/**
           if-no-files-found: ignore
 
-      - if: always()
+      - name: Upload JaCoCo XML
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: submission-jacoco-xml
           path: submission-service/build/reports/jacoco/test/jacocoTestReport.xml
           if-no-files-found: ignore
+
+      - name: SonarCloud Scan (submission-service)
+        uses: SonarSource/sonarcloud-github-action@v2
+        if: >
+          (github.event_name == 'push' && github.ref_name == 'main') ||
+          (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+           github.event.pull_request.head.repo.full_name == github.repository) ||
+          (github.event_name == 'workflow_dispatch')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN:  ${{ secrets.SONAR_TOKEN_SUBMISSION }}
+        with:
+          projectBaseDir: submission-service
 
   # ────────────────
   # Frontend

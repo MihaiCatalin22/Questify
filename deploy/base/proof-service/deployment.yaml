@@ -2,69 +2,95 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: proof-service
-  labels:
-    app: proof-service
+  namespace: default
+  labels: { app: proof-service }
+  annotations:
+    argocd.argoproj.io/sync-options: Replace=true
 spec:
   replicas: 1
   selector:
-    matchLabels:
-      app: proof-service
+    matchLabels: { app: proof-service }
   template:
     metadata:
-      labels:
-        app: proof-service
+      labels: { app: proof-service }
     spec:
       serviceAccountName: proof-service
+      volumes:
+        - name: app-config
+          secret:
+            secretName: proof-service-app-yml
       containers:
         - name: proof-service
-          image: ghcr.io/mihaicatalin22/questify-proof-service
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/mihaicatalin22/questify-proof-service:latest
+          imagePullPolicy: Always
           ports:
             - name: http
-              containerPort: 80
+              containerPort: 8080
+          volumeMounts:
+            - name: app-config
+              mountPath: /config
+              readOnly: true
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: "prod"
-            - name: JAVA_OPTS
-              value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine"
+            - name: SPRING_APPLICATION_NAME
+              value: "proof-service"
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: "/config/"
+
             - name: SERVER_PORT
-              value: "80"
+              value: "8080"
             - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
               value: "health,info,prometheus"
             - name: MANAGEMENT_HEALTH_PROBES_ENABLED
               value: "true"
-            - name: MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED
-              value: "true"
+
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "https://questify.tail03c40b.ts.net/auth/realms/questify"
+            - name: OIDC_ISSUER
+              value: "https://questify.tail03c40b.ts.net/auth/realms/questify"
+            - name: OIDC_JWKS
+              value: "https://questify.tail03c40b.ts.net/auth/realms/questify/protocol/openid-connect/certs"
+
+            - name: STORAGE_ENDPOINT
+              value: "http://minio:9000"
+            - name: STORAGE_PUBLIC_ENDPOINT
+              value: "https://questify.tail03c40b.ts.net/s3"
+            - name: STORAGE_BUCKET
+              value: "questify-proofs"
+            - name: STORAGE_REGION
+              value: "us-east-1"
+            - name: STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root
+                  key: accessKey
+            - name: STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root
+                  key: secretKey
+
+            - name: JAVA_OPTS
+              value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine"
+
           startupProbe:
-            httpGet:
-              path: /actuator/health
-              port: http
-              scheme: HTTP
+            httpGet: { path: /actuator/health/liveness, port: http }
             periodSeconds: 5
             timeoutSeconds: 5
-            failureThreshold: 180
+            failureThreshold: 120
           readinessProbe:
-            httpGet:
-              path: /actuator/health/readiness
-              port: http
-              scheme: HTTP
+            httpGet: { path: /actuator/health/readiness, port: http }
             initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 6
+            failureThreshold: 12
           livenessProbe:
-            httpGet:
-              path: /actuator/health/liveness
-              port: http
-              scheme: HTTP
+            httpGet: { path: /actuator/health/liveness, port: http }
             initialDelaySeconds: 120
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
           resources:
-            requests:
-              cpu: "100m"
-              memory: "256Mi"
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }

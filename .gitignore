@@ -124,3 +124,15 @@ user-config-patch.yaml
 user-db-env.yaml
 user-env-patch.yaml
 probe-proof.yaml
+infra/observability/application.yml
+infra/observability/apps.yaml
+infra/observability/minio-deploy-overlay.yaml
+infra/observability/minio-deploy-patch.yaml
+infra/observability/minio-fixed.json
+infra/observability/minio-merge.yaml
+infra/observability/minio-pv.yaml
+infra/observability/minio-pvc.yaml
+infra/observability/minio-volume-patch.json
+infra/observability/questify-observability.json
+QuestifyBE
+
