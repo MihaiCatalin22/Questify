@@ -146,3 +146,14 @@ frontend.yaml
 nginx-fixed.conf
 settings.gradle.kts
 
+default.conf
+docker-compose.override-ghcr.yml
+docker-compose.yml
+fe-nginx-patch.yaml
+fe-patch.yaml
+fe-port.yaml
+frontend.yaml
+nginx-fixed.conf
+settings.gradle.kts
+build.gradle.kts
+docker-compose.yml
