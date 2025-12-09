@@ -40,7 +40,11 @@ public class QuestController {
     private PageRequest page(int page, int size) {
         int p = Math.max(0, page);
         int s = Math.min(100, Math.max(1, size));
-        return PageRequest.of(p, s);
+        Sort sort = Sort.by(
+                Sort.Order.desc("createdAt"),
+                Sort.Order.desc("id")
+        );
+        return PageRequest.of(p, s, sort);
     }
 
     @PostMapping
@@ -105,14 +109,13 @@ public class QuestController {
         return new PageImpl<>(dtos.subList(from, to), p, dtos.size());
     }
 
-
     @GetMapping
     public Page<QuestRes> list(@RequestParam(required = false) QuestStatus status,
                                @RequestParam(defaultValue = "0") int page,
                                @RequestParam(defaultValue = "10") int size) {
         Page<Quest> p = (status == null)
-                ? service.discoverActive(PageRequest.of(page, size))
-                : service.listByStatus(status, PageRequest.of(page, size));
+                ? service.discoverActive(page(page, size))
+                : service.listByStatus(status, page(page, size));
         return p.map(q -> QuestMapper.toRes(q, service.participantsCount(q.getId()), false));
     }
 
@@ -146,23 +149,29 @@ public class QuestController {
     @PreAuthorize("isAuthenticated()")
     public Page<QuestRes> mine(@RequestParam(defaultValue = "0") int page,
                                @RequestParam(defaultValue = "10") int size,
+                               @RequestParam(required = false) QuestStatus status,
                                Authentication auth) {
         var me = jwt.userId(auth);
-        var p = service.mineOrParticipating(me, page(page, size))
-                .map(x -> QuestMapper.toRes(x, service.participantsCount(x.getId()),
-                        completionService.isCompleted(x.getId(), me)));
-        return new PageImpl<>(p.getContent(), p.getPageable(), p.getTotalElements());
+        Page<Quest> p = (status == null)
+                ? service.mine(me, page(page, size))
+                : service.mineByStatus(me, status, page(page, size));
+
+        return p.map(x -> QuestMapper.toRes(x, service.participantsCount(x.getId()),
+                completionService.isCompleted(x.getId(), me)));
     }
 
     @GetMapping("/mine-or-participating")
     @PreAuthorize("isAuthenticated()")
     public Page<QuestRes> mineOrParticipating(@RequestParam(defaultValue = "0") int page,
                                               @RequestParam(defaultValue = "10") int size,
+                                              @RequestParam(required = false) QuestStatus status,
                                               Authentication auth) {
         var me = jwt.userId(auth);
-        var p = service.mineOrParticipating(me, page(page, size))
-                .map(x -> QuestMapper.toRes(x, service.participantsCount(x.getId()),
-                        completionService.isCompleted(x.getId(), me)));
-        return new PageImpl<>(p.getContent(), p.getPageable(), p.getTotalElements());
+        Page<Quest> p = (status == null)
+                ? service.mineOrParticipating(me, page(page, size))
+                : service.mineOrParticipatingByStatus(me, status, page(page, size));
+
+        return p.map(x -> QuestMapper.toRes(x, service.participantsCount(x.getId()),
+                completionService.isCompleted(x.getId(), me)));
     }
 }

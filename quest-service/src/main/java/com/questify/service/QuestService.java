@@ -201,7 +201,13 @@ public class QuestService {
             );
         }
     }
+    public Page<Quest> mineByStatus(String userId, QuestStatus status, Pageable pageable) {
+        return quests.findByCreatedByUserIdAndStatus(userId, status, pageable);
+    }
 
+    public Page<Quest> mineOrParticipatingByStatus(String userId, QuestStatus status, Pageable pageable) {
+        return quests.findMyOrParticipatingByStatus(userId, status, pageable);
+    }
     public int participantsCount(Long questId) {
         return Math.toIntExact(participants.countByQuest_Id(questId));
     }

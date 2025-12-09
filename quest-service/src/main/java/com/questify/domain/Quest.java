@@ -9,6 +9,8 @@ import java.util.Set;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 @Builder
 @Entity
@@ -40,13 +42,14 @@ public class Quest {
     @Builder.Default
     private QuestCategory category = QuestCategory.OTHER;
 
-    /** Replaces ManyToOne<User>. Store the creator's user id (numeric string for now). */
     @Column(name = "created_by_user_id", nullable = false, length = 128)
     private String createdByUserId;
 
+    @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    @UpdateTimestamp
     private Instant updatedAt;
     private Instant startDate;
     private Instant endDate;

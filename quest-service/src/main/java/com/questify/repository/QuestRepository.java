@@ -39,4 +39,8 @@ public interface QuestRepository extends JpaRepository<Quest,Long> {
              and q.status = com.questify.domain.QuestStatus.ACTIVE
            """)
     Page<Quest> searchPublic(@Param("q") String q, Pageable pageable);
+    Page<Quest> findByCreatedByUserIdAndStatus(String userId, QuestStatus status, Pageable pageable);
+    Page<Quest> findMyOrParticipatingByStatus(@Param("userId") String userId,
+                                              @Param("status") QuestStatus status,
+                                              Pageable pageable);
 }

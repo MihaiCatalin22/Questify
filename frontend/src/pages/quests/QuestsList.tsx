@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { useDeleteQuest, useLeaveQuest, useMyQuests } from '../../hooks/useQuests';
+import { useDeleteQuest, useLeaveQuest, useMyQuestsPage } from '../../hooks/useQuests';
 import { useAuthContext } from '../../contexts/AuthContext';
 import type { QuestDTO } from '../../types/quest';
 import { toast } from 'react-hot-toast';
@@ -29,13 +29,29 @@ function saveSeen(map: SeenMap) {
 
 export default function QuestsList() {
   const { user } = useAuthContext();
-  const { data: quests, isLoading, isError, error } = useMyQuests();
+
+  const [page, setPage] = React.useState(0);
+  const [size, setSize] = React.useState(10);
+
+  const { data: paged, isLoading, isError, error } = useMyQuestsPage(page, size);
   const del = useDeleteQuest();
   const leave = useLeaveQuest();
 
   const [tab, setTab] = React.useState<Tab>('ACTIVE');
   const [showCompletedInActive, setShowCompletedInActive] = React.useState(false);
   const [seenCompletedAt, setSeenCompletedAt] = React.useState<SeenMap>(() => loadSeen());
+
+  const quests: QuestDTO[] = paged?.content ?? [];
+  const totalPages = paged?.totalPages ?? 1;
+  const total = paged?.totalElements ?? quests.length;
+
+  React.useEffect(() => {
+    if (!paged) return;
+    const tp = paged.totalPages ?? 1;
+    if (tp > 0 && page >= tp) {
+      setPage(tp - 1);
+    }
+  }, [paged?.totalPages]); 
 
   React.useEffect(() => {
     if (!quests?.length) return;
@@ -67,9 +83,8 @@ export default function QuestsList() {
   if (isLoading) return <div className="p-6">Loading quests…</div>;
   if (isError) return <div className="p-6 text-red-600">{(error as any)?.message || 'Failed to load quests'}</div>;
 
-  const all: QuestDTO[] = quests ?? [];
-  const active = all.filter((q: any) => (q as any).status !== 'ARCHIVED');
-  const archived = all.filter((q: any) => (q as any).status === 'ARCHIVED');
+  const active = quests.filter((q: any) => (q as any).status !== 'ARCHIVED');
+  const archived = quests.filter((q: any) => (q as any).status === 'ARCHIVED');
 
   const visibleActive = active.filter((q: any) => {
     if (showCompletedInActive) return true;
@@ -92,22 +107,24 @@ export default function QuestsList() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <button
-          className={`rounded-full px-3 py-1.5 text-sm border ${tab === 'ACTIVE' ? 'bg-black text-white' : 'bg-white'}`}
-          onClick={() => setTab('ACTIVE')}
-        >
-          Active
-        </button>
-        <button
-          className={`rounded-full px-3 py-1.5 text-sm border ${tab === 'ARCHIVED' ? 'bg-black text-white' : 'bg-white'}`}
-          onClick={() => setTab('ARCHIVED')}
-        >
-          Archived
-        </button>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            className={`rounded-full px-3 py-1.5 text-sm border ${tab === 'ACTIVE' ? 'bg-black text-white' : 'bg-white'}`}
+            onClick={() => setTab('ACTIVE')}
+          >
+            Active
+          </button>
+          <button
+            className={`rounded-full px-3 py-1.5 text-sm border ${tab === 'ARCHIVED' ? 'bg-black text-white' : 'bg-white'}`}
+            onClick={() => setTab('ARCHIVED')}
+          >
+            Archived
+          </button>
+        </div>
 
         {tab === 'ACTIVE' && (
-          <label className="ml-3 flex items-center gap-2 text-sm">
+          <label className="ml-1 flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={showCompletedInActive}
@@ -116,11 +133,47 @@ export default function QuestsList() {
             Show completed
           </label>
         )}
+
+        {/* Pager */}
+        <div className="ml-auto flex items-center gap-2 text-sm">
+          <button
+            className="rounded border px-2 py-1 disabled:opacity-50"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page <= 0}
+            title="Previous page"
+          >
+            ‹ Prev
+          </button>
+          <span className="px-2">
+            Page <strong>{page + 1}</strong> of <strong>{totalPages}</strong>
+          </span>
+          <button
+            className="rounded border px-2 py-1 disabled:opacity-50"
+            onClick={() => setPage((p) => (p + 1 < totalPages ? p + 1 : p))}
+            disabled={page + 1 >= totalPages}
+            title="Next page"
+          >
+            Next ›
+          </button>
+
+          <select
+            className="ml-2 rounded border px-2 py-1"
+            value={size}
+            onChange={(e) => { setPage(0); setSize(Number(e.target.value)); }}
+            title="Items per page"
+          >
+            <option value={10}>10 / page</option>
+            <option value={20}>20 / page</option>
+            <option value={50}>50 / page</option>
+          </select>
+
+          <span className="opacity-70">Total: {total}</span>
+        </div>
       </div>
 
       {list.length === 0 ? (
         <div className="text-sm text-gray-600">
-          {tab === 'ACTIVE' ? 'No active quests yet.' : 'No archived quests.'}
+          {tab === 'ACTIVE' ? 'No active quests on this page.' : 'No archived quests on this page.'}
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -133,23 +186,25 @@ export default function QuestsList() {
             const archivedQuest = (q as any).status === 'ARCHIVED';
             const isOwner = user && String(user.id) === String((q as any).createdByUserId);
 
-            const onDelete = () => del.mutate(q.id);
+            const onArchive = async () => {
+              try {
+                await del.mutateAsync(q.id);
+                if (list.length === 1 && page > 0) setPage(page - 1);
+              } catch (e: any) {
+                toast.error(e?.message ?? "Failed to archive");
+              }
+            };
 
             const onLeave = async () => {
               if (isOwner) {
-                toast('You can’t leave quests you own. Archive or delete the quest instead.', {
-                  icon: 'ℹ️',
-                });
+                toast('You can’t leave quests you own. Archive or delete the quest instead.', { icon: 'ℹ️' });
                 return;
               }
               try {
                 await leave.mutateAsync(String(q.id));
                 toast.success('Left quest');
               } catch (e: any) {
-                const msg =
-                  e?.response?.data?.message ||
-                  e?.message ||
-                  'Failed to leave quest';
+                const msg = e?.response?.data?.message || e?.message || 'Failed to leave quest';
                 toast.error(String(msg));
               }
             };
@@ -199,11 +254,11 @@ export default function QuestsList() {
                   )}
                   {isOwner && (
                     <button
-                      onClick={onDelete}
+                      onClick={onArchive}
                       className="underline"
                       disabled={del.isPending}
                     >
-                      {del.isPending ? 'Deleting…' : 'Delete'}
+                      {del.isPending ? 'Archiving…' : 'Archive'}
                     </button>
                   )}
 

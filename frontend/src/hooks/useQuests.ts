@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { QuestsApi } from "../api/quests";
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { QuestsApi, type PageResp } from "../api/quests";
 import type { QuestDTO, CreateQuestInput, UpdateQuestInput } from "../types/quest";
 
 export const KEY = {
@@ -72,7 +72,7 @@ export function useUpdateQuest(id: string) {
 export function useDeleteQuest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string | number) => QuestsApi.remove(String(id)),
+    mutationFn: (id: string | number) => QuestsApi.remove(String(id)), // archive
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEY.mine });
       qc.invalidateQueries({ queryKey: KEY.discover });
@@ -96,10 +96,9 @@ export function useJoinQuest() {
       const prevDiscover = (qc.getQueryData(KEY.discover) as QuestDTO[] | undefined) ?? [];
       const prevDetail = qc.getQueryData(KEY.detail(qid)) as QuestDTO | undefined;
 
-      const candidate =
-        prevDiscover.find(q => String(q.id) === qid) ?? prevDetail;
+      const candidate = prevDiscover.find((q) => String(q.id) === qid) ?? prevDetail;
 
-      if (candidate && !prevMine.some(q => String(q.id) === qid)) {
+      if (candidate && !prevMine.some((q) => String(q.id) === qid)) {
         qc.setQueryData<QuestDTO[]>(KEY.mine, [...prevMine, candidate]);
       }
 
@@ -111,10 +110,8 @@ export function useJoinQuest() {
       }
 
       if (candidate) {
-        const nextDiscover = prevDiscover.map(q =>
-          String(q.id) === qid
-            ? { ...q, participantsCount: (q.participantsCount ?? 0) + 1 }
-            : q
+        const nextDiscover = prevDiscover.map((q) =>
+          String(q.id) === qid ? { ...q, participantsCount: (q.participantsCount ?? 0) + 1 } : q
         );
         qc.setQueryData(KEY.discover, nextDiscover);
       }
@@ -153,7 +150,7 @@ export function useLeaveQuest() {
       const prevDetail = qc.getQueryData(KEY.detail(qid)) as QuestDTO | undefined;
       const prevDiscover = (qc.getQueryData(KEY.discover) as QuestDTO[] | undefined) ?? [];
 
-      qc.setQueryData<QuestDTO[]>(KEY.mine, prevMine.filter(q => String(q.id) !== qid));
+      qc.setQueryData<QuestDTO[]>(KEY.mine, prevMine.filter((q) => String(q.id) !== qid));
 
       if (prevDetail) {
         qc.setQueryData<QuestDTO>(KEY.detail(qid), {
@@ -162,7 +159,7 @@ export function useLeaveQuest() {
         });
       }
 
-      const nextDiscover = prevDiscover.map(q =>
+      const nextDiscover = prevDiscover.map((q) =>
         String(q.id) === qid
           ? { ...q, participantsCount: Math.max(0, (q.participantsCount ?? 0) - 1) }
           : q
@@ -182,7 +179,18 @@ export function useLeaveQuest() {
       const qid = String(id);
       qc.invalidateQueries({ queryKey: KEY.mine });
       qc.invalidateQueries({ queryKey: KEY.detail(qid) });
-      qc.invalidateQueries({ queryKey: KEY.discover }); 
+      qc.invalidateQueries({ queryKey: KEY.discover });
     },
+  });
+}
+
+export function useMyQuestsPage(page: number, size = 10) {
+  return useQuery<PageResp<QuestDTO>>({
+    queryKey: [...KEY.mine, page, size],
+    queryFn: () => QuestsApi.listMinePage(page, size),
+    placeholderData: keepPreviousData,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+    staleTime: 10_000,
   });
 }
