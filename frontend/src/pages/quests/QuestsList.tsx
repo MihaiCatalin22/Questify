@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { useDeleteQuest, useLeaveQuest, useMyQuestsPage } from '../../hooks/useQuests';
+import { useDeleteQuest, useLeaveQuest, useMyQuestsServerPage } from '../../hooks/useQuests';
 import { useAuthContext } from '../../contexts/AuthContext';
 import type { QuestDTO } from '../../types/quest';
 import { toast } from 'react-hot-toast';
@@ -22,7 +22,6 @@ function loadSeen(): SeenMap {
   } catch {}
   return {};
 }
-
 function saveSeen(map: SeenMap) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(map)); } catch {}
 }
@@ -30,29 +29,28 @@ function saveSeen(map: SeenMap) {
 export default function QuestsList() {
   const { user } = useAuthContext();
 
+  // UI state
+  const [tab, setTab] = React.useState<Tab>('ACTIVE');
   const [page, setPage] = React.useState(0);
-  const [size, setSize] = React.useState(10);
+  const [size, setSize] = React.useState(12);
+  const [showCompletedInActive, setShowCompletedInActive] = React.useState(false);
+  const [seenCompletedAt, setSeenCompletedAt] = React.useState<SeenMap>(() => loadSeen());
 
-  const { data: paged, isLoading, isError, error } = useMyQuestsPage(page, size);
+  // Server-side paged + archived filter
+  const { data: paged, isLoading, isError, error, isFetching, refetch } =
+    useMyQuestsServerPage(tab, page, size);
+
   const del = useDeleteQuest();
   const leave = useLeaveQuest();
 
-  const [tab, setTab] = React.useState<Tab>('ACTIVE');
-  const [showCompletedInActive, setShowCompletedInActive] = React.useState(false);
-  const [seenCompletedAt, setSeenCompletedAt] = React.useState<SeenMap>(() => loadSeen());
+  // Reset to first page on tab/size change
+  React.useEffect(() => { setPage(0); }, [tab, size]);
 
   const quests: QuestDTO[] = paged?.content ?? [];
   const totalPages = paged?.totalPages ?? 1;
   const total = paged?.totalElements ?? quests.length;
 
-  React.useEffect(() => {
-    if (!paged) return;
-    const tp = paged.totalPages ?? 1;
-    if (tp > 0 && page >= tp) {
-      setPage(tp - 1);
-    }
-  }, [paged?.totalPages]); 
-
+  // Remember first-seen completed timestamps
   React.useEffect(() => {
     if (!quests?.length) return;
     const now = Date.now();
@@ -70,7 +68,7 @@ export default function QuestsList() {
       setSeenCompletedAt(next);
       saveSeen(next);
     }
-  }, [quests]); 
+  }, [quests]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isCompletedAgedOut = React.useCallback((q: QuestDTO & { completedByCurrentUser?: boolean }) => {
     if (!q?.completedByCurrentUser) return false;
@@ -83,15 +81,18 @@ export default function QuestsList() {
   if (isLoading) return <div className="p-6">Loading quests…</div>;
   if (isError) return <div className="p-6 text-red-600">{(error as any)?.message || 'Failed to load quests'}</div>;
 
-  const active = quests.filter((q: any) => (q as any).status !== 'ARCHIVED');
-  const archived = quests.filter((q: any) => (q as any).status === 'ARCHIVED');
+  // Backend already filtered by "archived" flag.
+  // Optionally hide long-ago completed on ACTIVE tab only.
+  const list = (tab === 'ACTIVE'
+    ? quests.filter((q: any) => (showCompletedInActive ? true : !(q as any).completedByCurrentUser || !isCompletedAgedOut(q as any)))
+    : quests
+  ) as (QuestDTO & any)[];
 
-  const visibleActive = active.filter((q: any) => {
-    if (showCompletedInActive) return true;
-    return !(q as any).completedByCurrentUser || !isCompletedAgedOut(q);
-  });
+  const nextDisabled = page + 1 >= totalPages || isFetching;
+  const prevDisabled = page <= 0 || isFetching;
 
-  const list = (tab === 'ACTIVE' ? visibleActive : archived) as (QuestDTO & any)[];
+  const goPrev = () => setPage(p => Math.max(0, p - 1));
+  const goNext = () => { if (!nextDisabled) setPage(p => p + 1); };
 
   return (
     <div className="p-6 space-y-4">
@@ -134,23 +135,25 @@ export default function QuestsList() {
           </label>
         )}
 
-        {/* Pager */}
+        {/* Pager with totals (server-provided) */}
         <div className="ml-auto flex items-center gap-2 text-sm">
           <button
             className="rounded border px-2 py-1 disabled:opacity-50"
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={page <= 0}
+            onClick={goPrev}
+            disabled={prevDisabled}
             title="Previous page"
           >
             ‹ Prev
           </button>
+
           <span className="px-2">
             Page <strong>{page + 1}</strong> of <strong>{totalPages}</strong>
           </span>
+
           <button
             className="rounded border px-2 py-1 disabled:opacity-50"
-            onClick={() => setPage((p) => (p + 1 < totalPages ? p + 1 : p))}
-            disabled={page + 1 >= totalPages}
+            onClick={goNext}
+            disabled={nextDisabled}
             title="Next page"
           >
             Next ›
@@ -162,12 +165,21 @@ export default function QuestsList() {
             onChange={(e) => { setPage(0); setSize(Number(e.target.value)); }}
             title="Items per page"
           >
-            <option value={10}>10 / page</option>
-            <option value={20}>20 / page</option>
-            <option value={50}>50 / page</option>
+            <option value={12}>12 / page</option>
+            <option value={24}>24 / page</option>
+            <option value={48}>48 / page</option>
           </select>
 
           <span className="opacity-70">Total: {total}</span>
+
+          <button
+            className="ml-2 rounded border px-2 py-1"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            title="Refresh"
+          >
+            {isFetching ? 'Refreshing…' : 'Refresh'}
+          </button>
         </div>
       </div>
 
@@ -189,9 +201,15 @@ export default function QuestsList() {
             const onArchive = async () => {
               try {
                 await del.mutateAsync(q.id);
-                if (list.length === 1 && page > 0) setPage(page - 1);
+                // If page becomes empty after archiving, step back a page
+                setTimeout(() => {
+                  if ((paged?.content?.length ?? 0) <= 1 && page > 0) {
+                    setPage(p => Math.max(0, p - 1));
+                  }
+                }, 0);
               } catch (e: any) {
-                toast.error(e?.message ?? "Failed to archive");
+                const msg = e?.response?.data?.message || e?.message || 'Failed to archive quest';
+                toast.error(String(msg));
               }
             };
 

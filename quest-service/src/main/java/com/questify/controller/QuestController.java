@@ -164,12 +164,23 @@ public class QuestController {
     @PreAuthorize("isAuthenticated()")
     public Page<QuestRes> mineOrParticipating(@RequestParam(defaultValue = "0") int page,
                                               @RequestParam(defaultValue = "10") int size,
+                                              @RequestParam(required = false) Boolean archived,
                                               @RequestParam(required = false) QuestStatus status,
                                               Authentication auth) {
         var me = jwt.userId(auth);
-        Page<Quest> p = (status == null)
-                ? service.mineOrParticipating(me, page(page, size))
-                : service.mineOrParticipatingByStatus(me, status, page(page, size));
+
+        Page<Quest> p;
+        if (archived != null) {
+            p = service.mineOrParticipatingFiltered(me, archived, page(page, size));
+        } else if (status != null) {
+            if (status == QuestStatus.ARCHIVED) {
+                p = service.mineOrParticipatingWithStatus(me, QuestStatus.ARCHIVED, page(page, size));
+            } else {
+                p = service.mineOrParticipatingWithStatus(me, status, page(page, size));
+            }
+        } else {
+            p = service.mineOrParticipating(me, page(page, size));
+        }
 
         return p.map(x -> QuestMapper.toRes(x, service.participantsCount(x.getId()),
                 completionService.isCompleted(x.getId(), me)));

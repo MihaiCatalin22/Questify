@@ -5,13 +5,11 @@ export type PageResp<T> = {
   content: T[];
   totalElements: number;
   totalPages: number;
-  number: number; // 0-based page index
+  number: number; // 0-based index
   size: number;
   first: boolean;
   last: boolean;
 };
-
-type StatusFilter = "ACTIVE" | "ARCHIVED";
 
 export const QuestsApi = {
   async listMine(): Promise<QuestDTO[]> {
@@ -21,16 +19,11 @@ export const QuestsApi = {
     return Array.isArray(data) ? data : data?.content ?? [];
   },
 
-  async listMinePage(
-    page = 0,
-    size = 10,
-    status?: StatusFilter
-  ): Promise<PageResp<QuestDTO>> {
-    const params: Record<string, any> = { page, size, sort: "createdAt,desc" };
-    if (status) params.status = status;
-
-    const { data } = await http.get("/quests/mine-or-participating", { params });
-
+  /** Legacy, unfiltered page (kept in case other code still calls it) */
+  async listMinePage(page = 0, size = 10): Promise<PageResp<QuestDTO>> {
+    const { data } = await http.get("/quests/mine-or-participating", {
+      params: { page, size, sort: "createdAt,desc" },
+    });
     if (Array.isArray(data)) {
       return {
         content: data,
@@ -42,6 +35,18 @@ export const QuestsApi = {
         last: true,
       };
     }
+    return data as PageResp<QuestDTO>;
+  },
+
+  /** NEW: server-side filtered page (archived = true/false) */
+  async listMinePageFiltered(
+    archived: boolean,
+    page = 0,
+    size = 12
+  ): Promise<PageResp<QuestDTO>> {
+    const { data } = await http.get("/quests/mine-or-participating", {
+      params: { page, size, archived, sort: "createdAt,desc" },
+    });
     return data as PageResp<QuestDTO>;
   },
 
@@ -67,6 +72,7 @@ export const QuestsApi = {
     return data;
   },
 
+  // Archive instead of hard delete
   async archive(id: string | number): Promise<QuestDTO> {
     const { data } = await http.post<QuestDTO>(`/quests/${id}/archive`, {});
     return data;

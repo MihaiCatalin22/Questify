@@ -318,7 +318,7 @@ class QuestControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(12));
     }
-    
+
     /* ---------------------------- GET /quests/mine-or-participating ---------------------------- */
     @Test
     @WithCud(id = 10)

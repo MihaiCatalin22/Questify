@@ -201,13 +201,26 @@ public class QuestService {
             );
         }
     }
+
     public Page<Quest> mineByStatus(String userId, QuestStatus status, Pageable pageable) {
         return quests.findByCreatedByUserIdAndStatus(userId, status, pageable);
     }
 
-    public Page<Quest> mineOrParticipatingByStatus(String userId, QuestStatus status, Pageable pageable) {
-        return quests.findMyOrParticipatingByStatus(userId, status, pageable);
+    public Page<Quest> mineOrParticipatingWithStatus(String userId, QuestStatus status, Pageable pageable) {
+        return quests.findMyOrParticipatingWithStatus(userId, status, pageable);
     }
+
+    public Page<Quest> mineOrParticipatingNotStatus(String userId, QuestStatus status, Pageable pageable) {
+        return quests.findMyOrParticipatingNotStatus(userId, status, pageable);
+    }
+
+    public Page<Quest> mineOrParticipatingFiltered(String userId, Boolean archived, Pageable pageable) {
+        if (archived == null) return quests.findMyOrParticipating(userId, pageable);
+        return archived
+                ? quests.findMyOrParticipatingWithStatus(userId, QuestStatus.ARCHIVED, pageable)
+                : quests.findMyOrParticipatingNotStatus(userId, QuestStatus.ARCHIVED, pageable);
+    }
+
     public int participantsCount(Long questId) {
         return Math.toIntExact(participants.countByQuest_Id(questId));
     }
