@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.questify.service.SubmissionService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,9 @@ public class ProofScannedListener {
     private final SubmissionService submissionService;
     private final ObjectMapper mapper;
 
+    @Value("${app.kafka.groups.proofScanned:submission-service-proof-scanned}")
+    private String proofScannedGroup;
+
     public ProofScannedListener(SubmissionService submissionService, ObjectMapper mapper) {
         this.submissionService = submissionService;
         this.mapper = mapper;
@@ -29,11 +33,21 @@ public class ProofScannedListener {
     )
     public void onProofScanned(Object msg, Acknowledgment ack) {
         try {
+            String eventId = null;
             String proofKey = null;
             String scanStatus = null;
 
+            if (msg instanceof EventEnvelope<?> env) {
+                eventId = env.eventId();
+                Object payloadObj = env.payload();
+                if (payloadObj instanceof Map<?, ?> p) {
+                    proofKey = str(firstNonBlank(p.get("proofKey"), p.get("key")));
+                    scanStatus = str(p.get("scanStatus"));
+                }
+            }
+
             if (msg instanceof Map<?, ?> m) {
-                // Envelope?
+                eventId = str(m.get("eventId"));
                 Object payloadObj = m.get("payload");
                 if (payloadObj instanceof Map<?, ?> p) {
                     proofKey = str(firstNonBlank(p.get("proofKey"), p.get("key")));
@@ -45,6 +59,7 @@ public class ProofScannedListener {
             }
             else if (msg instanceof String s) {
                 Map<String, Object> m = mapper.readValue(s, new TypeReference<>() {});
+                eventId = str(m.get("eventId"));
                 Object payloadObj = m.get("payload");
                 if (payloadObj instanceof Map<?, ?> p) {
                     proofKey = str(firstNonBlank(p.get("proofKey"), p.get("key")));
@@ -56,6 +71,7 @@ public class ProofScannedListener {
             }
             else {
                 Map<String, Object> m = mapper.convertValue(msg, new TypeReference<>() {});
+                eventId = str(m.get("eventId"));
                 Object payloadObj = m.get("payload");
                 if (payloadObj instanceof Map<?, ?> p) {
                     proofKey = str(firstNonBlank(p.get("proofKey"), p.get("key")));
@@ -72,7 +88,7 @@ public class ProofScannedListener {
                 return;
             }
 
-            submissionService.applyProofScanResult(proofKey, scanStatus);
+            submissionService.applyProofScanResultIdempotent(proofScannedGroup, eventId, proofKey, scanStatus);
             ack.acknowledge();
         } catch (Exception e) {
             throw new RuntimeException(e);

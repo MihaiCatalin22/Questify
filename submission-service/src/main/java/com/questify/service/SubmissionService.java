@@ -1,5 +1,7 @@
 package com.questify.service;
 
+import com.questify.consistency.ProcessedEventId;
+import com.questify.consistency.ProcessedEventService;
 import com.questify.client.ProofClient;
 import com.questify.client.QuestAccessClient;
 import com.questify.client.QuestProgressClient;
@@ -32,6 +34,7 @@ public class SubmissionService {
     private final ProofClient proofClient;
     private final QuestProgressClient questProgress;
     private final EventPublisher events;
+    private final ProcessedEventService processedEvents;
 
     @Value("${app.kafka.topics.submissions:submissions}")
     private String submissionsTopic;
@@ -43,12 +46,14 @@ public class SubmissionService {
                              QuestAccessClient questAccess,
                              ProofClient proofClient,
                              QuestProgressClient questProgress,
-                             EventPublisher events) {
+                             EventPublisher events,
+                             ProcessedEventService processedEvents) {
         this.submissions = submissions;
         this.questAccess = questAccess;
         this.proofClient = proofClient;
         this.questProgress = questProgress;
         this.events = events;
+        this.processedEvents = processedEvents;
     }
 
     @Transactional
@@ -204,6 +209,16 @@ public class SubmissionService {
         }
 
         return saved;
+    }
+
+    @Transactional
+    public void applyProofScanResultIdempotent(String consumerGroup, String eventId, String proofKey, String scanStatus) {
+        if (!processedEvents.markProcessedIfNew(consumerGroup, eventId)) {
+            log.info("Duplicate ProofScanned skipped eventId={} proofKey={}", eventId, proofKey);
+            return;
+        }
+
+        applyProofScanResult(proofKey, scanStatus);
     }
     @Transactional
     public void applyProofScanResult(String proofKey, String scanStatus) {
