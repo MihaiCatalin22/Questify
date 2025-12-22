@@ -43,7 +43,7 @@ public class Submission {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     @Builder.Default
-    private ReviewStatus status = ReviewStatus.PENDING;
+    private ReviewStatus status = ReviewStatus.SCANNING;
 
     @Column(name = "reviewer_user_id", length = 128)
     private String reviewerUserId;

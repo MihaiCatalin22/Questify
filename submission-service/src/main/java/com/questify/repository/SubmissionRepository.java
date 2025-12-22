@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
+
 public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     Page<Submission> findByUserIdOrderByCreatedAtDesc(String userId, Pageable pageable);
     Page<Submission> findByQuestIdOrderByCreatedAtDesc(Long questId, Pageable pageable);
@@ -25,4 +27,6 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
                                  @Param("pending") ReviewStatus pending,
                                  @Param("rejected") ReviewStatus rejected,
                                  @Param("note") String note);
+    Optional<Submission> findByProofKey(String proofKey);
+
 }

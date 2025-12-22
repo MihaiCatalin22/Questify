@@ -62,7 +62,7 @@ public class SubmissionService {
                 .userId(userId)
                 .proofKey(req.proofKey())
                 .note(req.note())
-                .status(ReviewStatus.PENDING)
+                .status(ReviewStatus.SCANNING)
                 .build();
         var saved = submissions.save(s);
 
@@ -99,7 +99,7 @@ public class SubmissionService {
                     .userId(userId)
                     .proofKey(uploaded.key())
                     .note(note)
-                    .status(ReviewStatus.PENDING)
+                    .status(ReviewStatus.SCANNING)
                     .build();
             var saved = submissions.save(s);
 
@@ -197,6 +197,42 @@ public class SubmissionService {
         }
 
         return saved;
+    }
+    @Transactional
+    public void applyProofScanResult(String proofKey, String scanStatus) {
+        var opt = submissions.findByProofKey(proofKey);
+        if (opt.isEmpty()) {
+            log.warn("proof-scanned for unknown proofKey={}, scanStatus={}", proofKey, scanStatus);
+            return;
+        }
+
+        var s = opt.get();
+
+        if (s.getStatus() == ReviewStatus.APPROVED || s.getStatus() == ReviewStatus.REJECTED) {
+            log.info("Ignoring proof-scanned for already-final submission id={} status={}", s.getId(), s.getStatus());
+            return;
+        }
+
+        if ("CLEAN".equalsIgnoreCase(scanStatus)) {
+            if (s.getStatus() == ReviewStatus.SCANNING) {
+                s.setStatus(ReviewStatus.PENDING);
+                submissions.save(s);
+                log.info("Submission id={} proofKey={} marked PENDING (scan CLEAN)", s.getId(), proofKey);
+            }
+            return;
+        }
+
+        s.setStatus(ReviewStatus.REJECTED);
+
+        String reason = "Proof scan failed: " + scanStatus;
+        if (s.getNote() == null || s.getNote().isBlank()) {
+            s.setNote(reason);
+        } else if (!s.getNote().contains(reason)) {
+            s.setNote(s.getNote() + "\n" + reason);
+        }
+
+        submissions.save(s);
+        log.info("Submission id={} proofKey={} REJECTED (scanStatus={})", s.getId(), proofKey, scanStatus);
     }
 
     public String signedGetUrl(String proofKey) { return proofClient.signGet(proofKey); }
