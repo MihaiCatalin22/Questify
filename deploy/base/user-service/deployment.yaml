@@ -38,8 +38,7 @@ spec:
             - { name: SERVER_PORT, value: "8080" }
             - { name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE, value: "health,info,prometheus" }
             - { name: MANAGEMENT_HEALTH_PROBES_ENABLED, value: "true" }
-
-            - { name: SPRING_DATASOURCE_URL, value: "jdbc:mysql://mysql:3306/questify?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" }
+            - { name: SPRING_DATASOURCE_URL, value: "jdbc:mysql://mysql:3306/userdb?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" }
             - { name: SPRING_DATASOURCE_USERNAME, value: "root" }
             - name: SPRING_DATASOURCE_PASSWORD
               valueFrom: { secretKeyRef: { name: mysql-root, key: password } }  # use MYSQL_ROOT_PASSWORD if that's your key
