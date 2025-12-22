@@ -54,7 +54,7 @@ public class OutboxDispatcher {
                 @SuppressWarnings("rawtypes")
                 EventEnvelope env = mapper.readValue(ev.getEnvelopeJson(), EventEnvelope.class);
 
-                kafka.send(ev.getTopic(), ev.getKey(), env)
+                kafka.send(ev.getTopic(), ev.getEventKey(), env)
                         .get(sendTimeoutSeconds, TimeUnit.SECONDS);
 
                 ev.setStatus(OutboxStatus.SENT);

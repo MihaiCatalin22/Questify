@@ -27,7 +27,7 @@ public class OutboxEvent {
     private String topic;
 
     @Column(length = 512)
-    private String key;
+    private String eventKey;
 
     @Lob
     @Column(nullable = false, columnDefinition = "LONGTEXT")
@@ -56,7 +56,7 @@ public class OutboxEvent {
         return OutboxEvent.builder()
                 .id(eventId)
                 .topic(topic)
-                .key(key)
+                .eventKey(key)
                 .envelopeJson(envelopeJson)
                 .status(OutboxStatus.NEW)
                 .attempts(0)
