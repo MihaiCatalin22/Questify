@@ -192,6 +192,13 @@ public class SubmissionService {
                 payload
         );
 
+        if (req.status() == ReviewStatus.APPROVED && s.getStatus() == ReviewStatus.SCANNING) {
+            throw new ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "Cannot approve while proof is still scanning"
+            );
+        }
+
         if (req.status() == ReviewStatus.APPROVED) {
             questProgress.markCompleted(saved.getQuestId(), saved.getUserId(), saved.getId());
         }

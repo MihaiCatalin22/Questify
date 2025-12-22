@@ -1,7 +1,5 @@
 package com.questify.kafka;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.questify.service.SubmissionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -15,11 +13,9 @@ import java.util.Map;
 public class ProofScannedListener {
 
     private final SubmissionService submissionService;
-    private final ObjectMapper mapper;
 
-    public ProofScannedListener(SubmissionService submissionService, ObjectMapper mapper) {
+    public ProofScannedListener(SubmissionService submissionService) {
         this.submissionService = submissionService;
-        this.mapper = mapper;
     }
 
     @KafkaListener(
@@ -27,45 +23,29 @@ public class ProofScannedListener {
             groupId = "${app.kafka.groups.proofScanned:submission-service-proof-scanned}",
             containerFactory = "kafkaListenerContainerFactory"
     )
-    public void onProofScanned(Object payload, Acknowledgment ack) {
+    public void onProofScanned(EventEnvelope<Map<String, Object>> env, Acknowledgment ack) {
         try {
-            String key = null;
-            String scanStatus = null;
+            Map<String, Object> p = env.payload();
 
-            if (payload instanceof String s) {
-                JsonNode n = mapper.readTree(s);
-                key = textOrNull(n, "key");
-                scanStatus = textOrNull(n, "scanStatus");
-            } else if (payload instanceof Map<?, ?> m) {
-                Object k = m.get("key");
-                Object st = m.get("scanStatus");
-                key = k != null ? k.toString() : null;
-                scanStatus = st != null ? st.toString() : null;
-            } else {
-                Map<String, Object> m = mapper.convertValue(payload, Map.class);
-                Object k = m.get("key");
-                Object st = m.get("scanStatus");
-                key = k != null ? k.toString() : null;
-                scanStatus = st != null ? st.toString() : null;
-            }
+            String proofKey = str(p.get("proofKey"));
+            if (isBlank(proofKey)) proofKey = str(p.get("key"));
+            if (isBlank(proofKey)) proofKey = env.partitionKey();
 
-            if (key == null || key.isBlank() || scanStatus == null || scanStatus.isBlank()) {
-                log.warn("Ignoring proof-scanned message (missing key/scanStatus): {}", payload);
+            String scanStatus = str(p.get("scanStatus"));
+
+            if (isBlank(proofKey) || isBlank(scanStatus)) {
+                log.warn("Ignoring proof-scanned (missing proofKey/scanStatus). env={}", env);
                 ack.acknowledge();
                 return;
             }
 
-            submissionService.applyProofScanResult(key, scanStatus);
+            submissionService.applyProofScanResult(proofKey, scanStatus);
             ack.acknowledge();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
-    private static String textOrNull(JsonNode n, String field) {
-        JsonNode v = n.get(field);
-        if (v == null || v.isNull()) return null;
-        String s = v.asText();
-        return (s == null || s.isBlank()) ? null : s;
-    }
+    private static String str(Object o) { return o == null ? null : o.toString(); }
+    private static boolean isBlank(String s) { return s == null || s.isBlank(); }
 }
