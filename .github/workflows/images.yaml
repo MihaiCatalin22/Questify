@@ -5,11 +5,6 @@ on:
     workflows: ["CI"]
     types: [completed]
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - dev
-      - feat/**
 
 permissions:
   contents: read
@@ -22,6 +17,8 @@ concurrency:
 jobs:
   build-and-push:
     name: Build & Push • ${{ matrix.service }}
+    # If triggered by workflow_run, only build images when CI succeeded.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -46,12 +43,11 @@ jobs:
         run: |
           owner_lc="${OWNER,,}"
           ref="${BRANCH_NAME}"
-          # make a docker-safe, lowercased tag: replace anything not [A-Za-z0-9._-] with '-'
           branch_tag="$(echo "$ref" | sed -E 's/[^A-Za-z0-9._-]+/-/g' | tr 'A-Z' 'a-z')"
           sha7="${HEAD_SHA:0:7}"
-          echo "OWNER_LC=$owner_lc"   >> "$GITHUB_ENV"
-          echo "BRANCH_TAG=$branch_tag" >> "$GITHUB_ENV"
-          echo "SHA7=$sha7"           >> "$GITHUB_ENV"
+          echo "OWNER_LC=$owner_lc"       >> "$GITHUB_ENV"
+          echo "BRANCH_TAG=$branch_tag"  >> "$GITHUB_ENV"
+          echo "SHA7=$sha7"              >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
