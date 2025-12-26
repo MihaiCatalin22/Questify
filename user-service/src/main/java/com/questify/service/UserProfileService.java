@@ -6,6 +6,7 @@ import com.questify.dto.ProfileDtos.UpsertMeReq;
 import com.questify.kafka.EventPublisher;
 import com.questify.repository.UserProfileRepository;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -13,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -30,33 +32,40 @@ public class UserProfileService {
     public UserProfileService(UserProfileRepository repo, EventPublisher events) {
         this.repo = repo;
         this.events = events;
-        this.usersTopic = (usersTopic == null || usersTopic.isBlank()) ? "users" : usersTopic;
     }
+
+    @PostConstruct
+    void init() {
+        if (usersTopic == null || usersTopic.isBlank()) usersTopic = "users";
+    }
+
 
     @Transactional
     public UserProfile ensure(String userId, String username, String displayName, String email, String avatar) {
         return repo.findById(userId).orElseGet(() -> {
             var p = UserProfile.builder()
                     .userId(userId)
-                    .username(username)
-                    .displayName(displayName != null ? displayName : username)
-                    .email(email)
-                    .avatarUrl(avatar)
+                    .username(nullIfBlank(username))
+                    .displayName(firstNonBlank(displayName, username))
+                    .email(nullIfBlank(email))
+                    .avatarUrl(nullIfBlank(avatar))
                     .bio(null)
                     .build();
+
             var saved = repo.save(p);
+
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("userId", saved.getUserId());
+            payload.put("username", saved.getUsername());
+            payload.put("displayName", saved.getDisplayName());
+            payload.put("email", saved.getEmail());
+            payload.put("avatarUrl", saved.getAvatarUrl());
 
             events.publish(
                     usersTopic,
                     saved.getUserId(),
                     "UserRegistered", 1, "user-service",
-                    Map.of(
-                            "userId", saved.getUserId(),
-                            "username", saved.getUsername(),
-                            "displayName", saved.getDisplayName(),
-                            "email", saved.getEmail(),
-                            "avatarUrl", saved.getAvatarUrl()
-                    )
+                    payload
             );
 
             return saved;
@@ -71,25 +80,28 @@ public class UserProfileService {
             throw new IllegalStateException("Profile has been deleted");
         }
 
+
         if (req.username() != null) p.setUsername(req.username());
         if (req.displayName() != null) p.setDisplayName(req.displayName());
         if (req.email() != null) p.setEmail(req.email());
         if (req.avatarUrl() != null) p.setAvatarUrl(req.avatarUrl());
         if (req.bio() != null) p.setBio(req.bio());
+
         var saved = repo.save(p);
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("userId", saved.getUserId());
+        payload.put("username", saved.getUsername());
+        payload.put("displayName", saved.getDisplayName());
+        payload.put("email", saved.getEmail());
+        payload.put("avatarUrl", saved.getAvatarUrl());
+        payload.put("bio", saved.getBio());
 
         events.publish(
                 usersTopic,
                 saved.getUserId(),
                 "UserProfileUpdated", 1, "user-service",
-                Map.of(
-                        "userId", saved.getUserId(),
-                        "username", saved.getUsername(),
-                        "displayName", saved.getDisplayName(),
-                        "email", saved.getEmail(),
-                        "avatarUrl", saved.getAvatarUrl(),
-                        "bio", saved.getBio()
-                )
+                payload
         );
 
         return saved;
@@ -132,19 +144,19 @@ public class UserProfileService {
         p.setBio(null);
 
         p.setUsername("deleted-" + shortId(userId));
-
         p.setDeletedAt(now);
 
         var saved = repo.save(p);
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("userId", saved.getUserId());
+        payload.put("deletedAt", saved.getDeletedAt());
 
         events.publish(
                 usersTopic,
                 saved.getUserId(),
                 "UserDeleted", 1, "user-service",
-                Map.of(
-                        "userId", saved.getUserId(),
-                        "deletedAt", saved.getDeletedAt()
-                )
+                payload
         );
 
         return new ProfileDtos.DeleteMeRes(saved.getUserId(), saved.getDeletionRequestedAt(), saved.getDeletedAt());
@@ -175,5 +187,18 @@ public class UserProfileService {
         if (userId == null) return "unknown";
         int n = Math.min(8, userId.length());
         return userId.substring(0, n);
+    }
+
+    private static String nullIfBlank(String s) {
+        if (s == null) return null;
+        var t = s.trim();
+        return t.isEmpty() ? null : t;
+    }
+
+    private static String firstNonBlank(String a, String b) {
+        var aa = nullIfBlank(a);
+        if (aa != null) return aa;
+        var bb = nullIfBlank(b);
+        return bb;
     }
 }

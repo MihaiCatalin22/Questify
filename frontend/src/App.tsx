@@ -36,7 +36,7 @@ function Shell() {
     "Account";
 
   return (
-    <div className="min-h-screen">
+     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur dark:bg-[#0f1115]/80 dark:border-slate-800">
         <div className="px-6 py-3 flex items-center gap-4 justify-between">
           <div className="flex items-center gap-4">
@@ -45,15 +45,15 @@ function Shell() {
                 <img
                   src={logo}
                   alt="Questify"
-                  className="h-7 w-7 rounded-xl"
+                  className="h-6 w-6"
+                  width={24}
+                  height={24}
                   onError={() => setLogoOk(false)}
                 />
               ) : (
-                <div className="h-7 w-7 rounded-xl border border-slate-200 dark:border-slate-800" />
+                <span className="text-sm font-semibold">Questify</span>
               )}
-              <span className="font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                Questify
-              </span>
+              <span className="sr-only">Questify</span>
             </Link>
 
             <nav className="flex gap-4 text-sm">
