@@ -4,7 +4,7 @@ namespace: default
 resources:
   - ../../../base/quest-service
 images:
-  - name: ghcr.io/MihaiCatalin22/questify-quest-service
+  - name: ghcr.io/mihaicatalin22/questify-quest-service
     newTag: main-abcdef0
 patches:
   - path: patch-env.yaml
