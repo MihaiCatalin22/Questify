@@ -19,7 +19,7 @@ jobs:
     name: Build & Push • ${{ matrix.service }}
     runs-on: ubuntu-latest
 
-    # Auto-run only when CI succeeded AND original event was push AND branch is main/dev/feat/**
+    # Only run automatically when CI succeeded AND original event was push AND branch is main/dev/feat/**
     # Skip gitops commits to avoid loops.
     if: >
       github.event_name == 'workflow_dispatch' ||
@@ -54,7 +54,6 @@ jobs:
           fetch-depth: 0
 
       - name: Compute image tag (branchTag-sha7)
-        id: vars
         shell: bash
         run: |
           set -euo pipefail
@@ -68,11 +67,11 @@ jobs:
           is_main="false"
           if [ "$ref" = "main" ]; then is_main="true"; fi
 
-          echo "OWNER_LC=$owner_lc"     >> "$GITHUB_ENV"
-          echo "BRANCH_TAG=$branch_tag" >> "$GITHUB_ENV"
-          echo "SHA7=$sha7"             >> "$GITHUB_ENV"
-          echo "FULL_TAG=$full_tag"     >> "$GITHUB_ENV"
-          echo "IS_MAIN=$is_main"       >> "$GITHUB_ENV"
+          echo "OWNER_LC=$owner_lc"       >> "$GITHUB_ENV"
+          echo "BRANCH_TAG=$branch_tag"   >> "$GITHUB_ENV"
+          echo "SHA7=$sha7"               >> "$GITHUB_ENV"
+          echo "FULL_TAG=$full_tag"       >> "$GITHUB_ENV"
+          echo "IS_MAIN=$is_main"         >> "$GITHUB_ENV"
 
           echo "FULL_TAG=$full_tag"
 
@@ -176,46 +175,42 @@ jobs:
           sha7="${HEAD_SHA:0:7}"
           full_tag="${branch_tag}-${sha7}"
 
-          echo "OWNER_LC=$owner_lc"     >> "$GITHUB_ENV"
-          echo "BRANCH_TAG=$branch_tag" >> "$GITHUB_ENV"
-          echo "SHA7=$sha7"             >> "$GITHUB_ENV"
-          echo "FULL_TAG=$full_tag"     >> "$GITHUB_ENV"
+          echo "OWNER_LC=$owner_lc"       >> "$GITHUB_ENV"
+          echo "BRANCH_TAG=$branch_tag"   >> "$GITHUB_ENV"
+          echo "SHA7=$sha7"               >> "$GITHUB_ENV"
+          echo "FULL_TAG=$full_tag"       >> "$GITHUB_ENV"
 
           echo "FULL_TAG=$full_tag"
 
-      - name: Patch prod overlays to FULL_TAG
+      - name: Patch prod overlays (set newTag = FULL_TAG)
         shell: bash
         run: |
           set -euo pipefail
 
-          services=(quest-service user-service proof-service submission-service)
+          python - <<'PY'
+import os, re
 
-          for svc in "${services[@]}"; do
-            export FILE="deploy/overlays/prod/${svc}/kustomization.yaml"
-            export IMG="ghcr.io/${OWNER_LC}/questify-${svc}"
-            export TAG="${FULL_TAG}"
+owner_lc = os.environ["OWNER_LC"]
+tag = os.environ["FULL_TAG"]
 
-            echo "Patching ${FILE} -> ${IMG}:${TAG}"
+targets = [
+  ("deploy/overlays/prod/proof-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-proof-service"),
+  ("deploy/overlays/prod/quest-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-quest-service"),
+  ("deploy/overlays/prod/submission-service/kustomization.yaml", f"ghcr.io/{owner_lc}/questify-submission-service"),
+  ("deploy/overlays/prod/user-service/kustomization.yaml",       f"ghcr.io/{owner_lc}/questify-user-service"),
+]
 
-            python - <<'PY'
-import os, re, sys
+for file, img in targets:
+  txt = open(file, "r", encoding="utf-8").read()
+  pattern = rf"(^\s*-\s*name:\s*{re.escape(img)}\s*\n\s*newTag:\s*)([^\s#]+)(\s*$)"
+  new_txt, n = re.subn(pattern, rf"\1{tag}\3", txt, flags=re.MULTILINE)
 
-file = os.environ["FILE"]
-img  = os.environ["IMG"]
-tag  = os.environ["TAG"]
-
-txt = open(file, "r", encoding="utf-8").read()
-
-pattern = rf"(^\s*-\s*name:\s*{re.escape(img)}\s*\n\s*newTag:\s*)([^\s#]+)(\s*$)"
-new_txt, n = re.subn(pattern, rf"\1{tag}\3", txt, flags=re.MULTILINE)
-
-if n != 1:
+  if n != 1:
     raise SystemExit(f"[ERROR] Expected to update exactly 1 newTag for {img} in {file}, updated={n}")
 
-open(file, "w", encoding="utf-8").write(new_txt)
-print(f"[OK] {file} -> {img}:{tag}")
+  open(file, "w", encoding="utf-8").write(new_txt)
+  print(f"[OK] {file} -> {img}:{tag}")
 PY
-          done
 
       - name: Commit & push (if changed)
         shell: bash
