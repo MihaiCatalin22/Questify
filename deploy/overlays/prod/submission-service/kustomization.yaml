@@ -5,7 +5,7 @@ resources:
   - ../../../base/submission-service
 images:
   - name: ghcr.io/mihaicatalin22/questify-submission-service
-    newTag: main-abcdef0
+    newTag: main-10d8415
 
 patches:
   - path: patch-env.yaml

@@ -5,6 +5,6 @@ resources:
   - ../../../base/proof-service
 images:
   - name: ghcr.io/mihaicatalin22/questify-proof-service
-    newTag: main-abcdef0
+    newTag: main-10d8415
 patches:
   - path: patch-env.yaml
