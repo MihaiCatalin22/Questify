@@ -35,7 +35,6 @@ function ageDays(createdAt?: string | null) {
   return Math.max(0, days);
 }
 
-
 export default function ProfilePage() {
   const auth = useAuth();
 
@@ -63,15 +62,17 @@ export default function ProfilePage() {
     submissionsTotal: number;
   } | null>(null);
 
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
   const accountAge = useMemo(() => ageDays(exp?.createdAt ?? null), [exp?.createdAt]);
 
   useEffect(() => {
     if (!me) return;
     setForm({
-        displayName: me.displayName ?? "",
-        bio: (me.bio ?? "") as any,
+      displayName: me.displayName ?? "",
+      bio: (me.bio ?? "") as any,
     });
-    }, [me?.id]);
+  }, [me?.id]);
 
   async function onSave() {
     try {
@@ -98,14 +99,18 @@ export default function ProfilePage() {
     }
   }
 
-  async function onDelete() {
+  function onDeleteClick() {
     if (confirmText.trim().toUpperCase() !== "DELETE") {
       toast.error('Type "DELETE" to confirm');
       return;
     }
+    setDeleteModalOpen(true);
+  }
+
+  async function confirmDelete() {
     try {
       await del.mutateAsync();
-      toast.success("Account data deleted/anonymized");
+      toast.success("Account deleted. Signing you out…");
 
       try {
         await auth.signoutRedirect();
@@ -115,10 +120,12 @@ export default function ProfilePage() {
       }
     } catch (e: any) {
       toast.error(e?.message ?? "Deletion failed");
+    } finally {
+      setDeleteModalOpen(false);
     }
   }
 
-    async function loadSummary() {
+  async function loadSummary() {
     try {
       setLoadingSummary(true);
 
@@ -151,6 +158,48 @@ export default function ProfilePage() {
 
   return (
     <div className="p-6 space-y-6 max-w-4xl">
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f1115] p-5 space-y-4">
+            <div className="text-lg font-semibold text-red-700 dark:text-red-300">
+              Confirm account deletion
+            </div>
+
+            <div className="text-sm opacity-80 space-y-2">
+              <p>
+                You are about to permanently delete your account.
+              </p>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>You will be signed out immediately.</li>
+                <li>You won’t be able to log in again with this account.</li>
+                <li>If you want to use Questify again, you must create a new account.</li>
+                <li>Your submissions, participation/completion records, and uploaded proofs will be removed/anonymized.</li>
+              </ul>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <button
+                onClick={() => setDeleteModalOpen(false)}
+                disabled={del.isPending}
+                className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
+                           bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800 disabled:opacity-60"
+              >
+                Go back
+              </button>
+
+              <button
+                onClick={confirmDelete}
+                disabled={del.isPending}
+                className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
+                           border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 disabled:opacity-60"
+              >
+                {del.isPending ? "Deleting…" : "Yes, delete my account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
           Profile
@@ -257,13 +306,14 @@ export default function ProfilePage() {
         <h2 className="text-lg font-semibold text-red-700 dark:text-red-300">
           Danger zone
         </h2>
+
         <p className="text-sm opacity-80">
-          Deleting your account will anonymize your profile and trigger removal of your submissions,
-          participation/completion records, and uploaded proofs.
+          Deleting your account will permanently disable your login and remove/anonymize your data (submissions,
+          participation/completion records, and uploaded proofs).
         </p>
+
         <p className="text-xs opacity-70">
-          Prototype note: this does not delete your Keycloak account (identity provider). In production we would
-          also disable/delete the IdP account and block logins.
+          This action is irreversible. If you want to use Questify again, you will need to create a new account.
         </p>
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -276,12 +326,12 @@ export default function ProfilePage() {
                        border-red-200 dark:border-red-900 disabled:opacity-60"
           />
           <button
-            onClick={onDelete}
+            onClick={onDeleteClick}
             disabled={del.isPending || isDeleted}
             className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
                        border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 disabled:opacity-60"
           >
-            {del.isPending ? "Deleting…" : "Delete my account data"}
+            Delete my account
           </button>
         </div>
 

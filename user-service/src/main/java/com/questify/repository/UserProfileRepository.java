@@ -9,4 +9,6 @@ import java.util.List;
 public interface UserProfileRepository extends JpaRepository<UserProfile, String> {
     List<UserProfile> findTop20ByUsernameStartingWithIgnoreCaseOrDisplayNameStartingWithIgnoreCase(String u, String d);
     long deleteByDeletedAtBefore(Instant cutoff);
+    List<UserProfile> findTop200ByDeletedAtIsNotNullOrderByDeletedAtDesc();
+
 }

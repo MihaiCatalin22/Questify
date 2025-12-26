@@ -29,7 +29,7 @@ public class UserController {
 
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ProfileRes> me(Authentication auth) {
+    public ResponseEntity<?> me(Authentication auth) {
         var id      = jwt.userId(auth);
         var uname   = jwt.username(auth);
         var display = jwt.name(auth);
@@ -38,10 +38,17 @@ public class UserController {
 
         var p = service.ensure(id, uname, display, email, avatar);
 
+        if (p.isDeleted()) {
+            return ResponseEntity.status(HttpStatus.GONE)
+                    .header("Cache-Control", "no-store")
+                    .body(new ApiError("Profile is deleted"));
+        }
+
         return ResponseEntity.ok()
                 .header("Cache-Control", "no-store")
                 .body(ProfilePrivacyMapper.toResForViewer(p, auth));
     }
+
 
     @PutMapping("/me")
     @PreAuthorize("isAuthenticated()")

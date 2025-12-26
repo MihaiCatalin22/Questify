@@ -18,10 +18,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.kafka.common.requests.DeleteAclsResponse.log;
+
 @Service
 public class UserProfileService {
     private final UserProfileRepository repo;
     private final EventPublisher events;
+    private final KeycloakAdminService keycloakAdmin;
 
     @Value("${app.kafka.topics.users:users}")
     private String usersTopic;
@@ -29,9 +32,12 @@ public class UserProfileService {
     @Value("${app.gdpr.userProfileHardDeleteDays:30}")
     private int hardDeleteDays;
 
-    public UserProfileService(UserProfileRepository repo, EventPublisher events) {
+    @Value("${app.gdpr.idpDisableRetryMs:300000}")
+    private long idpDisableRetryMs;
+    public UserProfileService(UserProfileRepository repo, EventPublisher events, KeycloakAdminService keycloakAdmin) {
         this.repo = repo;
         this.events = events;
+        this.keycloakAdmin = keycloakAdmin;
     }
 
     @PostConstruct
@@ -129,6 +135,11 @@ public class UserProfileService {
         var p = repo.findById(userId).orElseThrow(() -> new EntityNotFoundException("Profile not found"));
 
         if (p.getDeletedAt() != null) {
+            try {
+                keycloakAdmin.disableAndLogout(userId);
+            } catch (Exception e) {
+                log.warn("Keycloak disable/logout failed for already-deleted userId={}: {}", userId, e.toString());
+            }
             return new ProfileDtos.DeleteMeRes(p.getUserId(), p.getDeletionRequestedAt(), p.getDeletedAt());
         }
 
@@ -142,7 +153,6 @@ public class UserProfileService {
         p.setDisplayName("Deleted user");
         p.setAvatarUrl(null);
         p.setBio(null);
-
         p.setUsername("deleted-" + shortId(userId));
         p.setDeletedAt(now);
 
@@ -159,7 +169,26 @@ public class UserProfileService {
                 payload
         );
 
+        try {
+            keycloakAdmin.disableAndLogout(userId);
+        } catch (Exception e) {
+            log.error("Keycloak disable/logout failed userId={}. Will retry later. err={}", userId, e.toString());
+        }
+
         return new ProfileDtos.DeleteMeRes(saved.getUserId(), saved.getDeletionRequestedAt(), saved.getDeletedAt());
+    }
+
+    @Scheduled(fixedDelayString = "${app.gdpr.idpDisableRetryMs:300000}")
+    @Transactional
+    public void retryDisableIdpForDeletedProfiles() {
+        var list = repo.findTop200ByDeletedAtIsNotNullOrderByDeletedAtDesc();
+        for (var p : list) {
+            try {
+                keycloakAdmin.disableAndLogout(p.getUserId());
+            } catch (Exception e) {
+                log.warn("Retry Keycloak disable/logout failed userId={}: {}", p.getUserId(), e.toString());
+            }
+        }
     }
 
     public UserProfile get(String id) {

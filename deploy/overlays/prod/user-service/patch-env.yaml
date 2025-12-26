@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+spec:
+  template:
+    spec:
+      containers:
+        - name: user-service
+          env:
+            - name: KC_ADMIN_BASE_URL
+              value: "http://keycloak:8080/auth"
+            - name: KC_ADMIN_REALM
+              value: "questify"
+            - name: KC_ADMIN_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: user-service-keycloak-admin
+                  key: KC_ADMIN_CLIENT_ID
+            - name: KC_ADMIN_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: user-service-keycloak-admin
+                  key: KC_ADMIN_CLIENT_SECRET
