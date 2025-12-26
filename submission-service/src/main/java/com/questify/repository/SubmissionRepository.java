@@ -37,5 +37,7 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
            """)
     int clearReviewerUserId(@Param("userId") String userId);
     long countByUserId(String userId);
+    Page<Submission> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
 
 }

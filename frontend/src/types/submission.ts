@@ -1,4 +1,4 @@
-export type SubmissionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type SubmissionStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SCANNING';
 
 export interface SubmissionDTO {
   id: string;

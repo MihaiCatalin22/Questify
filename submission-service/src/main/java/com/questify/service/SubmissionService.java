@@ -170,6 +170,10 @@ public class SubmissionService {
         return submissions.findByStatus(status, PageRequest.of(page, size));
     }
 
+    public Page<Submission> all(int page, int size) {
+        return submissions.findAllByOrderByCreatedAtDesc(PageRequest.of(page, size));
+    }
+
     @Transactional
     public Submission review(Long id, ReviewReq req, String reviewerUserId) {
         var s = get(id);

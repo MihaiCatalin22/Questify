@@ -3,6 +3,7 @@ package com.questify.controller;
 import com.questify.client.QuestAccessClient;
 import com.questify.config.JwtAuth;
 import com.questify.domain.ReviewStatus;
+import com.questify.domain.Submission;
 import com.questify.dto.SubmissionDtos.*;
 import com.questify.mapper.SubmissionMapper;
 import com.questify.service.SubmissionService;
@@ -125,21 +126,22 @@ public class SubmissionController {
                                         @RequestParam(defaultValue = "10") int size,
                                         @RequestParam(name = "status", required = false) ReviewStatus status,
                                         Authentication auth) {
+
         boolean elevated = hasRole(auth, "ADMIN") || hasRole(auth, "REVIEWER");
 
-        Page<SubmissionRes> mapped;
+        Page<Submission> data;
         if (elevated) {
-            var data = (status != null)
+            data = (status != null)
                     ? service.byStatus(status, page, size)
-                    : service.pending(page, size);
-            mapped = data.map(SubmissionMapper::toRes);
-            return new PageImpl<>(mapped.getContent(), data.getPageable(), data.getTotalElements());
+                    : service.all(page, size); 
         } else {
-            var data = service.mine(jwt.userId(auth), page, size);
-            mapped = data.map(SubmissionMapper::toRes);
-            return new PageImpl<>(mapped.getContent(), data.getPageable(), data.getTotalElements());
+            data = service.mine(jwt.userId(auth), page, size);
         }
+
+        var mapped = data.map(SubmissionMapper::toRes);
+        return new PageImpl<>(mapped.getContent(), data.getPageable(), data.getTotalElements());
     }
+
 
     @GetMapping("/{id}/proof")
     @PreAuthorize("isAuthenticated()")
