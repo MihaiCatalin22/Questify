@@ -188,29 +188,29 @@ jobs:
           set -euo pipefail
 
           python - <<'PY'
-import os, re
+          import os, re
 
-owner_lc = os.environ["OWNER_LC"]
-tag = os.environ["FULL_TAG"]
+          owner_lc = os.environ["OWNER_LC"]
+          tag = os.environ["FULL_TAG"]
 
-targets = [
-  ("deploy/overlays/prod/proof-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-proof-service"),
-  ("deploy/overlays/prod/quest-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-quest-service"),
-  ("deploy/overlays/prod/submission-service/kustomization.yaml", f"ghcr.io/{owner_lc}/questify-submission-service"),
-  ("deploy/overlays/prod/user-service/kustomization.yaml",       f"ghcr.io/{owner_lc}/questify-user-service"),
-]
+          targets = [
+            ("deploy/overlays/prod/proof-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-proof-service"),
+            ("deploy/overlays/prod/quest-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-quest-service"),
+            ("deploy/overlays/prod/submission-service/kustomization.yaml", f"ghcr.io/{owner_lc}/questify-submission-service"),
+            ("deploy/overlays/prod/user-service/kustomization.yaml",       f"ghcr.io/{owner_lc}/questify-user-service"),
+          ]
 
-for file, img in targets:
-  txt = open(file, "r", encoding="utf-8").read()
-  pattern = rf"(^\s*-\s*name:\s*{re.escape(img)}\s*\n\s*newTag:\s*)([^\s#]+)(\s*$)"
-  new_txt, n = re.subn(pattern, rf"\1{tag}\3", txt, flags=re.MULTILINE)
+          for file, img in targets:
+            txt = open(file, "r", encoding="utf-8").read()
+            pattern = rf"(^\s*-\s*name:\s*{re.escape(img)}\s*\n\s*newTag:\s*)([^\s#]+)(\s*$)"
+            new_txt, n = re.subn(pattern, rf"\1{tag}\3", txt, flags=re.MULTILINE)
 
-  if n != 1:
-    raise SystemExit(f"[ERROR] Expected to update exactly 1 newTag for {img} in {file}, updated={n}")
+            if n != 1:
+              raise SystemExit(f"[ERROR] Expected to update exactly 1 newTag for {img} in {file}, updated={n}")
 
-  open(file, "w", encoding="utf-8").write(new_txt)
-  print(f"[OK] {file} -> {img}:{tag}")
-PY
+            open(file, "w", encoding="utf-8").write(new_txt)
+            print(f"[OK] {file} -> {img}:{tag}")
+          PY
 
       - name: Commit & push (if changed)
         shell: bash
