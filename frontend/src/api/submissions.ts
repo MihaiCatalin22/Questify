@@ -10,6 +10,10 @@ export type PageResp<T> = {
   first: boolean;
   last: boolean;
 };
+export type SubmissionSummaryRes = {
+  submissionsTotal: number;
+};
+
 
 const ALLOWED = new Set<string>([
   "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif",
@@ -162,6 +166,11 @@ export const SubmissionsApi = {
     }
 
     return normalizePage<SubmissionDTO>(data);
+  },
+
+    async mineSummary(): Promise<SubmissionSummaryRes> {
+    const { data } = await http.get<SubmissionSummaryRes>("/submissions/mine/summary");
+    return data;
   },
 
 };

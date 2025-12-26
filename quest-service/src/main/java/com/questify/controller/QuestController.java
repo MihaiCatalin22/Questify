@@ -5,6 +5,7 @@ import com.questify.domain.Quest;
 import com.questify.domain.QuestStatus;
 import com.questify.dto.ParticipantResponse;
 import com.questify.dto.QuestDtos.*;
+import com.questify.dto.QuestSummaryRes;
 import com.questify.mapper.QuestMapper;
 import com.questify.repository.QuestParticipantRepository;
 import com.questify.service.CompletionService;
@@ -46,6 +47,17 @@ public class QuestController {
         );
         return PageRequest.of(p, s, sort);
     }
+
+    @GetMapping("/mine-or-participating/summary")
+    @PreAuthorize("isAuthenticated()")
+    public QuestSummaryRes mineOrParticipatingSummary(@RequestParam(required = false) Boolean archived,
+                                                      Authentication auth) {
+        var me = jwt.userId(auth);
+        long total = service.countMineOrParticipatingFiltered(me, archived);
+        long completed = completionService.countCompletedInMineOrParticipatingFiltered(me, archived);
+        return new QuestSummaryRes(total, completed);
+    }
+
 
     @PostMapping
     @PreAuthorize("isAuthenticated()")

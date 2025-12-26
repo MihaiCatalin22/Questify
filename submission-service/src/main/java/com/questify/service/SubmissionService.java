@@ -263,4 +263,8 @@ public class SubmissionService {
     private static boolean notBlank(String s) {
         return s != null && !s.isBlank();
     }
+    public long countMine(String userId) {
+        return submissions.countByUserId(userId);
+    }
+
 }

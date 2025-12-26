@@ -10,6 +10,10 @@ export type PageResp<T> = {
   first: boolean;
   last: boolean;
 };
+export type QuestSummaryRes = {
+  questsTotal: number;
+  questsCompleted: number;
+};
 
 export const QuestsApi = {
   async listMine(): Promise<QuestDTO[]> {
@@ -91,4 +95,13 @@ export const QuestsApi = {
     await http.delete(`/quests/${id}/join`);
     return { ok: true };
   },
+    async mineOrParticipatingSummary(archived?: boolean): Promise<QuestSummaryRes> {
+    const params = archived === undefined ? undefined : { archived };
+    const { data } = await http.get<QuestSummaryRes>(
+      "/quests/mine-or-participating/summary",
+      { params }
+    );
+    return data;
+  },
+
 };

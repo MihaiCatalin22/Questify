@@ -72,4 +72,30 @@ public interface QuestRepository extends JpaRepository<Quest, Long> {
             where q.createdByUserId = :userId
            """)
     int anonymizeCreator(@Param("userId") String userId, @Param("anonId") String anonId);
+    @Query("""
+       select count(distinct q.id)
+       from Quest q
+       left join q.participants p
+       where (q.createdByUserId = :userId or p.userId = :userId)
+       """)
+    long countMyOrParticipating(@Param("userId") String userId);
+
+    @Query("""
+       select count(distinct q.id)
+       from Quest q
+       left join q.participants p
+       where (q.createdByUserId = :userId or p.userId = :userId)
+         and q.status = :status
+       """)
+    long countMyOrParticipatingWithStatus(@Param("userId") String userId, @Param("status") QuestStatus status);
+
+    @Query("""
+       select count(distinct q.id)
+       from Quest q
+       left join q.participants p
+       where (q.createdByUserId = :userId or p.userId = :userId)
+         and q.status <> :status
+       """)
+    long countMyOrParticipatingNotStatus(@Param("userId") String userId, @Param("status") QuestStatus status);
+
 }

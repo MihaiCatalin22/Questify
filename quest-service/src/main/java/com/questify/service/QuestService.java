@@ -231,4 +231,13 @@ public class QuestService {
                         participants.findByQuest_IdAndUserId(questId, userId).isPresent()
         ).orElse(false);
     }
+    public long countMineOrParticipatingFiltered(String userId, Boolean archived) {
+        if (archived == null) {
+            return quests.countMyOrParticipating(userId);
+        }
+        return archived
+                ? quests.countMyOrParticipatingWithStatus(userId, QuestStatus.ARCHIVED)
+                : quests.countMyOrParticipatingNotStatus(userId, QuestStatus.ARCHIVED);
+    }
+
 }

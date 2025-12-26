@@ -36,4 +36,6 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
             where s.reviewerUserId = :userId
            """)
     int clearReviewerUserId(@Param("userId") String userId);
+    long countByUserId(String userId);
+
 }

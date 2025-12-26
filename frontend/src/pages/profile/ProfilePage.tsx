@@ -5,7 +5,6 @@ import { useAuth } from "react-oidc-context";
 import { useDeleteMe, useExportMe, useMe, useUpdateMe } from "../../hooks/useUsers";
 import { QuestsApi } from "../../api/quests";
 import { SubmissionsApi } from "../../api/submissions";
-import type { QuestDTO } from "../../types/quest";
 import type { UpdateMeInput, UserExportDTO } from "../../api/users";
 
 function downloadJson(obj: unknown, filename: string) {
@@ -36,29 +35,6 @@ function ageDays(createdAt?: string | null) {
   return Math.max(0, days);
 }
 
-async function countCompletedQuestsAllPages(archived: boolean): Promise<{ total: number; completed: number }> {
-  const pageSize = 50;
-
-  const first = await QuestsApi.listMinePageFiltered(archived, 0, 1);
-  const total = Number(first.totalElements ?? 0);
-
-  let completed = 0;
-  let page = 0;
-
-  while (true) {
-    const p = await QuestsApi.listMinePageFiltered(archived, page, pageSize);
-    const list = (p.content ?? []) as QuestDTO[];
-
-    completed += list.filter((q: any) => q?.completedByCurrentUser === true).length;
-
-    if (p.last || page + 1 >= (p.totalPages ?? 1)) break;
-
-    page++;
-    if (page > 100) break;
-  }
-
-  return { total, completed };
-}
 
 export default function ProfilePage() {
   const auth = useAuth();
@@ -142,21 +118,21 @@ export default function ProfilePage() {
     }
   }
 
-  async function loadSummary() {
+    async function loadSummary() {
     try {
       setLoadingSummary(true);
 
-      const [qA, qB, subs] = await Promise.all([
-        countCompletedQuestsAllPages(false),
-        countCompletedQuestsAllPages(true),
-        SubmissionsApi.minePage(0, 1),
+      const [active, archived, subs] = await Promise.all([
+        QuestsApi.mineOrParticipatingSummary(false),
+        QuestsApi.mineOrParticipatingSummary(true),
+        SubmissionsApi.mineSummary(),
       ]);
 
       setSummary({
         accountAgeDays: accountAge,
-        questsTotal: qA.total + qB.total,
-        questsCompleted: qA.completed + qB.completed,
-        submissionsTotal: Number(subs.totalElements ?? 0),
+        questsTotal: Number(active.questsTotal ?? 0) + Number(archived.questsTotal ?? 0),
+        questsCompleted: Number(active.questsCompleted ?? 0) + Number(archived.questsCompleted ?? 0),
+        submissionsTotal: Number(subs.submissionsTotal ?? 0),
       });
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to load summary");
