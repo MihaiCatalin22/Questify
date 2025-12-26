@@ -17,9 +17,16 @@ concurrency:
 jobs:
   build-and-push:
     name: Build & Push • ${{ matrix.service }}
-    # If triggered by workflow_run, only build images when CI succeeded.
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+
+    # Only run automatically when CI succeeded AND branch is main/dev/feat/**
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+        (github.event.workflow_run.head_branch == 'main' ||
+         github.event.workflow_run.head_branch == 'dev' ||
+         startsWith(github.event.workflow_run.head_branch, 'feat/')))
+
     strategy:
       fail-fast: false
       matrix:
@@ -45,9 +52,9 @@ jobs:
           ref="${BRANCH_NAME}"
           branch_tag="$(echo "$ref" | sed -E 's/[^A-Za-z0-9._-]+/-/g' | tr 'A-Z' 'a-z')"
           sha7="${HEAD_SHA:0:7}"
-          echo "OWNER_LC=$owner_lc"       >> "$GITHUB_ENV"
-          echo "BRANCH_TAG=$branch_tag"  >> "$GITHUB_ENV"
-          echo "SHA7=$sha7"              >> "$GITHUB_ENV"
+          echo "OWNER_LC=$owner_lc"     >> "$GITHUB_ENV"
+          echo "BRANCH_TAG=$branch_tag" >> "$GITHUB_ENV"
+          echo "SHA7=$sha7"             >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -72,3 +79,22 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.HEAD_SHA }}
+
+      - name: Trivy image scan (report)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: image
+          image-ref: ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_TAG }}-${{ env.SHA7 }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          format: table
+          output: trivy-${{ matrix.service }}.txt
+          exit-code: "0"
+
+      - name: Upload Trivy image report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-${{ matrix.service }}
+          path: trivy-${{ matrix.service }}.txt
+          if-no-files-found: ignore
