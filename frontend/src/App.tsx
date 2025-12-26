@@ -10,7 +10,9 @@ import RegisterPage from "./pages/auth/RegisterPage";
 import OidcCallback from "./pages/auth/OidcCallback";
 
 import UsersList from "./pages/users/UsersList";
-import UsersForm from "./pages/users/UsersForm";
+import UserDetail from "./pages/users/UserDetail";
+
+import ProfilePage from "./pages/profile/ProfilePage";
 
 import QuestsList from "./pages/quests/QuestsList";
 import QuestForm from "./pages/quests/QuestForm";
@@ -43,29 +45,42 @@ function Shell() {
                 <img
                   src={logo}
                   alt="Questify"
-                  className="h-6 w-6"
-                  width={24}
-                  height={24}
+                  className="h-7 w-7 rounded-xl"
                   onError={() => setLogoOk(false)}
                 />
               ) : (
-                <span className="text-sm font-semibold">Questify</span>
+                <div className="h-7 w-7 rounded-xl border border-slate-200 dark:border-slate-800" />
               )}
-              <span className="sr-only">Questify</span>
+              <span className="font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                Questify
+              </span>
             </Link>
 
             <nav className="flex gap-4 text-sm">
-              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/quests">Quests</Link>
-              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/quests/discover">Discover</Link>
-              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/users">Users</Link>
-              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/submissions">Submissions</Link>
+              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/quests">
+                Quests
+              </Link>
+              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/quests/discover">
+                Discover
+              </Link>
+              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/submissions">
+                Submissions
+              </Link>
+              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/users">
+                Users
+              </Link>
+              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/profile">
+                Profile
+              </Link>
             </nav>
           </div>
 
           <div className="flex items-center gap-3">
             {auth.isAuthenticated && (
               <>
-                <span className="text-sm opacity-80">{displayName}</span>
+                <Link to="/profile" className="text-sm opacity-80 hover:opacity-100">
+                  {displayName}
+                </Link>
                 <button
                   onClick={() => auth.signoutRedirect()}
                   className="px-3 py-1.5 rounded-lg border shadow text-sm hover:bg-gray-100 dark:hover:bg-[#161b26]"
@@ -94,16 +109,16 @@ export default function App() {
       <Routes>
         <Route index element={<HomePage />} />
 
-        {/* OIDC pages */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/oidc/callback" element={<OidcCallback />} />
 
         <Route element={<ProtectedRoute />}>
           <Route element={<Shell />}>
+            <Route path="/profile" element={<ProfilePage />} />
+
             <Route path="/users" element={<UsersList />} />
-            <Route path="/users/new" element={<UsersForm />} />
-            <Route path="/users/:id" element={<UsersForm />} />
+            <Route path="/users/:id" element={<UserDetail />} />
 
             <Route path="/quests" element={<QuestsList />} />
             <Route path="/quests/new" element={<QuestForm />} />

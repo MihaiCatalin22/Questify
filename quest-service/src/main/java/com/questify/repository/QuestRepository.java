@@ -65,4 +65,11 @@ public interface QuestRepository extends JpaRepository<Quest, Long> {
     Page<Quest> findMyOrParticipatingNotStatus(@Param("userId") String userId,
                                                @Param("status") QuestStatus status,
                                                Pageable pageable);
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+           update Quest q
+              set q.createdByUserId = :anonId
+            where q.createdByUserId = :userId
+           """)
+    int anonymizeCreator(@Param("userId") String userId, @Param("anonId") String anonId);
 }

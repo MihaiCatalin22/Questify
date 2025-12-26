@@ -1,6 +1,16 @@
 import http from "./https";
 import type { SubmissionDTO, CreateSubmissionInput, SubmissionStatus } from "../types/submission";
 
+export type PageResp<T> = {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+  first: boolean;
+  last: boolean;
+};
+
 const ALLOWED = new Set<string>([
   "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif",
   "video/mp4", "video/quicktime", "video/webm",
@@ -134,4 +144,37 @@ export const SubmissionsApi = {
       throw new Error(extractError(e));
     }
   },
+  async minePage(page = 0, size = 10): Promise<PageResp<SubmissionDTO>> {
+    const { data } = await http.get("/submissions/mine", {
+      params: { page, size, sort: "createdAt,desc" },
+    });
+
+    if (Array.isArray(data)) {
+      return {
+        content: data as SubmissionDTO[],
+        totalElements: data.length,
+        totalPages: 1,
+        number: 0,
+        size: data.length,
+        first: true,
+        last: true,
+      };
+    }
+
+    return normalizePage<SubmissionDTO>(data);
+  },
+
 };
+
+function normalizePage<T>(payload: any): PageResp<T> {
+  const content = normalizeList<T>(payload);
+  return {
+    content,
+    totalElements: Number(payload?.totalElements ?? content.length ?? 0),
+    totalPages: Number(payload?.totalPages ?? 1),
+    number: Number(payload?.number ?? 0),
+    size: Number(payload?.size ?? content.length ?? 0),
+    first: Boolean(payload?.first ?? true),
+    last: Boolean(payload?.last ?? true),
+  };
+}

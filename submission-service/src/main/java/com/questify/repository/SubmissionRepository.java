@@ -28,5 +28,12 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
                                  @Param("rejected") ReviewStatus rejected,
                                  @Param("note") String note);
     Optional<Submission> findByProofKey(String proofKey);
-
+    long deleteByUserId(String userId);
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+           update Submission s
+              set s.reviewerUserId = null
+            where s.reviewerUserId = :userId
+           """)
+    int clearReviewerUserId(@Param("userId") String userId);
 }

@@ -3,6 +3,7 @@ package com.questify.dto;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
 
+import java.time.Instant;
 import java.util.List;
 
 public class ProfileDtos {
@@ -26,4 +27,23 @@ public class ProfileDtos {
 
     public record BulkRequest(List<String> ids) {}
     public record BulkResponse(List<ProfileRes> profiles) {}
+
+    public record ExportRes(
+            String userId,
+            String username,
+            String displayName,
+            String email,
+            String avatarUrl,
+            String bio,
+            Instant createdAt,
+            Instant updatedAt,
+            Instant deletionRequestedAt,
+            Instant deletedAt
+    ) {}
+
+    public record DeleteMeRes(
+            String userId,
+            Instant deletionRequestedAt,
+            Instant deletedAt
+    ) {}
 }

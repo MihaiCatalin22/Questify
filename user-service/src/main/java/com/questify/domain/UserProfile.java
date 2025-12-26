@@ -11,7 +11,8 @@ import java.time.Instant;
 @Table(name = "user_profiles",
         indexes = {
                 @Index(name="idx_up_username", columnList="username"),
-                @Index(name="idx_up_display_name", columnList="displayName")
+                @Index(name="idx_up_display_name", columnList="displayName"),
+                @Index(name="idx_up_deleted_at", columnList = "deletedAt")
         })
 @Getter @Setter
 @AllArgsConstructor @NoArgsConstructor @Builder(toBuilder = true)
@@ -38,11 +39,18 @@ public class UserProfile {
     @Size(max = 512)
     private String bio;
 
+    private Instant deletionRequestedAt;
+    private Instant deletedAt;
+
     @Column(nullable = false)
     private Instant createdAt;
 
     @Column(nullable = false)
     private Instant updatedAt;
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
 
     @PrePersist void onCreate(){ var now=Instant.now(); createdAt=now; updatedAt=now; }
     @PreUpdate  void onUpdate(){ updatedAt=Instant.now(); }

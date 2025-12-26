@@ -4,11 +4,16 @@ import {
   type UserDTO,
   type CreateUserInput,
   type UpdateUserInput,
+  type UpdateMeInput,
+  type UserExportDTO,
+  type DeleteMeRes,
 } from "../api/users";
 
 const KEY = {
-  all: ["users"] as const,
-  detail: (id: string) => ["users", id] as const,
+  all: (q: string) => ["users", "list", q] as const,
+  detail: (id: string) => ["users", "detail", id] as const,
+  me: ["users", "me"] as const,
+  export: ["users", "me", "export"] as const,
 };
 
 function sanitize<T extends object>(obj: T): Partial<T> {
@@ -21,10 +26,10 @@ function sanitize<T extends object>(obj: T): Partial<T> {
   return out;
 }
 
-export function useUsers() {
+export function useUsers(q: string = "") {
   return useQuery<UserDTO[]>({
-    queryKey: KEY.all,
-    queryFn: () => UsersApi.list(),
+    queryKey: KEY.all(q ?? ""),
+    queryFn: () => UsersApi.list(q ?? ""),
     placeholderData: [] as UserDTO[],
     refetchOnMount: "always",
     refetchOnWindowFocus: false,
@@ -41,12 +46,51 @@ export function useUser(id: string) {
   });
 }
 
+export function useMe() {
+  return useQuery<UserDTO>({
+    queryKey: KEY.me,
+    queryFn: () => UsersApi.me(),
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useExportMe() {
+  return useQuery<UserExportDTO>({
+    queryKey: KEY.export,
+    queryFn: () => UsersApi.exportMe(),
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useUpdateMe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateMeInput) => UsersApi.updateMe(sanitize(input) as UpdateMeInput),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEY.me });
+      qc.invalidateQueries({ queryKey: KEY.export });
+    },
+  });
+}
+
+export function useDeleteMe() {
+  const qc = useQueryClient();
+  return useMutation<DeleteMeRes, unknown, void>({
+    mutationFn: () => UsersApi.deleteMe(),
+    onSuccess: () => {
+      qc.invalidateQueries();
+    },
+  });
+}
+
 export function useCreateUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateUserInput) => UsersApi.create(input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY.all });
+      qc.invalidateQueries({ queryKey: KEY.all("") });
     },
   });
 }
@@ -57,7 +101,7 @@ export function useUpdateUser(id: string) {
     mutationFn: (input: Partial<UpdateUserInput>) =>
       UsersApi.update(id, sanitize(input) as UpdateUserInput),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY.all });
+      qc.invalidateQueries({ queryKey: KEY.all("") });
       qc.invalidateQueries({ queryKey: KEY.detail(id) });
     },
   });
@@ -68,10 +112,7 @@ export function useDeleteUser() {
   return useMutation({
     mutationFn: (id: string | number) => UsersApi.remove(String(id)),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY.all });
+      qc.invalidateQueries({ queryKey: KEY.all("") });
     },
   });
 }
-
-
-
