@@ -4,5 +4,5 @@ namespace: default
 resources:
   - ../../../base/user-service
 images:
-  - name: ghcr.io/MihaiCatalin22/questify-user-service
+  - name: ghcr.io/mihaicatalin22/questify-user-service
     newTag: main-abcdef0

@@ -20,12 +20,11 @@ export interface QuestDTO {
   status: QuestStatus;
   startDate: string;             // ISO instant
   endDate: string;               // ISO instant
-  createdAt: string;             // ISO instant
-  updatedAt: string;             // ISO instant
+  createdAt?: string;             // ISO instant
+  updatedAt?: string;             // ISO instant
   createdByUserId: string;
-  participantsCount: number;     // server-calculated
+  participantsCount?: number;     // server-calculated
   visibility: QuestVisibility;
-
   completedByCurrentUser?: boolean;
 }
 

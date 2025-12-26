@@ -8,8 +8,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
@@ -17,6 +16,8 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 import java.io.InputStream;
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -65,6 +66,50 @@ public class S3ProofStorageService implements ProofStorageService {
                 .bucket(props.getBucket())
                 .key(objectKey)
                 .build());
+    }
+
+    @Override
+    public long deleteByPrefix(String prefix) {
+        if (!StringUtils.hasText(prefix)) return 0L;
+
+        long totalDeleted = 0L;
+        String token = null;
+
+        do {
+            var listReq = ListObjectsV2Request.builder()
+                    .bucket(props.getBucket())
+                    .prefix(prefix)
+                    .continuationToken(token)
+                    .maxKeys(1000)
+                    .build();
+
+            ListObjectsV2Response list = s3.listObjectsV2(listReq);
+
+            List<S3Object> contents = list.contents() == null ? List.of() : list.contents();
+            if (!contents.isEmpty()) {
+                List<ObjectIdentifier> ids = new ArrayList<>(contents.size());
+                for (S3Object o : contents) {
+                    if (o != null && StringUtils.hasText(o.key())) {
+                        ids.add(ObjectIdentifier.builder().key(o.key()).build());
+                    }
+                }
+
+                if (!ids.isEmpty()) {
+                    var delReq = DeleteObjectsRequest.builder()
+                            .bucket(props.getBucket())
+                            .delete(Delete.builder().objects(ids).quiet(true).build())
+                            .build();
+                    s3.deleteObjects(delReq);
+                    totalDeleted += ids.size();
+                }
+            }
+
+            token = list.nextContinuationToken();
+            if (!list.isTruncated()) break;
+
+        } while (true);
+
+        return totalDeleted;
     }
 
     @Override

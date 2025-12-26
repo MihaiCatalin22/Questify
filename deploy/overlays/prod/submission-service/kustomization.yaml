@@ -4,7 +4,7 @@ namespace: default
 resources:
   - ../../../base/submission-service
 images:
-  - name: ghcr.io/MihaiCatalin22/questify-submission-service
+  - name: ghcr.io/mihaicatalin22/questify-submission-service
     newTag: main-abcdef0
 
 patches:

@@ -1,5 +1,7 @@
 package com.questify.service;
 
+import com.questify.consistency.ProcessedEventId;
+import com.questify.consistency.ProcessedEventService;
 import com.questify.client.ProofClient;
 import com.questify.client.QuestAccessClient;
 import com.questify.client.QuestProgressClient;
@@ -32,6 +34,7 @@ public class SubmissionService {
     private final ProofClient proofClient;
     private final QuestProgressClient questProgress;
     private final EventPublisher events;
+    private final ProcessedEventService processedEvents;
 
     @Value("${app.kafka.topics.submissions:submissions}")
     private String submissionsTopic;
@@ -43,12 +46,14 @@ public class SubmissionService {
                              QuestAccessClient questAccess,
                              ProofClient proofClient,
                              QuestProgressClient questProgress,
-                             EventPublisher events) {
+                             EventPublisher events,
+                             ProcessedEventService processedEvents) {
         this.submissions = submissions;
         this.questAccess = questAccess;
         this.proofClient = proofClient;
         this.questProgress = questProgress;
         this.events = events;
+        this.processedEvents = processedEvents;
     }
 
     @Transactional
@@ -62,7 +67,7 @@ public class SubmissionService {
                 .userId(userId)
                 .proofKey(req.proofKey())
                 .note(req.note())
-                .status(ReviewStatus.PENDING)
+                .status(ReviewStatus.SCANNING)
                 .build();
         var saved = submissions.save(s);
 
@@ -99,7 +104,7 @@ public class SubmissionService {
                     .userId(userId)
                     .proofKey(uploaded.key())
                     .note(note)
-                    .status(ReviewStatus.PENDING)
+                    .status(ReviewStatus.SCANNING)
                     .build();
             var saved = submissions.save(s);
 
@@ -192,11 +197,64 @@ public class SubmissionService {
                 payload
         );
 
+        if (req.status() == ReviewStatus.APPROVED && s.getStatus() == ReviewStatus.SCANNING) {
+            throw new ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "Cannot approve while proof is still scanning"
+            );
+        }
+
         if (req.status() == ReviewStatus.APPROVED) {
             questProgress.markCompleted(saved.getQuestId(), saved.getUserId(), saved.getId());
         }
 
         return saved;
+    }
+
+    @Transactional
+    public void applyProofScanResultIdempotent(String consumerGroup, String eventId, String proofKey, String scanStatus) {
+        if (!processedEvents.markProcessedIfNew(consumerGroup, eventId)) {
+            log.info("Duplicate ProofScanned skipped eventId={} proofKey={}", eventId, proofKey);
+            return;
+        }
+
+        applyProofScanResult(proofKey, scanStatus);
+    }
+    @Transactional
+    public void applyProofScanResult(String proofKey, String scanStatus) {
+        var opt = submissions.findByProofKey(proofKey);
+        if (opt.isEmpty()) {
+            log.warn("proof-scanned for unknown proofKey={}, scanStatus={}", proofKey, scanStatus);
+            return;
+        }
+
+        var s = opt.get();
+
+        if (s.getStatus() == ReviewStatus.APPROVED || s.getStatus() == ReviewStatus.REJECTED) {
+            log.info("Ignoring proof-scanned for already-final submission id={} status={}", s.getId(), s.getStatus());
+            return;
+        }
+
+        if ("CLEAN".equalsIgnoreCase(scanStatus)) {
+            if (s.getStatus() == ReviewStatus.SCANNING) {
+                s.setStatus(ReviewStatus.PENDING);
+                submissions.save(s);
+                log.info("Submission id={} proofKey={} marked PENDING (scan CLEAN)", s.getId(), proofKey);
+            }
+            return;
+        }
+
+        s.setStatus(ReviewStatus.REJECTED);
+
+        String reason = "Proof scan failed: " + scanStatus;
+        if (s.getNote() == null || s.getNote().isBlank()) {
+            s.setNote(reason);
+        } else if (!s.getNote().contains(reason)) {
+            s.setNote(s.getNote() + "\n" + reason);
+        }
+
+        submissions.save(s);
+        log.info("Submission id={} proofKey={} REJECTED (scanStatus={})", s.getId(), proofKey, scanStatus);
     }
 
     public String signedGetUrl(String proofKey) { return proofClient.signGet(proofKey); }
@@ -205,4 +263,8 @@ public class SubmissionService {
     private static boolean notBlank(String s) {
         return s != null && !s.isBlank();
     }
+    public long countMine(String userId) {
+        return submissions.countByUserId(userId);
+    }
+
 }

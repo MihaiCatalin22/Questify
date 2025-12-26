@@ -5,14 +5,9 @@ on:
     workflows: ["CI"]
     types: [completed]
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - dev
-      - feat/**
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 concurrency:
@@ -23,6 +18,24 @@ jobs:
   build-and-push:
     name: Build & Push • ${{ matrix.service }}
     runs-on: ubuntu-latest
+
+    # Only run automatically when CI succeeded AND original event was push AND branch is main/dev/feat/**
+    # Skip gitops commits to avoid loops.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        (
+          github.event.workflow_run.head_branch == 'main' ||
+          github.event.workflow_run.head_branch == 'dev' ||
+          startsWith(github.event.workflow_run.head_branch, 'feat/')
+        ) &&
+        !contains(github.event.workflow_run.head_commit.message, 'chore(gitops):') &&
+        !contains(github.event.workflow_run.head_commit.message, '[skip images]')
+      )
+
     strategy:
       fail-fast: false
       matrix:
@@ -40,18 +53,47 @@ jobs:
           ref: ${{ env.HEAD_SHA }}
           fetch-depth: 0
 
-      - name: Compute image naming vars
-        id: vars
+      - name: Compute image tag (branchTag-sha7)
         shell: bash
         run: |
+          set -euo pipefail
+
           owner_lc="${OWNER,,}"
           ref="${BRANCH_NAME}"
-          # make a docker-safe, lowercased tag: replace anything not [A-Za-z0-9._-] with '-'
           branch_tag="$(echo "$ref" | sed -E 's/[^A-Za-z0-9._-]+/-/g' | tr 'A-Z' 'a-z')"
           sha7="${HEAD_SHA:0:7}"
-          echo "OWNER_LC=$owner_lc"   >> "$GITHUB_ENV"
-          echo "BRANCH_TAG=$branch_tag" >> "$GITHUB_ENV"
-          echo "SHA7=$sha7"           >> "$GITHUB_ENV"
+          full_tag="${branch_tag}-${sha7}"
+
+          is_main="false"
+          if [ "$ref" = "main" ]; then is_main="true"; fi
+
+          echo "OWNER_LC=$owner_lc"       >> "$GITHUB_ENV"
+          echo "BRANCH_TAG=$branch_tag"   >> "$GITHUB_ENV"
+          echo "SHA7=$sha7"               >> "$GITHUB_ENV"
+          echo "FULL_TAG=$full_tag"       >> "$GITHUB_ENV"
+          echo "IS_MAIN=$is_main"         >> "$GITHUB_ENV"
+
+          echo "FULL_TAG=$full_tag"
+
+      - name: Compute Docker tags
+        id: tags
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base="ghcr.io/${OWNER_LC}/questify-${{ matrix.service }}"
+          tags="${base}:${FULL_TAG}\n${base}:${BRANCH_TAG}"
+
+          # Optional convenience tag for main only
+          if [ "${IS_MAIN}" = "true" ]; then
+            tags="${tags}\n${base}:latest"
+          fi
+
+          {
+            echo "tags<<EOF"
+            echo -e "$tags"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -69,10 +111,120 @@ jobs:
           context: ./${{ matrix.service }}
           file: ./${{ matrix.service }}/Dockerfile
           push: true
-          tags: |
-            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_TAG }}-${{ env.SHA7 }}
-            ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.BRANCH_TAG }}
-            ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main' || github.ref_name == 'main' && format('ghcr.io/{0}/questify-{1}:latest', env.OWNER_LC, matrix.service) || '' }}
+          tags: ${{ steps.tags.outputs.tags }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.HEAD_SHA }}
+
+      - name: Trivy image scan (report)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: image
+          image-ref: ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.FULL_TAG }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          format: table
+          output: trivy-${{ matrix.service }}.txt
+          exit-code: "0"
+
+      - name: Upload Trivy image report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-${{ matrix.service }}
+          path: trivy-${{ matrix.service }}.txt
+          if-no-files-found: ignore
+
+  update-manifests:
+    name: Update kustomize newTag (GitOps)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    if: >
+      needs.build-and-push.result == 'success' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.event == 'push' &&
+          !contains(github.event.workflow_run.head_commit.message, 'chore(gitops):') &&
+          !contains(github.event.workflow_run.head_commit.message, '[skip images]')
+        )
+      )
+
+    env:
+      OWNER: ${{ github.repository_owner }}
+      BRANCH_NAME: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
+      HEAD_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+    steps:
+      - name: Checkout branch (so we can commit back)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH_NAME }}
+          fetch-depth: 0
+
+      - name: Compute FULL_TAG (must match build job)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          owner_lc="${OWNER,,}"
+          ref="${BRANCH_NAME}"
+          branch_tag="$(echo "$ref" | sed -E 's/[^A-Za-z0-9._-]+/-/g' | tr 'A-Z' 'a-z')"
+          sha7="${HEAD_SHA:0:7}"
+          full_tag="${branch_tag}-${sha7}"
+
+          echo "OWNER_LC=$owner_lc"       >> "$GITHUB_ENV"
+          echo "BRANCH_TAG=$branch_tag"   >> "$GITHUB_ENV"
+          echo "SHA7=$sha7"               >> "$GITHUB_ENV"
+          echo "FULL_TAG=$full_tag"       >> "$GITHUB_ENV"
+
+          echo "FULL_TAG=$full_tag"
+
+      - name: Patch prod overlays (set newTag = FULL_TAG)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import os, re
+
+          owner_lc = os.environ["OWNER_LC"]
+          tag = os.environ["FULL_TAG"]
+
+          targets = [
+            ("deploy/overlays/prod/proof-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-proof-service"),
+            ("deploy/overlays/prod/quest-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-quest-service"),
+            ("deploy/overlays/prod/submission-service/kustomization.yaml", f"ghcr.io/{owner_lc}/questify-submission-service"),
+            ("deploy/overlays/prod/user-service/kustomization.yaml",       f"ghcr.io/{owner_lc}/questify-user-service"),
+          ]
+
+          for file, img in targets:
+            txt = open(file, "r", encoding="utf-8").read()
+            pattern = rf"(^\s*-\s*name:\s*{re.escape(img)}\s*\n\s*newTag:\s*)([^\s#]+)(\s*$)"
+            new_txt, n = re.subn(pattern, rf"\1{tag}\3", txt, flags=re.MULTILINE)
+
+            if n != 1:
+              raise SystemExit(f"[ERROR] Expected to update exactly 1 newTag for {img} in {file}, updated={n}")
+
+            open(file, "w", encoding="utf-8").write(new_txt)
+            print(f"[OK] {file} -> {img}:{tag}")
+          PY
+
+      - name: Commit & push (if changed)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "No manifest changes to commit."
+            exit 0
+          fi
+
+          git add deploy/overlays/prod/*/kustomization.yaml
+          git commit -m "chore(gitops): deploy ${FULL_TAG} [skip images]"
+          git push origin HEAD:${BRANCH_NAME}

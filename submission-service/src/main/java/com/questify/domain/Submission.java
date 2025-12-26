@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;
-
+import com.questify.domain.ProofScanStatus;
 import java.time.Instant;
 
 @Entity
@@ -43,7 +43,7 @@ public class Submission {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     @Builder.Default
-    private ReviewStatus status = ReviewStatus.PENDING;
+    private ReviewStatus status = ReviewStatus.SCANNING;
 
     @Column(name = "reviewer_user_id", length = 128)
     private String reviewerUserId;
@@ -55,6 +55,14 @@ public class Submission {
 
     @Column(nullable = false)
     private Instant updatedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "proof_scan_status", length = 16)
+    @Builder.Default
+    private ProofScanStatus proofScanStatus = ProofScanStatus.PENDING;
+
+    @Column(name = "proof_scanned_at")
+    private Instant proofScannedAt;
 
     @PrePersist void onCreate(){ var now = Instant.now(); createdAt = now; updatedAt = now; }
     @PreUpdate  void onUpdate(){ updatedAt = Instant.now(); }

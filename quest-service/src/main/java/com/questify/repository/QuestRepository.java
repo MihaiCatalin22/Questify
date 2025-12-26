@@ -8,7 +8,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
-public interface QuestRepository extends JpaRepository<Quest,Long> {
+public interface QuestRepository extends JpaRepository<Quest, Long> {
 
     Page<Quest> findByStatus(QuestStatus status, Pageable pageable);
 
@@ -39,4 +39,63 @@ public interface QuestRepository extends JpaRepository<Quest,Long> {
              and q.status = com.questify.domain.QuestStatus.ACTIVE
            """)
     Page<Quest> searchPublic(@Param("q") String q, Pageable pageable);
+
+    Page<Quest> findByCreatedByUserIdAndStatus(String userId, QuestStatus status, Pageable pageable);
+
+    /* ===== NEW: server-side filters for archived vs non-archived ===== */
+
+    @Query("""
+           select distinct q
+           from Quest q
+           left join q.participants p
+           where (q.createdByUserId = :userId or p.userId = :userId)
+             and q.status = :status
+           """)
+    Page<Quest> findMyOrParticipatingWithStatus(@Param("userId") String userId,
+                                                @Param("status") QuestStatus status,
+                                                Pageable pageable);
+
+    @Query("""
+           select distinct q
+           from Quest q
+           left join q.participants p
+           where (q.createdByUserId = :userId or p.userId = :userId)
+             and q.status <> :status
+           """)
+    Page<Quest> findMyOrParticipatingNotStatus(@Param("userId") String userId,
+                                               @Param("status") QuestStatus status,
+                                               Pageable pageable);
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+           update Quest q
+              set q.createdByUserId = :anonId
+            where q.createdByUserId = :userId
+           """)
+    int anonymizeCreator(@Param("userId") String userId, @Param("anonId") String anonId);
+    @Query("""
+       select count(distinct q.id)
+       from Quest q
+       left join q.participants p
+       where (q.createdByUserId = :userId or p.userId = :userId)
+       """)
+    long countMyOrParticipating(@Param("userId") String userId);
+
+    @Query("""
+       select count(distinct q.id)
+       from Quest q
+       left join q.participants p
+       where (q.createdByUserId = :userId or p.userId = :userId)
+         and q.status = :status
+       """)
+    long countMyOrParticipatingWithStatus(@Param("userId") String userId, @Param("status") QuestStatus status);
+
+    @Query("""
+       select count(distinct q.id)
+       from Quest q
+       left join q.participants p
+       where (q.createdByUserId = :userId or p.userId = :userId)
+         and q.status <> :status
+       """)
+    long countMyOrParticipatingNotStatus(@Param("userId") String userId, @Param("status") QuestStatus status);
+
 }

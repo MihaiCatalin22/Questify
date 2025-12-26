@@ -15,6 +15,61 @@ permissions:
 
 jobs:
   # ───────────────────────────
+  # Security • GitGuardian (secret scanning)
+  # ───────────────────────────
+  gitguardian-scan:
+    name: GitGuardian • Secret Scan
+    runs-on: ubuntu-latest
+    # Secrets are not exposed to fork PRs, so skip those to avoid false failures
+    if: >
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: GitGuardian scan
+        uses: GitGuardian/ggshield/actions/secret@v1.45.0
+        env:
+          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
+          GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+
+  # ───────────────────────────
+  # Security • Trivy (repo filesystem scan)
+  # ───────────────────────────
+  trivy-fs:
+    name: Trivy • Repo Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan (report)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,config
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          format: table
+          output: trivy-fs-report.txt
+          exit-code: "0"
+
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-fs-report
+          path: trivy-fs-report.txt
+          if-no-files-found: ignore
+
+  # ───────────────────────────
   # Quest Service
   # ───────────────────────────
   quest-service:
@@ -69,8 +124,8 @@ jobs:
            github.event.pull_request.head.repo.full_name == github.repository) ||
           (github.event_name == 'workflow_dispatch')
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}         # PR decoration
-          SONAR_TOKEN:  ${{ secrets.SONAR_TOKEN_QUEST }}    # project token
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN:  ${{ secrets.SONAR_TOKEN_QUEST }}
         with:
           projectBaseDir: quest-service
 
@@ -132,7 +187,7 @@ jobs:
           projectBaseDir: user-service
 
   # ───────────────────────────
-  # Proof Service 
+  # Proof Service
   # ───────────────────────────
   proof-service:
     name: Proof Service • Build & Test

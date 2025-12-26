@@ -10,4 +10,5 @@ public interface QuestParticipantRepository extends JpaRepository<QuestParticipa
     Optional<QuestParticipant> findByQuest_IdAndUserId(Long questId, String userId);
     long countByQuest_Id(Long questId);
     List<QuestParticipant> findByQuest_Id(Long questId);
+    long deleteByUserId(String userId);
 }

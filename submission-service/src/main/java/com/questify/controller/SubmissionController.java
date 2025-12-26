@@ -28,11 +28,19 @@ public class SubmissionController {
     private final SubmissionService service;
     private final JwtAuth jwt;
     private final QuestAccessClient questAccess;
+    public record SubmissionSummaryRes(long submissionsTotal) {}
 
     public SubmissionController(SubmissionService service, JwtAuth jwt, QuestAccessClient questAccess) {
         this.service = service;
         this.jwt = jwt;
         this.questAccess = questAccess;
+    }
+
+    @GetMapping("/mine/summary")
+    @PreAuthorize("isAuthenticated()")
+    public SubmissionSummaryRes mineSummary(Authentication auth) {
+        var me = jwt.userId(auth);
+        return new SubmissionSummaryRes(service.countMine(me));
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)

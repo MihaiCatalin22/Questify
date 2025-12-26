@@ -10,6 +10,19 @@ public final class ProfilePrivacyMapper {
     private ProfilePrivacyMapper() {}
 
     public static ProfileRes toResForViewer(UserProfile p, Authentication auth) {
+        if (p == null) return null;
+
+        if (p.isDeleted()) {
+            return new ProfileRes(
+                    p.getUserId(),
+                    p.getUsername(),
+                    "Deleted user",
+                    null,
+                    null,
+                    null
+            );
+        }
+
         boolean isSelf = false;
         boolean isPrivileged = false;
 

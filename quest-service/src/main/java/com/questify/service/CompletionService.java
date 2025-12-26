@@ -76,4 +76,9 @@ public class CompletionService {
     public long countForQuest(Long questId) {
         return completions.countByQuestId(questId);
     }
+
+    public long countCompletedInMineOrParticipatingFiltered(String userId, Boolean archived) {
+        return completions.countMyCompletedFiltered(userId, archived);
+    }
+
 }

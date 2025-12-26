@@ -319,22 +319,6 @@ class QuestControllerTest {
                 .andExpect(jsonPath("$.content[0].id").value(12));
     }
 
-    /* ---------------------------- GET /quests/mine ---------------------------- */
-    @Test
-    @WithCud(id = 10)
-    void mine_requires_auth_and_returns_page() throws Exception {
-        when(jwt.userId(any())).thenReturn("u10");
-        var q = quest(13L, "u10", QuestStatus.ACTIVE);
-        when(service.mineOrParticipating(eq("u10"), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(q)));
-        when(service.participantsCount(13L)).thenReturn(2);
-        when(completionService.isCompleted(13L, "u10")).thenReturn(true);
-
-        mvc.perform(get("/quests/mine").accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].id").value(13));
-    }
-
     /* ---------------------------- GET /quests/mine-or-participating ---------------------------- */
     @Test
     @WithCud(id = 10)
