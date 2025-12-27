@@ -5,6 +5,6 @@ resources:
   - ../../../base/proof-service
 images:
   - name: ghcr.io/mihaicatalin22/questify-proof-service
-    newTag: feat-cicd2-a0c9f4f
+    newTag: feat-cicd2-6cfcbec
 patches:
   - path: patch-env.yaml
