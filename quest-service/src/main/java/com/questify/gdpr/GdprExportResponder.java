@@ -29,8 +29,9 @@ public class GdprExportResponder {
     private final QuestParticipantRepository participantRepo;
     private final QuestCompletionRepository completionRepo;
 
-    @Value("${USER_SERVICE_BASE:http://user-service}")
+    @Value("${user.service.base:http://user-service}")
     private String userServiceBase;
+
 
     @Value("${internal.token:${INTERNAL_TOKEN:dev-internal-token}}")
     private String internalToken;
