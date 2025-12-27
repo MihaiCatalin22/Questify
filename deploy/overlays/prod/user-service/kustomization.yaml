@@ -5,6 +5,6 @@ resources:
   - ../../../base/user-service
 images:
   - name: ghcr.io/mihaicatalin22/questify-user-service
-    newTag: feat-cicd2-cbc58e6
+    newTag: feat-cicd2-69cb706
 patches:
   - path: patch-env.yaml
