@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useAuth } from "react-oidc-context";
 
 import HomePage from "./pages/HomePage";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
 import Login from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
 import OidcCallback from "./pages/auth/OidcCallback";
@@ -36,7 +37,7 @@ function Shell() {
     "Account";
 
   return (
-     <div className="min-h-screen">
+    <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur dark:bg-[#0f1115]/80 dark:border-slate-800">
         <div className="px-6 py-3 flex items-center gap-4 justify-between">
           <div className="flex items-center gap-4">
@@ -108,6 +109,8 @@ export default function App() {
 
       <Routes>
         <Route index element={<HomePage />} />
+
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
 
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<RegisterPage />} />

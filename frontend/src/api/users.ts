@@ -32,19 +32,6 @@ export interface UpdateUserInput {
   roles?: Role[];
 }
 
-export interface UserExportDTO {
-  userId: string;
-  username?: string | null;
-  displayName?: string | null;
-  email?: string | null;
-  bio?: string | null;
-
-  createdAt: string;
-  updatedAt: string;
-  deletionRequestedAt?: string | null;
-  deletedAt?: string | null;
-}
-
 export interface DeleteMeRes {
   userId: string;
   deletionRequestedAt?: string | null;
@@ -58,6 +45,27 @@ export interface UpdateMeInput {
 
 export type UserProfileDTO = UserDTO;
 export type UpsertMeReq = UpdateMeInput;
+
+
+export type ExportJobStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "EXPIRED";
+
+export interface ExportJobCreatedDTO {
+  jobId: string;
+  status: ExportJobStatus;
+  expiresAt?: string;
+}
+
+export interface ExportJobDTO {
+  jobId: string;
+  status: ExportJobStatus;
+  createdAt?: string;
+  expiresAt?: string;
+  errorMessage?: string;
+}
+
+export interface ExportJobDownloadDTO {
+  url: string;
+}
 
 function mapUser(raw: any): UserDTO {
   const id = String(raw?.id ?? raw?.userId ?? "");
@@ -105,19 +113,35 @@ export const UsersApi = {
     return mapUser(data);
   },
 
-  async exportMe(): Promise<UserExportDTO> {
-    const { data } = await http.get<UserExportDTO>("/users/me/export", {
-      headers: { "Cache-Control": "no-store" },
-    });
-    return data;
-  },
-
   async deleteMe(): Promise<DeleteMeRes> {
     const { data } = await http.delete<DeleteMeRes>("/users/me", {
       headers: { "Cache-Control": "no-store" },
     });
     return data;
   },
+
+
+  async requestExportJob(): Promise<ExportJobCreatedDTO> {
+    const { data } = await http.post<ExportJobCreatedDTO>("/users/me/export-jobs");
+    return data;
+  },
+
+  async getExportJob(jobId: string): Promise<ExportJobDTO> {
+    const { data } = await http.get<ExportJobDTO>(
+      `/users/me/export-jobs/${encodeURIComponent(jobId)}`,
+      { headers: { "Cache-Control": "no-store" } }
+    );
+    return data;
+  },
+
+  async getExportDownloadUrl(jobId: string): Promise<string> {
+    const { data } = await http.get<ExportJobDownloadDTO>(
+      `/users/me/export-jobs/${encodeURIComponent(jobId)}/download`,
+      { headers: { "Cache-Control": "no-store" } }
+    );
+    return data.url;
+  },
+
 
   async create(_input: CreateUserInput): Promise<UserDTO> {
     throw new Error("User creation is handled by Keycloak/OIDC.");

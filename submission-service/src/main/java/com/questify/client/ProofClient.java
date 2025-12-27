@@ -213,4 +213,13 @@ public class ProofClient {
         if (s == null || s.isBlank()) return "";
         return s.endsWith("/") ? s.substring(0, s.length() - 1) : s;
     }
+
+    public void deleteInternalObject(String key) {
+        proofApi.delete()
+                .uri(uri -> uri.path("/internal/objects").queryParam("key", key).build())
+                .header("X-Internal-Token", internalToken)
+                .retrieve()
+                .toBodilessEntity()
+                .block(Duration.ofSeconds(15));
+    }
 }
