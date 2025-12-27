@@ -37,7 +37,6 @@ public class S3Config {
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))
                 .serviceConfiguration(s3conf)
-                // ✅ version-tolerant alternative to httpClientBuilder(...)
                 .httpClient(ApacheHttpClient.builder().build())
                 .build();
     }
