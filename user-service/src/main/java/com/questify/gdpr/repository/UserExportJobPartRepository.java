@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Optional;
 
 public interface UserExportJobPartRepository extends JpaRepository<UserExportJobPart, Long> {
-    List<UserExportJobPart> findByJobId(String jobId);
-    Optional<UserExportJobPart> findByJobIdAndService(String jobId, String service);
-    long countByJobIdAndReceivedTrue(String jobId);
+    List<UserExportJobPart> findByJob_Id(String jobId);
+    Optional<UserExportJobPart> findByJob_IdAndService(String jobId, String service);
 }

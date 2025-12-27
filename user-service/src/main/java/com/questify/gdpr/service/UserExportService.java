@@ -3,11 +3,10 @@ package com.questify.gdpr.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.questify.gdpr.model.UserExportJob;
 import com.questify.gdpr.model.UserExportJobPart;
-import com.questify.gdpr.storage.ExportStorageService;
-import com.questify.kafka.EventPublisher;
 import com.questify.gdpr.repository.UserExportJobPartRepository;
 import com.questify.gdpr.repository.UserExportJobRepository;
-import com.questify.service.UserProfileService;
+import com.questify.gdpr.storage.ExportStorageService;
+import com.questify.kafka.EventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,160 +26,187 @@ import java.util.zip.ZipOutputStream;
 @RequiredArgsConstructor
 public class UserExportService {
 
-    private static final List<String> EXPECTED_PARTS =
-            List.of("user-service", "quest-service", "submission-service", "proof-service");
-
     private final UserExportJobRepository jobRepo;
     private final UserExportJobPartRepository partRepo;
     private final ExportStorageService storage;
     private final ObjectMapper mapper;
     private final EventPublisher events;
-    private final UserProfileService profiles;
 
     @Value("${app.kafka.topics.users}")
     private String usersTopic;
 
-    @Value("${app.kafka.topics.audit}")
+    @Value("${app.kafka.topics.audit:}")
     private String auditTopic;
 
-    @Value("${app.gdpr.export.zipTtlHours:24}")
+    @Value("${app.keycloak.gdpr.export.zipTtlHours:24}")
     private long zipTtlHours;
 
-    @Value("${app.gdpr.export.presignTtlSeconds:900}")
+    @Value("${app.keycloak.gdpr.export.presignTtlSeconds:900}")
     private long presignTtlSeconds;
+
+    private static final Set<String> EXPECTED = Set.of(
+            "user-service",
+            "quest-service",
+            "submission-service",
+            "proof-service"
+    );
 
     @Transactional
     public UserExportJob createJob(String userId) {
-        var now = Instant.now();
-        var job = UserExportJob.builder()
+        Instant now = Instant.now();
+
+        UserExportJob job = UserExportJob.builder()
                 .userId(userId)
                 .status(UserExportJob.Status.RUNNING)
                 .createdAt(now)
                 .expiresAt(now.plus(Duration.ofHours(zipTtlHours)))
                 .build();
-
         jobRepo.save(job);
 
-        for (String svc : EXPECTED_PARTS) {
+        for (String svc : EXPECTED) {
             partRepo.save(UserExportJobPart.builder()
-                    .jobId(job.getId())
+                    .job(job)
                     .service(svc)
                     .received(false)
                     .build());
         }
 
-        try {
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("schemaVersion", "2.0");
-            payload.put("generatedAt", now.toString());
-            payload.put("profile", profiles.exportMe(userId));
-            receivePart(job.getId(), "user-service", payload);
-        } catch (Exception e) {
-            log.warn("Failed to write user-service export part. jobId={} err={}", job.getId(), e.toString());
-        }
+        Map<String, Object> payload = Map.of(
+                "jobId", job.getId(),
+                "userId", userId
+        );
 
-        Map<String, Object> req = new LinkedHashMap<>();
-        req.put("jobId", job.getId());
-        req.put("userId", userId);
+        events.publish(
+                usersTopic,
+                userId,
+                "UserExportRequested",
+                1,
+                "user-service",
+                payload
+        );
 
-        events.publish(usersTopic, userId, "UserExportRequested", 1, "user-service", req);
-        events.publish(auditTopic, userId, "UserExportJobCreated", 1, "user-service", Map.of("jobId", job.getId()));
-
+        log.info("Export job {} created for user {} (event queued via outbox).", job.getId(), userId);
         return job;
     }
 
     @Transactional
     public void receivePart(String jobId, String service, Map<String, Object> payload) throws Exception {
+        if (!EXPECTED.contains(service)) {
+            log.warn("Ignoring export part for unknown service '{}', jobId={}", service, jobId);
+            return;
+        }
+
         UserExportJob job = jobRepo.findById(jobId).orElseThrow();
 
-        byte[] json = mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(payload);
+        var part = partRepo.findByJob_IdAndService(jobId, service)
+                .orElseThrow(() -> new IllegalStateException("Missing part row for " + service));
 
-        String key = partObjectKey(job.getUserId(), job.getId(), service);
+        if (part.isReceived()) {
+            log.info("Export part already received: jobId={} service={}", jobId, service);
+            return;
+        }
+
+        byte[] json = mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(payload);
+        String key = "exports/" + job.getUserId() + "/" + job.getId() + "/parts/" + service + ".json";
         storage.putBytes(key, json, "application/json");
 
-        UserExportJobPart part = partRepo.findByJobIdAndService(jobId, service)
-                .orElseThrow(() -> new IllegalStateException("Unknown part service=" + service + " for jobId=" + jobId));
         part.setReceived(true);
         part.setReceivedAt(Instant.now());
         partRepo.save(part);
 
-        tryAssemble(job);
+        assembleIfComplete(jobId);
     }
 
-    @Transactional
-    public void tryAssemble(UserExportJob job) throws Exception {
-        long receivedCount = partRepo.countByJobIdAndReceivedTrue(job.getId());
-        if (receivedCount < EXPECTED_PARTS.size()) return;
+    private void assembleIfComplete(String jobId) throws Exception {
+        UserExportJob job = jobRepo.findById(jobId).orElseThrow();
+        if (job.getStatus() == UserExportJob.Status.COMPLETED || job.getStatus() == UserExportJob.Status.EXPIRED) return;
 
-        assembleZip(job);
+        List<UserExportJobPart> parts = partRepo.findByJob_Id(jobId);
+
+        Set<String> received = new HashSet<>();
+        for (UserExportJobPart p : parts) {
+            if (p.isReceived()) received.add(p.getService());
+        }
+
+        if (!received.containsAll(EXPECTED)) {
+            log.info("Export job {} waiting. Received: {}", jobId, received);
+            return;
+        }
+
+        assembleZip(job, parts);
     }
 
-    private void assembleZip(UserExportJob job) throws Exception {
+    private void assembleZip(UserExportJob job, List<UserExportJobPart> parts) throws Exception {
         if (job.getStatus() == UserExportJob.Status.COMPLETED) return;
 
-        List<UserExportJobPart> parts = partRepo.findByJobId(job.getId());
+        String base = "exports/" + job.getUserId() + "/" + job.getId() + "/parts/";
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(out)) {
             for (UserExportJobPart part : parts) {
-                if (!part.isReceived()) continue;
+                String svc = part.getService();
+                String key = base + svc + ".json";
+                byte[] bytes = storage.getBytes(key);
 
-                String partKey = partObjectKey(job.getUserId(), job.getId(), part.getService());
-                byte[] data = storage.getBytes(partKey);
-
-                ZipEntry entry = new ZipEntry(part.getService() + ".json");
-                zip.putNextEntry(entry);
-                zip.write(data);
+                zip.putNextEntry(new ZipEntry(svc + ".json"));
+                zip.write(bytes);
                 zip.closeEntry();
             }
+
+            Map<String, Object> manifest = Map.of(
+                    "jobId", job.getId(),
+                    "userId", job.getUserId(),
+                    "createdAt", job.getCreatedAt(),
+                    "generatedAt", Instant.now(),
+                    "parts", parts.stream().map(p -> Map.of(
+                            "service", p.getService(),
+                            "received", p.isReceived(),
+                            "receivedAt", p.getReceivedAt()
+                    )).toList()
+            );
+
+            zip.putNextEntry(new ZipEntry("manifest.json"));
+            zip.write(mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(manifest));
+            zip.closeEntry();
         }
 
-        String zipKey = zipObjectKey(job.getUserId(), job.getId());
+        String zipKey = "exports/" + job.getUserId() + "/" + job.getId() + "/questify-export.zip";
         storage.putBytes(zipKey, out.toByteArray(), "application/zip");
 
         job.setZipObjectKey(zipKey);
         job.setStatus(UserExportJob.Status.COMPLETED);
         jobRepo.save(job);
 
-        events.publish(auditTopic, job.getUserId(), "UserExportCompleted", 1, "user-service",
-                Map.of("jobId", job.getId()));
+        if (auditTopic != null && !auditTopic.isBlank()) {
+            events.publish(
+                    auditTopic,
+                    job.getUserId(),
+                    "UserExportCompleted",
+                    1,
+                    "user-service",
+                    Map.of("jobId", job.getId(), "userId", job.getUserId())
+            );
+        }
+
+        log.info("Export job {} COMPLETED. zipKey={}", job.getId(), zipKey);
     }
 
     public String presignedDownloadUrl(UserExportJob job) {
-        if (job.getZipObjectKey() == null || job.getZipObjectKey().isBlank()) {
-            throw new IllegalStateException("Export ZIP not ready");
-        }
         return storage.presignGet(job.getZipObjectKey(), presignTtlSeconds);
     }
 
-    @Scheduled(fixedDelayString = "${app.gdpr.export.cleanupMs:3600000}")
-    @Transactional
+    @Scheduled(fixedDelayString = "${app.keycloak.gdpr.export.cleanupMs:3600000}")
     public void cleanupExpired() {
         Instant now = Instant.now();
-        List<UserExportJob> expired = jobRepo.findByStatusInAndExpiresAtBefore(
-                List.of(UserExportJob.Status.COMPLETED, UserExportJob.Status.RUNNING, UserExportJob.Status.PENDING),
-                now
-        );
-
-        for (UserExportJob job : expired) {
-            try {
-                if (job.getZipObjectKey() != null) {
-                    storage.deleteObject(job.getZipObjectKey());
-                }
-            } catch (Exception e) {
-                log.warn("Failed to delete export zip. jobId={} key={} err={}",
-                        job.getId(), job.getZipObjectKey(), e.toString());
+        for (UserExportJob job : jobRepo.findAll()) {
+            if (job.getExpiresAt() != null && job.getExpiresAt().isBefore(now)
+                    && job.getStatus() != UserExportJob.Status.EXPIRED) {
+                try {
+                    if (job.getZipObjectKey() != null) storage.deleteObject(job.getZipObjectKey());
+                } catch (Exception ignored) {}
+                job.setStatus(UserExportJob.Status.EXPIRED);
+                jobRepo.save(job);
             }
-            job.setStatus(UserExportJob.Status.EXPIRED);
-            jobRepo.save(job);
         }
-    }
-
-    private static String partObjectKey(String userId, String jobId, String service) {
-        return "exports/" + userId + "/" + jobId + "/parts/" + service + ".json";
-    }
-
-    private static String zipObjectKey(String userId, String jobId) {
-        return "exports/" + userId + "/" + jobId + "/questify-export.zip";
     }
 }

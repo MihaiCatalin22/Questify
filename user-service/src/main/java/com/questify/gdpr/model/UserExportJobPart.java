@@ -5,22 +5,23 @@ import lombok.*;
 
 import java.time.Instant;
 
-@Entity
-@Table(
-        name = "user_export_job_parts",
-        uniqueConstraints = @UniqueConstraint(name = "uq_export_job_part", columnNames = {"job_id", "service"})
-)
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor
 @Builder
+@Entity
+@Table(
+        name = "user_export_job_parts",
+        uniqueConstraints = @UniqueConstraint(name = "uq_job_service", columnNames = {"job_id", "service"})
+)
 public class UserExportJobPart {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name="job_id", nullable = false, length = 64)
-    private String jobId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "job_id", nullable = false)
+    private UserExportJob job;
 
     @Column(nullable = false, length = 64)
     private String service;

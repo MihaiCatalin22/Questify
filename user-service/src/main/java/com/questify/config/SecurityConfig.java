@@ -25,7 +25,8 @@ import java.util.List;
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
-    @Value("${SECURITY_INTERNAL_TOKEN:${INTERNAL_TOKEN:}}")
+
+    @Value("${SECURITY_INTERNAL_TOKEN:${INTERNAL_TOKEN:${internal.token:}}}")
     private String internalToken;
 
     @Bean
@@ -40,7 +41,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a.anyRequest().permitAll())
                 .httpBasic(h -> h.disable())
                 .formLogin(f -> f.disable())
-                .addFilterBefore(new InternalTokenFilter(internalToken), BasicAuthenticationFilter.class);
+                .addFilterBefore(new InternalTokenFilter(() -> internalToken), BasicAuthenticationFilter.class);
 
         return http.build();
     }
@@ -62,8 +63,12 @@ public class SecurityConfig {
     }
 
     static class InternalTokenFilter extends OncePerRequestFilter {
-        private final String token;
-        InternalTokenFilter(String token) { this.token = token; }
+        interface TokenSupplier { String get(); }
+        private final TokenSupplier tokenSupplier;
+
+        InternalTokenFilter(TokenSupplier tokenSupplier) {
+            this.tokenSupplier = tokenSupplier;
+        }
 
         @Override
         protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -75,7 +80,9 @@ public class SecurityConfig {
         protected void doFilterInternal(HttpServletRequest request,
                                         HttpServletResponse response,
                                         FilterChain chain) throws ServletException, IOException {
+            String token = tokenSupplier.get();
             String got = request.getHeader("X-Internal-Token");
+
             if (token == null || token.isBlank() || got == null || !token.equals(got)) {
                 response.setStatus(403);
                 return;
@@ -94,8 +101,13 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         var cfg = new CorsConfiguration();
-        cfg.setAllowedOriginPatterns(List.of("https://*.ts.net", "https://questify.tail03c40b.ts.net", "https://localhost:5443"));
-        cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
+        cfg.setAllowedOriginPatterns(List.of(
+                "https://*.ts.net",
+                "https://questify.tail03c40b.ts.net",
+                "https://localhost:5443",
+                "https://localhost:5173"
+        ));
+        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setAllowCredentials(true);
 
