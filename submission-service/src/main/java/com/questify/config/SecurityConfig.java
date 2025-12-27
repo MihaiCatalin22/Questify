@@ -22,25 +22,32 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    private static String firstNonBlank(String... vals) {
+        if (vals == null) return "";
+        for (String v : vals) {
+            if (v != null && !v.isBlank()) return v;
+        }
+        return "";
+    }
+
     @Bean
     InternalTokenAuthFilter internalTokenAuthFilter(
             @Value("${INTERNAL_TOKEN:}") String internalToken,
-            @Value("${SECURITY_INTERNAL_TOKEN:}") String securityInternalToken
+            @Value("${SECURITY_INTERNAL_TOKEN:}") String securityInternalToken,
+            @Value("${internal.token:}") String internalDotToken
     ) {
-        return new InternalTokenAuthFilter(internalToken, securityInternalToken);
+        String resolved = firstNonBlank(securityInternalToken, internalToken, internalDotToken);
+
+        return new InternalTokenAuthFilter(resolved, resolved);
     }
 
-
-    /** Internal chain: header token only */
     @Bean
     @Order(0)
     SecurityFilterChain internalChain(HttpSecurity http,
                                       InternalTokenAuthFilter internalTokenAuthFilter) throws Exception {
         http
-                .securityMatcher(req -> {
-                    String p = req.getServletPath();
-                    return p != null && p.startsWith("/internal/");
-                })
+                // IMPORTANT: do NOT use servletPath; use pattern matcher
+                .securityMatcher("/internal/**")
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(a -> a.anyRequest().permitAll())
@@ -50,7 +57,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /** Public API chain: JWT */
     @Bean
     @Order(1)
     SecurityFilterChain apiChain(HttpSecurity http) throws Exception {
@@ -77,7 +83,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         var cfg = new CorsConfiguration();
-        cfg.setAllowedOriginPatterns(List.of("https://*.ts.net", "https://questify.tail03c40b.ts.net", "https://localhost:5443"));
+        cfg.setAllowedOriginPatterns(List.of(
+                "https://*.ts.net",
+                "https://questify.tail03c40b.ts.net",
+                "https://localhost:5443"
+        ));
         cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setAllowCredentials(true);

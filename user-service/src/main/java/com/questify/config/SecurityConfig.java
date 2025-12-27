@@ -32,10 +32,8 @@ public class SecurityConfig {
     @Bean
     @Order(0)
     public SecurityFilterChain internal(HttpSecurity http) throws Exception {
-        http.securityMatcher(req -> {
-                    String p = req.getServletPath();
-                    return p != null && p.startsWith("/internal/");
-                })
+        http
+                .securityMatcher("/internal/**")
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(a -> a.anyRequest().permitAll())
@@ -70,9 +68,18 @@ public class SecurityConfig {
             this.tokenSupplier = tokenSupplier;
         }
 
+        private static String pathNoContext(HttpServletRequest request) {
+            String uri = request.getRequestURI();
+            String ctx = request.getContextPath();
+            if (ctx != null && !ctx.isEmpty() && uri.startsWith(ctx)) {
+                return uri.substring(ctx.length());
+            }
+            return uri;
+        }
+
         @Override
         protected boolean shouldNotFilter(HttpServletRequest request) {
-            String p = request.getServletPath();
+            String p = pathNoContext(request);
             return p == null || !p.startsWith("/internal/");
         }
 
@@ -80,10 +87,10 @@ public class SecurityConfig {
         protected void doFilterInternal(HttpServletRequest request,
                                         HttpServletResponse response,
                                         FilterChain chain) throws ServletException, IOException {
-            String token = tokenSupplier.get();
+            String expected = tokenSupplier.get();
             String got = request.getHeader("X-Internal-Token");
 
-            if (token == null || token.isBlank() || got == null || !token.equals(got)) {
+            if (expected == null || expected.isBlank() || got == null || !expected.equals(got)) {
                 response.setStatus(403);
                 return;
             }
