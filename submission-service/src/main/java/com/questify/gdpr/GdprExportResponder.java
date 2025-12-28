@@ -12,7 +12,9 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,17 +27,27 @@ public class GdprExportResponder {
 
     private final SubmissionRepository repo;
 
-    @Value("${USER_SERVICE_BASE:http://user-service}")
+    @Value("${user.service.base:${USER_SERVICE_BASE:http://user-service}}")
     private String userServiceBase;
 
-    @Value("${internal.token:${INTERNAL_TOKEN:dev-internal-token}}")
+    @Value("${SECURITY_INTERNAL_TOKEN:${INTERNAL_TOKEN:dev-internal-token}}")
     private String internalToken;
 
-    private WebClient userServiceClient() {
-        return WebClient.builder()
+    private WebClient userServiceClient;
+
+    @PostConstruct
+    void init() {
+        this.userServiceClient = WebClient.builder()
                 .baseUrl(userServiceBase)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
+
+        boolean tokenPresent = internalToken != null && !internalToken.isBlank();
+        log.info("submission-service GDPR responder configured: userServiceBase={}, tokenPresent={}", userServiceBase, tokenPresent);
+
+        if (userServiceBase.contains(":8080")) {
+            log.warn("userServiceBase contains :8080. If your K8s Service exposes port 80->8080, use http://user-service (no :8080).");
+        }
     }
 
     @KafkaListener(
@@ -58,19 +70,18 @@ public class GdprExportResponder {
                 return;
             }
 
-            var submissions = repo.findByUserIdOrderByCreatedAtDesc(
+            List<Submission> submissions = repo.findByUserIdOrderByCreatedAtDesc(
                     userId, org.springframework.data.domain.Pageable.unpaged()
             ).getContent();
 
-            Map<String, Object> part = Map.of(
-                    "service", "submission-service",
-                    "jobId", jobId,
-                    "userId", userId,
-                    "generatedAt", Instant.now(),
-                    "submissions", submissions.stream().map(this::submissionDto).toList()
-            );
+            Map<String, Object> part = new LinkedHashMap<>();
+            part.put("service", "submission-service");
+            part.put("jobId", jobId);
+            part.put("userId", userId);
+            part.put("generatedAt", Instant.now());
+            part.put("submissions", submissions.stream().map(this::submissionDto).toList());
 
-            userServiceClient()
+            userServiceClient
                     .post()
                     .uri("/internal/export-jobs/{jobId}/parts/{service}", jobId, "submission-service")
                     .header("X-Internal-Token", internalToken)
@@ -81,6 +92,10 @@ public class GdprExportResponder {
 
             log.info("Sent submission-service export part for jobId={}, userId={}", jobId, userId);
             ack.acknowledge();
+        } catch (WebClientResponseException e) {
+            log.error("submission-service callback failed: status={} body={}",
+                    e.getRawStatusCode(), e.getResponseBodyAsString(), e);
+            throw e;
         } catch (Exception e) {
             log.error("Failed processing UserExportRequested in submission-service: {}", e.toString(), e);
             throw e instanceof RuntimeException re ? re : new RuntimeException(e);

@@ -9,10 +9,12 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
+import jakarta.annotation.PostConstruct;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -25,13 +27,25 @@ public class GdprExportResponder {
     private final ProofMetadataExporter exporter;
     private final ObjectMapper mapper;
 
-    @Value("${USER_SERVICE_BASE:http://user-service}")
+    @Value("${user.service.base:${USER_SERVICE_BASE:http://user-service}}")
     private String userServiceBase;
 
-    @Value("${internal.token:${INTERNAL_TOKEN:dev-internal-token}}")
+    @Value("${SECURITY_INTERNAL_TOKEN:${INTERNAL_TOKEN:dev-internal-token}}")
     private String internalToken;
 
-    private final HttpClient http = HttpClient.newHttpClient();
+    private final HttpClient http = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
+
+    @PostConstruct
+    void logConfig() {
+        boolean tokenPresent = internalToken != null && !internalToken.isBlank();
+        log.info("proof-service GDPR responder configured: userServiceBase={}, tokenPresent={}", userServiceBase, tokenPresent);
+
+        if (userServiceBase.contains(":8080")) {
+            log.warn("userServiceBase contains :8080. If your K8s Service exposes port 80->8080, use http://user-service (no :8080).");
+        }
+    }
 
     @KafkaListener(
             topics = "${app.kafka.topics.users}",
@@ -77,6 +91,7 @@ public class GdprExportResponder {
         String json = mapper.writeValueAsString(part);
 
         HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(10))
                 .header("Content-Type", "application/json")
                 .header("X-Internal-Token", internalToken)
                 .POST(HttpRequest.BodyPublishers.ofString(json))
@@ -84,7 +99,8 @@ public class GdprExportResponder {
 
         HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
         if (res.statusCode() >= 300) {
-            throw new IllegalStateException("user-service callback failed: " + res.statusCode() + " body=" + res.body());
+            log.error("user-service callback failed: status={} body={}", res.statusCode(), res.body());
+            throw new IllegalStateException("user-service callback failed: " + res.statusCode());
         }
     }
 
