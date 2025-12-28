@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 
 const OWNER_NAME = "Cătălin Mihai Popoiu";
 const CONTACT_EMAIL = "privacy@questify.com";
+const CONTROLLER_LOCATION = "Eindhoven, Netherlands";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -21,7 +22,7 @@ export default function PrivacyPolicyPage() {
         </div>
 
         <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          Last updated: <span className="font-medium">December 27, 2025</span>
+          Last updated: <span className="font-medium">December 28, 2025</span>
         </div>
 
         <div className="mt-8 space-y-8 rounded-3xl border bg-white/70 p-8 shadow-xl backdrop-blur dark:border-slate-800 dark:bg-[#0f1115]/70">
@@ -30,6 +31,9 @@ export default function PrivacyPolicyPage() {
             <p className="text-sm text-slate-700 dark:text-slate-300">
               Questify is a gamified challenge-tracking platform. This project is operated by{" "}
               <span className="font-medium">{OWNER_NAME}</span> ("we", "us", "our").
+            </p>
+            <p className="text-sm text-slate-700 dark:text-slate-300">
+              <span className="font-medium">Data controller</span>: {OWNER_NAME} ({CONTROLLER_LOCATION})
             </p>
             <p className="text-sm text-slate-700 dark:text-slate-300">
               If you have questions about privacy, contact us at{" "}
@@ -105,7 +109,15 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">6. Security</h2>
+            <h2 className="text-lg font-semibold">6. International transfers</h2>
+            <p className="text-sm text-slate-700 dark:text-slate-300">
+              Depending on provider configuration, data may be processed in the EU and potentially other regions.
+              Where applicable, we rely on provider safeguards for international transfers (for example, standard contractual clauses).
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">7. Security</h2>
             <p className="text-sm text-slate-700 dark:text-slate-300">
               We use security measures designed to protect your data, such as short-lived signed URLs for file access,
               malware scanning for uploads, and role-based access controls.
@@ -113,19 +125,24 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">7. Data retention</h2>
+            <h2 className="text-lg font-semibold">8. Data retention</h2>
             <p className="text-sm text-slate-700 dark:text-slate-300">
               We keep personal data only as long as needed for the purposes described above. In particular:
             </p>
             <ul className="list-disc pl-5 text-sm text-slate-700 dark:text-slate-300 space-y-1">
-              <li><span className="font-medium">Export ZIPs</span> expire automatically (e.g., after 24 hours).</li>
-              <li><span className="font-medium">Proof files</span> are retained for a limited period after review (e.g., 30 days), then deleted.</li>
-              <li><span className="font-medium">Account deletion</span> triggers anonymization and disables login.</li>
+              <li><span className="font-medium">Export ZIPs</span> are automatically deleted after <span className="font-medium">24 hours</span>.</li>
+              <li>
+                <span className="font-medium">Proof files</span> are retained for <span className="font-medium">30 days after review</span>, then deleted
+                (subject to short technical delays).
+              </li>
+              <li>
+                <span className="font-medium">Account deletion</span> disables login and triggers anonymization/deletion of associated data where applicable.
+              </li>
             </ul>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">8. Your rights</h2>
+            <h2 className="text-lg font-semibold">9. Your rights</h2>
             <p className="text-sm text-slate-700 dark:text-slate-300">
               Depending on your location, you may have rights to access, correct, delete, export, or restrict processing.
               Questify supports:
@@ -134,26 +151,29 @@ export default function PrivacyPolicyPage() {
               <li><span className="font-medium">Access & correction</span> via your Profile page.</li>
               <li><span className="font-medium">Data export</span> via an export job that produces a ZIP download.</li>
               <li><span className="font-medium">Deletion</span> via account deletion (irreversible).</li>
+              <li>
+                <span className="font-medium">Complaint</span>: you may have the right to lodge a complaint with your local supervisory authority.
+              </li>
             </ul>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">9. Cookies</h2>
+            <h2 className="text-lg font-semibold">10. Cookies</h2>
             <p className="text-sm text-slate-700 dark:text-slate-300">
-              Questify does not use advertising cookies. Some technical storage may be used for essential functionality
-              (for example, to keep your theme preference).
+              Questify does not use advertising cookies. We may use essential technical storage (for example, local storage)
+              for functionality like theme preference and keeping you signed in.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">10. Changes to this policy</h2>
+            <h2 className="text-lg font-semibold">11. Changes to this policy</h2>
             <p className="text-sm text-slate-700 dark:text-slate-300">
               We may update this policy from time to time. We will update the “Last updated” date at the top of the page.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">11. Contact</h2>
+            <h2 className="text-lg font-semibold">12. Contact</h2>
             <p className="text-sm text-slate-700 dark:text-slate-300">
               If you have privacy questions or requests, contact{" "}
               <a className="underline" href={`mailto:${CONTACT_EMAIL}`}>

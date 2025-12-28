@@ -37,6 +37,16 @@ public class UserExportJob {
     @Column(length = 1024)
     private String zipObjectKey;
 
+    @Column
+    private Instant lastProgressAt;
+
+    @Column
+    private Instant failedAt;
+
+    @Column(length = 1024)
+    private String failureReason;
+
+
     @OneToMany(mappedBy = "job", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
     private List<UserExportJobPart> parts = new ArrayList<>();

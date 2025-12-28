@@ -7,6 +7,8 @@ import { QuestsApi } from "../../api/quests";
 import { SubmissionsApi } from "../../api/submissions";
 import { UsersApi, type ExportJobDTO, type ExportJobStatus, type UpdateMeInput } from "../../api/users";
 
+const EXPORT_STORAGE_KEY = "questify:lastExportJob";
+
 function formatDate(iso?: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -24,6 +26,17 @@ function ageDays(createdAt?: string | null) {
 
 function isTerminalStatus(s: ExportJobStatus) {
   return s === "COMPLETED" || s === "FAILED" || s === "EXPIRED";
+}
+
+function safeParseStoredJob(raw: string | null): ExportJobDTO | null {
+  if (!raw) return null;
+  try {
+    const obj = JSON.parse(raw);
+    if (!obj?.jobId) return null;
+    return obj as ExportJobDTO;
+  } catch {
+    return null;
+  }
 }
 
 export default function ProfilePage() {
@@ -61,6 +74,7 @@ export default function ProfilePage() {
   const lastToastStatus = useRef<ExportJobStatus | null>(null);
   const pollTimer = useRef<number | null>(null);
 
+  // Keep profile form in sync
   useEffect(() => {
     if (!me) return;
     setForm({
@@ -68,6 +82,44 @@ export default function ProfilePage() {
       bio: me.bio ?? "",
     });
   }, [me?.id]);
+
+  // Persist export job to localStorage so leaving Profile doesn't "lose" it
+  useEffect(() => {
+    if (!exportJob) {
+      localStorage.removeItem(EXPORT_STORAGE_KEY);
+      return;
+    }
+    try {
+      localStorage.setItem(EXPORT_STORAGE_KEY, JSON.stringify(exportJob));
+    } catch {
+      // ignore storage quota / blocked storage
+    }
+  }, [exportJob]);
+
+  // Restore last export job on mount (and refresh from backend)
+  useEffect(() => {
+    if (!auth.isAuthenticated) return;
+
+    const stored = safeParseStoredJob(localStorage.getItem(EXPORT_STORAGE_KEY));
+    if (!stored?.jobId) return;
+
+    setExportJob(stored);
+    lastToastStatus.current = stored.status ?? null;
+
+    (async () => {
+      try {
+        const fresh = await UsersApi.getExportJob(stored.jobId);
+        setExportJob((prev) => ({ ...(prev ?? stored), ...fresh }));
+      } catch (e: any) {
+        const status = e?.response?.status;
+        // If it's not accessible / not found, clear it so the UI doesn't get stuck
+        if (status === 403 || status === 404) {
+          localStorage.removeItem(EXPORT_STORAGE_KEY);
+          setExportJob(null);
+        }
+      }
+    })();
+  }, [auth.isAuthenticated]);
 
   async function onSave() {
     try {
@@ -84,6 +136,11 @@ export default function ProfilePage() {
   async function startExport() {
     try {
       setExportStarting(true);
+
+      // Optional: clear previous job from state (keeps UI clean)
+      // (ZIP is still accessible if you stored its jobId elsewhere; we store only latest)
+      // setExportJob(null);
+
       const created = await UsersApi.requestExportJob();
 
       const job: ExportJobDTO = {
@@ -108,37 +165,67 @@ export default function ProfilePage() {
       window.location.href = url;
     } catch (e: any) {
       const status = e?.response?.status;
+      const data = e?.response?.data;
+
       if (status === 409) {
+        // could be not ready OR failed
+        if (data?.reason) {
+          toast.error(String(data.reason));
+          return;
+        }
+        if (data?.error) {
+          toast.error(String(data.error));
+          return;
+        }
         toast("Export not ready yet — try again in a moment.");
         return;
       }
+
+      if (status === 410) {
+        toast.error("Export expired. Please request a new one.");
+        return;
+      }
+
       toast.error(e?.message ?? "Failed to download export");
     }
   }
 
   // Poll export status while RUNNING/PENDING
   useEffect(() => {
-    if (!exportJob?.jobId) return;
+    const jobId = exportJob?.jobId;
+    const status = exportJob?.status;
+
+    if (!jobId) return;
 
     if (pollTimer.current) {
       window.clearInterval(pollTimer.current);
       pollTimer.current = null;
     }
 
-    if (!exportJob.status || isTerminalStatus(exportJob.status)) return;
+    if (!status || isTerminalStatus(status)) return;
 
     pollTimer.current = window.setInterval(async () => {
       try {
-        const next = await UsersApi.getExportJob(exportJob.jobId);
+        const next = await UsersApi.getExportJob(jobId);
 
         setExportJob((prev) => ({
-          ...(prev ?? { jobId: exportJob.jobId, status: next.status }),
+          ...(prev ?? { jobId, status: next.status }),
           ...next,
         }));
 
         if (lastToastStatus.current !== next.status) {
           lastToastStatus.current = next.status;
-          if (next.status === "FAILED") toast.error("Export failed.");
+
+          if (next.status === "FAILED") {
+            const msg =
+              next.failureReason
+                ? `Export failed: ${next.failureReason}`
+                : next.missingParts?.length
+                  ? `Export failed (missing: ${next.missingParts.join(", ")})`
+                  : "Export failed.";
+            toast.error(msg);
+          }
+
           if (next.status === "EXPIRED") toast.error("Export expired. Please request a new one.");
         }
 
@@ -148,7 +235,7 @@ export default function ProfilePage() {
             pollTimer.current = null;
           }
           toast.success("Export ready! Downloading…");
-          await downloadExport(exportJob.jobId);
+          await downloadExport(jobId);
         }
       } catch (e: any) {
         toast.error(e?.message ?? "Failed to check export status");
@@ -361,8 +448,20 @@ export default function ProfilePage() {
               <div>
                 Export status: <span className="font-medium">{exportJob.status}</span>
               </div>
+              <div>Export jobId: <span className="font-mono">{exportJob.jobId}</span></div>
               {exportJob.expiresAt && <div>Export expires: {formatDate(exportJob.expiresAt)}</div>}
               {exportJob.createdAt && <div>Export created: {formatDate(exportJob.createdAt)}</div>}
+              {exportJob.lastProgressAt && <div>Last progress: {formatDate(exportJob.lastProgressAt)}</div>}
+
+              {exportJob.status === "FAILED" && (
+                <div className="text-xs text-red-700 dark:text-red-300">
+                  {exportJob.failureReason ? (
+                    <div>Reason: {exportJob.failureReason}</div>
+                  ) : exportJob.missingParts?.length ? (
+                    <div>Missing parts: {exportJob.missingParts.join(", ")}</div>
+                  ) : null}
+                </div>
+              )}
             </div>
           )}
         </div>

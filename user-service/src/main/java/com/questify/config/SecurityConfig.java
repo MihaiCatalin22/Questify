@@ -33,6 +33,7 @@ public class SecurityConfig {
     @Order(0)
     public SecurityFilterChain internal(HttpSecurity http) throws Exception {
         http
+                // IMPORTANT: do NOT use servletPath lambda; this is what causes random 401s
                 .securityMatcher("/internal/**")
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
@@ -57,6 +58,7 @@ public class SecurityConfig {
                 .oauth2ResourceServer(o -> o.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthConverter())))
                 .httpBasic(h -> h.disable())
                 .formLogin(f -> f.disable());
+
         return http.build();
     }
 
@@ -68,29 +70,20 @@ public class SecurityConfig {
             this.tokenSupplier = tokenSupplier;
         }
 
-        private static String pathNoContext(HttpServletRequest request) {
-            String uri = request.getRequestURI();
-            String ctx = request.getContextPath();
-            if (ctx != null && !ctx.isEmpty() && uri.startsWith(ctx)) {
-                return uri.substring(ctx.length());
-            }
-            return uri;
-        }
-
         @Override
         protected boolean shouldNotFilter(HttpServletRequest request) {
-            String p = pathNoContext(request);
-            return p == null || !p.startsWith("/internal/");
+            String uri = request.getRequestURI();
+            return uri == null || !uri.startsWith("/internal/");
         }
 
         @Override
         protected void doFilterInternal(HttpServletRequest request,
                                         HttpServletResponse response,
                                         FilterChain chain) throws ServletException, IOException {
-            String expected = tokenSupplier.get();
+            String token = tokenSupplier.get();
             String got = request.getHeader("X-Internal-Token");
 
-            if (expected == null || expected.isBlank() || got == null || !expected.equals(got)) {
+            if (token == null || token.isBlank() || got == null || !token.equals(got)) {
                 response.setStatus(403);
                 return;
             }

@@ -44,12 +44,32 @@ public class UserExportService {
     @Value("${app.keycloak.gdpr.export.presignTtlSeconds:900}")
     private long presignTtlSeconds;
 
-    private static final Set<String> EXPECTED = Set.of(
+    @Value("${app.keycloak.gdpr.export.stallMinutes:15}")
+    private long stallMinutes;
+
+
+    private static final List<String> EXPECTED_SERVICES = List.of(
             "user-service",
             "quest-service",
             "submission-service",
             "proof-service"
     );
+
+    private static final Set<String> EXPECTED = Set.copyOf(EXPECTED_SERVICES);
+
+
+    private static final Map<String, String> ZIP_ENTRY_NAME = Map.of(
+            "user-service", "your-data.json",
+            "quest-service", "quests.json",
+            "submission-service", "submissions.json",
+            "proof-service", "proofs.json"
+    );
+
+    private static final String SUMMARY_ENTRY = "summary.json";
+
+    private static String zipEntryForService(String service) {
+        return ZIP_ENTRY_NAME.getOrDefault(service, service + ".json");
+    }
 
     @Transactional
     public UserExportJob createJob(String userId) {
@@ -59,11 +79,12 @@ public class UserExportService {
                 .userId(userId)
                 .status(UserExportJob.Status.RUNNING)
                 .createdAt(now)
+                .lastProgressAt(now)
                 .expiresAt(now.plus(Duration.ofHours(zipTtlHours)))
                 .build();
         jobRepo.save(job);
 
-        for (String svc : EXPECTED) {
+        for (String svc : EXPECTED_SERVICES) {
             partRepo.save(UserExportJobPart.builder()
                     .job(job)
                     .service(svc)
@@ -98,6 +119,11 @@ public class UserExportService {
 
         UserExportJob job = jobRepo.findById(jobId).orElseThrow();
 
+        if (job.getStatus() == UserExportJob.Status.EXPIRED || job.getStatus() == UserExportJob.Status.FAILED) {
+            log.warn("Ignoring export part because job is {}: jobId={} service={}", job.getStatus(), jobId, service);
+            return;
+        }
+
         var part = partRepo.findByJob_IdAndService(jobId, service)
                 .orElseThrow(() -> new IllegalStateException("Missing part row for " + service));
 
@@ -110,16 +136,25 @@ public class UserExportService {
         String key = "exports/" + job.getUserId() + "/" + job.getId() + "/parts/" + service + ".json";
         storage.putBytes(key, json, "application/json");
 
+        Instant now = Instant.now();
         part.setReceived(true);
-        part.setReceivedAt(Instant.now());
+        part.setReceivedAt(now);
         partRepo.save(part);
+
+        job.setLastProgressAt(now);
+        jobRepo.save(job);
 
         assembleIfComplete(jobId);
     }
 
     private void assembleIfComplete(String jobId) throws Exception {
         UserExportJob job = jobRepo.findById(jobId).orElseThrow();
-        if (job.getStatus() == UserExportJob.Status.COMPLETED || job.getStatus() == UserExportJob.Status.EXPIRED) return;
+
+        if (job.getStatus() == UserExportJob.Status.COMPLETED
+                || job.getStatus() == UserExportJob.Status.EXPIRED
+                || job.getStatus() == UserExportJob.Status.FAILED) {
+            return;
+        }
 
         List<UserExportJobPart> parts = partRepo.findByJob_Id(jobId);
 
@@ -141,32 +176,39 @@ public class UserExportService {
 
         String base = "exports/" + job.getUserId() + "/" + job.getId() + "/parts/";
 
+        parts.sort(Comparator.comparing(UserExportJobPart::getService));
+
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(out)) {
+
             for (UserExportJobPart part : parts) {
                 String svc = part.getService();
                 String key = base + svc + ".json";
                 byte[] bytes = storage.getBytes(key);
 
-                zip.putNextEntry(new ZipEntry(svc + ".json"));
+                String entryName = zipEntryForService(svc);
+                zip.putNextEntry(new ZipEntry(entryName));
                 zip.write(bytes);
                 zip.closeEntry();
             }
 
-            Map<String, Object> manifest = Map.of(
+            Map<String, Object> summary = Map.of(
                     "jobId", job.getId(),
                     "userId", job.getUserId(),
+                    "status", "COMPLETED",
                     "createdAt", job.getCreatedAt(),
                     "generatedAt", Instant.now(),
-                    "parts", parts.stream().map(p -> Map.of(
-                            "service", p.getService(),
-                            "received", p.isReceived(),
+                    "expiresAt", job.getExpiresAt(),
+                    "zipTtlHours", zipTtlHours,
+                    "files", parts.stream().map(p -> Map.of(
+                            "name", zipEntryForService(p.getService()),
+                            "sourceService", p.getService(),
                             "receivedAt", p.getReceivedAt()
                     )).toList()
             );
 
-            zip.putNextEntry(new ZipEntry("manifest.json"));
-            zip.write(mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(manifest));
+            zip.putNextEntry(new ZipEntry(SUMMARY_ENTRY));
+            zip.write(mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(summary));
             zip.closeEntry();
         }
 
@@ -195,18 +237,57 @@ public class UserExportService {
         return storage.presignGet(job.getZipObjectKey(), presignTtlSeconds);
     }
 
+    @Scheduled(fixedDelayString = "${app.keycloak.gdpr.export.watchdogMs:60000}")
+    @Transactional
+    public void failStalledJobs() {
+        Instant now = Instant.now();
+        Duration stall = Duration.ofMinutes(stallMinutes);
+
+        for (UserExportJob job : jobRepo.findAll()) {
+            if (job.getStatus() != UserExportJob.Status.RUNNING) continue;
+
+            if (job.getExpiresAt() != null && job.getExpiresAt().isBefore(now)) continue;
+
+            Instant last = job.getLastProgressAt();
+            if (last == null) last = job.getCreatedAt();
+
+            if (last != null && last.plus(stall).isBefore(now)) {
+                List<UserExportJobPart> parts = partRepo.findByJob_Id(job.getId());
+                List<String> missing = parts.stream()
+                        .filter(p -> !p.isReceived())
+                        .map(UserExportJobPart::getService)
+                        .sorted()
+                        .toList();
+
+                job.setStatus(UserExportJob.Status.FAILED);
+                job.setFailedAt(now);
+                job.setFailureReason("Timed out waiting for parts: " + String.join(", ", missing));
+                jobRepo.save(job);
+
+                log.warn("Export job {} FAILED (stalled). Missing={}", job.getId(), missing);
+            }
+        }
+    }
+
     @Scheduled(fixedDelayString = "${app.keycloak.gdpr.export.cleanupMs:3600000}")
+    @Transactional
     public void cleanupExpired() {
         Instant now = Instant.now();
+
         for (UserExportJob job : jobRepo.findAll()) {
-            if (job.getExpiresAt() != null && job.getExpiresAt().isBefore(now)
-                    && job.getStatus() != UserExportJob.Status.EXPIRED) {
-                try {
-                    if (job.getZipObjectKey() != null) storage.deleteObject(job.getZipObjectKey());
-                } catch (Exception ignored) {}
+            if (job.getExpiresAt() == null) continue;
+            if (!job.getExpiresAt().isBefore(now)) continue;
+
+            if (job.getStatus() == UserExportJob.Status.EXPIRED) continue;
+
+            try {
+                if (job.getZipObjectKey() != null) storage.deleteObject(job.getZipObjectKey());
+            } catch (Exception ignored) {}
+
+            if (job.getStatus() != UserExportJob.Status.FAILED) {
                 job.setStatus(UserExportJob.Status.EXPIRED);
-                jobRepo.save(job);
             }
+            jobRepo.save(job);
         }
     }
 }

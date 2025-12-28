@@ -61,6 +61,9 @@ export interface ExportJobDTO {
   createdAt?: string;
   expiresAt?: string;
   errorMessage?: string;
+  lastProgressAt?: string;
+  failureReason?: string | null;
+  missingParts?: string[];
 }
 
 export interface ExportJobDownloadDTO {
