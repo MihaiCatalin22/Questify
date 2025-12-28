@@ -5,7 +5,7 @@ resources:
   - ../../../base/quest-service
 images:
   - name: ghcr.io/mihaicatalin22/questify-quest-service
-    newTag: feat-cicd2-72fb708
+    newTag: feat-cicd2-cc65d03
 patches:
   - path: patch-env.yaml
     target:
