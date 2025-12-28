@@ -10,6 +10,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestController
@@ -25,11 +27,13 @@ public class UserExportJobsController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> create(Authentication auth) {
         var job = exports.createJob(auth.getName());
-        return ResponseEntity.accepted().body(Map.of(
-                "jobId", job.getId(),
-                "status", job.getStatus().name(),
-                "expiresAt", job.getExpiresAt()
-        ));
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("jobId", job.getId());
+        body.put("status", job.getStatus().name());
+        body.put("expiresAt", job.getExpiresAt());
+
+        return ResponseEntity.accepted().body(body);
     }
 
     @GetMapping("/{jobId}")
@@ -39,6 +43,16 @@ public class UserExportJobsController {
         if (job == null) return ResponseEntity.notFound().build();
         if (!job.getUserId().equals(auth.getName())) return ResponseEntity.status(403).build();
 
+        Instant now = Instant.now();
+        if (job.getExpiresAt() != null && job.getExpiresAt().isBefore(now)
+                && job.getStatus() != UserExportJob.Status.EXPIRED) {
+
+            if (job.getStatus() != UserExportJob.Status.FAILED) {
+                job.setStatus(UserExportJob.Status.EXPIRED);
+                jobs.save(job);
+            }
+        }
+
         var jobParts = parts.findByJob_Id(jobId);
         var missingParts = jobParts.stream()
                 .filter(p -> !p.isReceived())
@@ -46,15 +60,16 @@ public class UserExportJobsController {
                 .sorted()
                 .toList();
 
-        return ResponseEntity.ok(Map.of(
-                "jobId", job.getId(),
-                "status", job.getStatus().name(),
-                "createdAt", job.getCreatedAt(),
-                "expiresAt", job.getExpiresAt(),
-                "lastProgressAt", job.getLastProgressAt(),
-                "failureReason", job.getFailureReason(),
-                "missingParts", missingParts
-        ));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("jobId", job.getId());
+        body.put("status", job.getStatus().name());
+        body.put("createdAt", job.getCreatedAt());
+        body.put("expiresAt", job.getExpiresAt());
+        body.put("lastProgressAt", job.getLastProgressAt());
+        body.put("failureReason", job.getFailureReason());
+        body.put("missingParts", missingParts);
+
+        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/{jobId}/download")
@@ -64,15 +79,16 @@ public class UserExportJobsController {
         if (job == null) return ResponseEntity.notFound().build();
         if (!job.getUserId().equals(auth.getName())) return ResponseEntity.status(403).build();
 
-        if (job.getStatus() == UserExportJob.Status.EXPIRED) {
+        Instant now = Instant.now();
+        if (job.getExpiresAt() != null && job.getExpiresAt().isBefore(now)) {
             return ResponseEntity.status(410).body(Map.of("error", "Export expired"));
         }
 
         if (job.getStatus() == UserExportJob.Status.FAILED) {
-            return ResponseEntity.status(409).body(Map.of(
-                    "error", "Export failed",
-                    "reason", job.getFailureReason()
-            ));
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("error", "Export failed");
+            body.put("reason", job.getFailureReason());
+            return ResponseEntity.status(409).body(body);
         }
 
         if (job.getZipObjectKey() == null) {
