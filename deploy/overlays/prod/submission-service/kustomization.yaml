@@ -5,7 +5,7 @@ resources:
   - ../../../base/submission-service
 images:
   - name: ghcr.io/mihaicatalin22/questify-submission-service
-    newTag: feat-cicd2-cc65d03
+    newTag: feat-cicd2-edf70f0
 
 patches:
   - path: patch-env.yaml
