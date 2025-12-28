@@ -46,7 +46,6 @@ export interface UpdateMeInput {
 export type UserProfileDTO = UserDTO;
 export type UpsertMeReq = UpdateMeInput;
 
-
 export type ExportJobStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "EXPIRED";
 
 export interface ExportJobCreatedDTO {
@@ -61,6 +60,7 @@ export interface ExportJobDTO {
   createdAt?: string;
   expiresAt?: string;
   errorMessage?: string;
+
   lastProgressAt?: string;
   failureReason?: string | null;
   missingParts?: string[];
@@ -123,7 +123,6 @@ export const UsersApi = {
     return data;
   },
 
-
   async requestExportJob(): Promise<ExportJobCreatedDTO> {
     const { data } = await http.post<ExportJobCreatedDTO>("/users/me/export-jobs");
     return data;
@@ -144,7 +143,6 @@ export const UsersApi = {
     );
     return data.url;
   },
-
 
   async create(_input: CreateUserInput): Promise<UserDTO> {
     throw new Error("User creation is handled by Keycloak/OIDC.");

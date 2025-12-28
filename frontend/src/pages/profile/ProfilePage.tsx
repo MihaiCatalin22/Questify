@@ -48,16 +48,11 @@ export default function ProfilePage() {
 
   const me = meQ.data;
 
-  const [form, setForm] = useState<UpdateMeInput>({
-    displayName: "",
-    bio: "",
-  });
-
+  const [form, setForm] = useState<UpdateMeInput>({ displayName: "", bio: "" });
   const [confirmText, setConfirmText] = useState("");
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   const isDeleted = !!me?.deletedAt;
-
   const accountAge = useMemo(() => ageDays(me?.createdAt ?? null), [me?.createdAt]);
 
   const [loadingSummary, setLoadingSummary] = useState(false);
@@ -68,13 +63,15 @@ export default function ProfilePage() {
     submissionsTotal: number;
   } | null>(null);
 
-  // GDPR export job state
   const [exportJob, setExportJob] = useState<ExportJobDTO | null>(null);
   const [exportStarting, setExportStarting] = useState(false);
+
   const lastToastStatus = useRef<ExportJobStatus | null>(null);
   const pollTimer = useRef<number | null>(null);
 
-  // Keep profile form in sync
+  // avoid spamming download attempts
+  const lastSoftDownloadAttemptAt = useRef<number>(0);
+
   useEffect(() => {
     if (!me) return;
     setForm({
@@ -83,7 +80,7 @@ export default function ProfilePage() {
     });
   }, [me?.id]);
 
-  // Persist export job to localStorage so leaving Profile doesn't "lose" it
+  // persist export job
   useEffect(() => {
     if (!exportJob) {
       localStorage.removeItem(EXPORT_STORAGE_KEY);
@@ -92,11 +89,11 @@ export default function ProfilePage() {
     try {
       localStorage.setItem(EXPORT_STORAGE_KEY, JSON.stringify(exportJob));
     } catch {
-      // ignore storage quota / blocked storage
+      // ignore
     }
   }, [exportJob]);
 
-  // Restore last export job on mount (and refresh from backend)
+  // restore last export job on mount
   useEffect(() => {
     if (!auth.isAuthenticated) return;
 
@@ -112,7 +109,6 @@ export default function ProfilePage() {
         setExportJob((prev) => ({ ...(prev ?? stored), ...fresh }));
       } catch (e: any) {
         const status = e?.response?.status;
-        // If it's not accessible / not found, clear it so the UI doesn't get stuck
         if (status === 403 || status === 404) {
           localStorage.removeItem(EXPORT_STORAGE_KEY);
           setExportJob(null);
@@ -137,12 +133,7 @@ export default function ProfilePage() {
     try {
       setExportStarting(true);
 
-      // Optional: clear previous job from state (keeps UI clean)
-      // (ZIP is still accessible if you stored its jobId elsewhere; we store only latest)
-      // setExportJob(null);
-
       const created = await UsersApi.requestExportJob();
-
       const job: ExportJobDTO = {
         jobId: created.jobId,
         status: created.status,
@@ -159,38 +150,41 @@ export default function ProfilePage() {
     }
   }
 
-  async function downloadExport(jobId: string) {
+  async function downloadExport(jobId: string, quiet409: boolean = false) {
     try {
       const url = await UsersApi.getExportDownloadUrl(jobId);
       window.location.href = url;
+      return true;
     } catch (e: any) {
       const status = e?.response?.status;
       const data = e?.response?.data;
 
       if (status === 409) {
-        // could be not ready OR failed
+        if (quiet409) return false;
+
         if (data?.reason) {
           toast.error(String(data.reason));
-          return;
+          return false;
         }
         if (data?.error) {
           toast.error(String(data.error));
-          return;
+          return false;
         }
         toast("Export not ready yet — try again in a moment.");
-        return;
+        return false;
       }
 
       if (status === 410) {
         toast.error("Export expired. Please request a new one.");
-        return;
+        return false;
       }
 
       toast.error(e?.message ?? "Failed to download export");
+      return false;
     }
   }
 
-  // Poll export status while RUNNING/PENDING
+  // poll export status
   useEffect(() => {
     const jobId = exportJob?.jobId;
     const status = exportJob?.status;
@@ -213,6 +207,7 @@ export default function ProfilePage() {
           ...next,
         }));
 
+        // toast transitions
         if (lastToastStatus.current !== next.status) {
           lastToastStatus.current = next.status;
 
@@ -229,6 +224,7 @@ export default function ProfilePage() {
           if (next.status === "EXPIRED") toast.error("Export expired. Please request a new one.");
         }
 
+        // normal completion path
         if (next.status === "COMPLETED") {
           if (pollTimer.current) {
             window.clearInterval(pollTimer.current);
@@ -236,6 +232,16 @@ export default function ProfilePage() {
           }
           toast.success("Export ready! Downloading…");
           await downloadExport(jobId);
+          return;
+        }
+
+        // ✅ soft attempt: if parts are done but status hasn't flipped yet
+        if (next.status === "RUNNING" && (next.missingParts?.length ?? 0) === 0) {
+          const now = Date.now();
+          if (now - lastSoftDownloadAttemptAt.current > 8000) {
+            lastSoftDownloadAttemptAt.current = now;
+            await downloadExport(jobId, true); // quiet 409
+          }
         }
       } catch (e: any) {
         toast.error(e?.message ?? "Failed to check export status");
@@ -310,12 +316,13 @@ export default function ProfilePage() {
   }, [me?.id]);
 
   if (meQ.isLoading) return <div className="p-6 opacity-70">Loading…</div>;
-  if (meQ.isError)
+  if (meQ.isError) {
     return (
       <div className="p-6 text-red-600">
         {(meQ.error as any)?.message || "Failed to load profile"}
       </div>
     );
+  }
 
   return (
     <div className="p-6 space-y-6 max-w-4xl">
@@ -427,14 +434,14 @@ export default function ProfilePage() {
                 : "Request data export (ZIP)"}
           </button>
 
-          {exportJob?.status === "COMPLETED" && exportJob.jobId && (
+          {exportJob?.jobId && (
             <button
               onClick={() => downloadExport(exportJob.jobId)}
               disabled={isDeleted}
               className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
                          bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800 disabled:opacity-60"
             >
-              Download export (ZIP)
+              Download export (if ready)
             </button>
           )}
         </div>
@@ -448,19 +455,16 @@ export default function ProfilePage() {
               <div>
                 Export status: <span className="font-medium">{exportJob.status}</span>
               </div>
-              <div>Export jobId: <span className="font-mono">{exportJob.jobId}</span></div>
+              <div>
+                Export jobId: <span className="font-mono">{exportJob.jobId}</span>
+              </div>
               {exportJob.expiresAt && <div>Export expires: {formatDate(exportJob.expiresAt)}</div>}
               {exportJob.createdAt && <div>Export created: {formatDate(exportJob.createdAt)}</div>}
               {exportJob.lastProgressAt && <div>Last progress: {formatDate(exportJob.lastProgressAt)}</div>}
+              {!!exportJob.missingParts?.length && <div>Missing parts: {exportJob.missingParts.join(", ")}</div>}
 
-              {exportJob.status === "FAILED" && (
-                <div className="text-xs text-red-700 dark:text-red-300">
-                  {exportJob.failureReason ? (
-                    <div>Reason: {exportJob.failureReason}</div>
-                  ) : exportJob.missingParts?.length ? (
-                    <div>Missing parts: {exportJob.missingParts.join(", ")}</div>
-                  ) : null}
-                </div>
+              {exportJob.status === "FAILED" && exportJob.failureReason && (
+                <div className="text-xs text-red-700 dark:text-red-300">Reason: {exportJob.failureReason}</div>
               )}
             </div>
           )}

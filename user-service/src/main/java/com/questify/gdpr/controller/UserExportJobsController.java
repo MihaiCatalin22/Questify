@@ -46,7 +46,6 @@ public class UserExportJobsController {
         Instant now = Instant.now();
         if (job.getExpiresAt() != null && job.getExpiresAt().isBefore(now)
                 && job.getStatus() != UserExportJob.Status.EXPIRED) {
-
             if (job.getStatus() != UserExportJob.Status.FAILED) {
                 job.setStatus(UserExportJob.Status.EXPIRED);
                 jobs.save(job);
