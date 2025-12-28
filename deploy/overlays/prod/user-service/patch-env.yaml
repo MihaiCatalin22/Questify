@@ -22,3 +22,13 @@ spec:
                 secretKeyRef:
                   name: user-service-keycloak-admin
                   key: KC_ADMIN_CLIENT_SECRET
+            - name: SECURITY_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: internal-token
+                  key: token
+            - name: INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: internal-token
+                  key: token

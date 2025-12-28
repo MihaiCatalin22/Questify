@@ -20,3 +20,8 @@ spec:
                 secretKeyRef:
                   name: internal-token
                   key: token
+            - name: SECURITY_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: internal-token
+                  key: token

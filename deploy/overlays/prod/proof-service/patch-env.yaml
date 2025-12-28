@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: proof-service
-  namespace: default
 spec:
   template:
     spec:
@@ -10,6 +9,11 @@ spec:
         - name: proof-service
           env:
             - name: SECURITY_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: internal-token
+                  key: token
+            - name: INTERNAL_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: internal-token
