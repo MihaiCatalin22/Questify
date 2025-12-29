@@ -126,11 +126,6 @@ spec:
         - analysis:
             templates:
               - templateName: quest-service-success-rate
-                args:
-                  - name: job
-                    value: quest-service
-                  - name: namespace
-                    value: default
         - pause:
             duration: 60s
 
@@ -138,11 +133,6 @@ spec:
         - analysis:
             templates:
               - templateName: quest-service-success-rate
-                args:
-                  - name: job
-                    value: quest-service
-                  - name: namespace
-                    value: default
         - pause:
             duration: 120s
 

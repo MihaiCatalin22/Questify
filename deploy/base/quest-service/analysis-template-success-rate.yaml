@@ -4,9 +4,6 @@ metadata:
   name: quest-service-success-rate
   namespace: default
 spec:
-  args:
-    - name: job
-    - name: namespace
   metrics:
     - name: http-success-rate
       interval: 30s
@@ -17,6 +14,6 @@ spec:
         prometheus:
           address: http://kps-kube-prometheus-stack-prometheus.monitoring.svc:9090
           query: |
-            sum(rate(http_server_requests_seconds_count{namespace="{{args.namespace}}", job="{{args.job}}", status!~"5..", uri!~"/actuator.*"}[2m]))
+            sum(rate(http_server_requests_seconds_count{namespace="default", job="quest-service", status!~"5..", uri!~"/actuator.*"}[2m]))
             /
-            sum(rate(http_server_requests_seconds_count{namespace="{{args.namespace}}", job="{{args.job}}", uri!~"/actuator.*"}[2m]))
+            sum(rate(http_server_requests_seconds_count{namespace="default", job="quest-service", uri!~"/actuator.*"}[2m]))
