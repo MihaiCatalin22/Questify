@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   args:
-    - name: prometheus-url
+    - name: prometheusUrl
     - name: job
     - name: namespace
   metrics:
@@ -16,7 +16,7 @@ spec:
       successCondition: result[0] >= 0.99
       provider:
         prometheus:
-          address: "{{args.prometheus-url}}"
+          address: "{{args.prometheusUrl}}"
           query: |
             sum(rate(http_server_requests_seconds_count{namespace="{{args.namespace}}", job="{{args.job}}", status!~"5..", uri!~"/actuator.*"}[2m]))
             /

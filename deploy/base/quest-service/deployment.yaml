@@ -127,7 +127,7 @@ spec:
             templates:
               - templateName: quest-service-success-rate
                 args:
-                  - name: prometheus-url
+                  - name: prometheusurl
                     value: http://kps-kube-prometheus-stack-prometheus.monitoring.svc:9090
                   - name: job
                     value: quest-service
@@ -141,7 +141,7 @@ spec:
             templates:
               - templateName: quest-service-success-rate
                 args:
-                  - name: prometheus-url
+                  - name: prometheusurl
                     value: http://kps-kube-prometheus-stack-prometheus.monitoring.svc:9090
                   - name: job
                     value: quest-service
