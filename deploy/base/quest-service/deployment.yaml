@@ -118,14 +118,37 @@ spec:
               memory: "512Mi"
 
   strategy:
-    canary:
-      maxSurge: 1
-      maxUnavailable: 0
-      steps:
-        - setWeight: 20
-        - pause:
-            duration: 60s
-        - setWeight: 50
-        - pause:
-            duration: 120s
-        - setWeight: 100
+  canary:
+    maxSurge: 1
+    maxUnavailable: 0
+    steps:
+      - setWeight: 20
+      - analysis:
+          templates:
+            - templateName: quest-service-success-rate
+              args:
+                - name: prometheus-url
+                  value: http://kps-kube-prometheus-stack-prometheus.monitoring.svc:9090
+                - name: job
+                  value: quest-service
+                - name: namespace
+                  value: default
+      - pause:
+          duration: 60s
+
+      - setWeight: 50
+      - analysis:
+          templates:
+            - templateName: quest-service-success-rate
+              args:
+                - name: prometheus-url
+                  value: http://kps-kube-prometheus-stack-prometheus.monitoring.svc:9090
+                - name: job
+                  value: quest-service
+                - name: namespace
+                  value: default
+      - pause:
+          duration: 120s
+
+      - setWeight: 100
+
