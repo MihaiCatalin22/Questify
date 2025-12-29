@@ -2,6 +2,8 @@ package com.questify.service;
 
 import com.questify.client.ProofClient;
 import com.questify.domain.ReviewStatus;
+import com.questify.domain.SubmissionProof;
+import com.questify.repository.SubmissionProofRepository;
 import com.questify.repository.SubmissionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +22,7 @@ import java.util.List;
 public class ProofRetentionService {
 
     private final SubmissionRepository submissions;
+    private final SubmissionProofRepository submissionProofs;
     private final ProofClient proofClient;
 
     @Value("${app.gdpr.proof-retention-days:30}")
@@ -30,19 +33,34 @@ public class ProofRetentionService {
     public void run() {
         Instant cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
 
-        var targets = submissions.findByStatusInAndReviewedAtBeforeAndProofDeletedAtIsNull(
-                List.of(ReviewStatus.APPROVED, ReviewStatus.REJECTED),
-                cutoff
-        );
+        List<ReviewStatus> statuses = List.of(ReviewStatus.APPROVED, ReviewStatus.REJECTED);
+
+        var targets = submissions.findByStatusInAndReviewedAtBeforeAndProofDeletedAtIsNull(statuses, cutoff);
 
         for (var s : targets) {
-            try {
-                proofClient.deleteInternalObject(s.getProofKey());
+            List<String> keys = submissionProofs.findBySubmissionIdOrderByCreatedAtAsc(s.getId())
+                    .stream()
+                    .map(SubmissionProof::getProofKey)
+                    .filter(k -> k != null && !k.isBlank())
+                    .toList();
 
+            if (keys.isEmpty() && s.getProofKey() != null && !s.getProofKey().isBlank()) {
+                keys = List.of(s.getProofKey());
+            }
+
+            boolean ok = true;
+            for (String key : keys) {
+                try {
+                    proofClient.deleteInternalObject(key);
+                } catch (Exception e) {
+                    ok = false;
+                    log.warn("Retention delete failed: submissionId={} key={} err={}",
+                            s.getId(), key, e.toString());
+                }
+            }
+
+            if (ok) {
                 s.setProofDeletedAt(Instant.now());
-            } catch (Exception e) {
-                log.warn("Retention delete failed: submissionId={} key={} err={}",
-                        s.getId(), s.getProofKey(), e.toString());
             }
         }
     }

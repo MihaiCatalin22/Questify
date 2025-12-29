@@ -20,7 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
-import java.util.Map;
+import java.util.*;
 
 @RestController
 @RequestMapping("/submissions")
@@ -29,6 +29,7 @@ public class SubmissionController {
     private final SubmissionService service;
     private final JwtAuth jwt;
     private final QuestAccessClient questAccess;
+
     public record SubmissionSummaryRes(long submissionsTotal) {}
 
     public SubmissionController(SubmissionService service, JwtAuth jwt, QuestAccessClient questAccess) {
@@ -57,12 +58,36 @@ public class SubmissionController {
     public ResponseEntity<SubmissionRes> createMultipart(
             @RequestParam("questId") Long questId,
             @RequestParam(value = "comment", required = false) String comment,
-            @RequestParam("file") MultipartFile file,
+
+            // New: multi
+            @RequestParam(value = "files", required = false) List<MultipartFile> files,
+
+            // Back-compat: single
+            @RequestParam(value = "file", required = false) MultipartFile file,
+
             Authentication auth,
             @RequestHeader(name = "Authorization", required = false) String authorization
     ) {
-        String bearer = (authorization != null && authorization.startsWith("Bearer ")) ? authorization.substring(7) : null;
-        var saved = service.createFromMultipart(questId, comment, file, jwt.userId(auth), bearer);
+        String bearer = (authorization != null && authorization.startsWith("Bearer "))
+                ? authorization.substring(7)
+                : null;
+
+        List<MultipartFile> all = new ArrayList<>();
+        if (file != null && !file.isEmpty()) all.add(file);
+        if (files != null) {
+            for (var f : files) {
+                if (f != null && !f.isEmpty()) all.add(f);
+            }
+        }
+
+        if (all.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one file is required");
+        }
+
+        var saved = (all.size() == 1)
+                ? service.createFromMultipart(questId, comment, all.get(0), jwt.userId(auth), bearer)
+                : service.createFromMultipartMany(questId, comment, all, jwt.userId(auth), bearer);
+
         return ResponseEntity.created(URI.create("/submissions/" + saved.getId()))
                 .body(SubmissionMapper.toRes(saved));
     }
@@ -133,7 +158,7 @@ public class SubmissionController {
         if (elevated) {
             data = (status != null)
                     ? service.byStatus(status, page, size)
-                    : service.all(page, size); 
+                    : service.all(page, size);
         } else {
             data = service.mine(jwt.userId(auth), page, size);
         }
@@ -141,7 +166,6 @@ public class SubmissionController {
         var mapped = data.map(SubmissionMapper::toRes);
         return new PageImpl<>(mapped.getContent(), data.getPageable(), data.getTotalElements());
     }
-
 
     @GetMapping("/{id}/proof")
     @PreAuthorize("isAuthenticated()")
@@ -173,5 +197,22 @@ public class SubmissionController {
 
         String signed = service.signedGetUrl(key);
         return Map.of("url", signed, "expiresInSeconds", 900);
+    }
+
+    @GetMapping("/{id}/proof-urls")
+    @PreAuthorize("isAuthenticated()")
+    public Map<String, Object> proofUrls(@PathVariable Long id, Authentication auth) {
+        var s = service.get(id);
+        var userId = jwt.userId(auth);
+        boolean elevated = hasRole(auth, "ADMIN") || hasRole(auth, "REVIEWER");
+        boolean allowed = elevated || userId.equals(s.getUserId()) || questAccess.allowed(userId, s.getQuestId());
+        if (!allowed) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed");
+
+        var urls = service.signedGetUrlsForSubmission(id);
+        if (urls == null || urls.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No proof");
+        }
+
+        return Map.of("urls", urls, "expiresInSeconds", 900);
     }
 }

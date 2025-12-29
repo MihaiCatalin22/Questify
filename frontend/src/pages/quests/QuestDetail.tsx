@@ -5,10 +5,8 @@ import { useCreateSubmission, useSubmissionsForQuest } from '../../hooks/useSubm
 import { useAuthContext } from '../../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import http from '../../api/https';
+import type { SubmissionDTO } from '../../types/submission';
 
-// ---- helpers --------------------------------------------------------------
-
-/** Get the bearer token from our AuthContext. */
 function getBearer(auth: ReturnType<typeof useAuthContext> | any): string | null {
   try {
     const fromFn = auth?.getAuthToken?.();
@@ -19,13 +17,11 @@ function getBearer(auth: ReturnType<typeof useAuthContext> | any): string | null
   }
 }
 
-/** IMPORTANT: Do NOT rewrite presigned URLs (SigV4 is path-sensitive). */
 function toSameOriginS3(url?: string | null): string | null {
   if (!url) return null;
   return url;
 }
 
-/** Quick magic-number sniff for common image formats */
 async function looksLikeImage(blob: Blob): Promise<boolean> {
   try {
     const head = await blob.slice(0, 16).arrayBuffer();
@@ -40,7 +36,6 @@ async function looksLikeImage(blob: Blob): Promise<boolean> {
   }
 }
 
-/** Turn a (public/presigned) URL into a renderable image source. */
 async function materializeRenderableSrc(url: string): Promise<{ src: string; revoke?: () => void }> {
   const res = await fetch(url, {
     credentials: 'same-origin',
@@ -60,7 +55,6 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
   }
 
   try {
-    // @ts-ignore
     const bmp = await createImageBitmap(blob);
     const canvas = document.createElement('canvas');
     canvas.width = bmp.width || 1;
@@ -69,7 +63,7 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
     if (!ctx) throw new Error('No 2D context');
     ctx.drawImage(bmp, 0, 0);
     const dataUrl = canvas.toDataURL('image/png');
-    if (bmp.close) try { bmp.close(); } catch {}
+    if ((bmp as any).close) try { (bmp as any).close(); } catch {}
     return { src: dataUrl };
   } catch {
     const obj = URL.createObjectURL(blob);
@@ -77,15 +71,10 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
   }
 }
 
-/**
- * Client-side downscale & recompress to keep uploads small and avoid 413s.
- * Target ~0.8 MB, max side 1800 px (tweak if needed).
- */
 async function maybeDownscaleImage(file: File, targetBytes = 0.8 * 1024 * 1024, maxSide = 1800): Promise<File> {
   try {
     if (file.size <= targetBytes) return file;
 
-    // @ts-ignore
     const bmp = await createImageBitmap(file);
     const ratio = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
     const w = Math.max(1, Math.round(bmp.width * ratio));
@@ -102,7 +91,6 @@ async function maybeDownscaleImage(file: File, targetBytes = 0.8 * 1024 * 1024, 
     let blob: Blob | null = await new Promise(res => canvas.toBlob(res, 'image/jpeg', q));
     while (blob && blob.size > targetBytes && q > 0.5) {
       q -= 0.1;
-      // eslint-disable-next-line no-await-in-loop
       blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', q));
     }
     if (!blob) return file;
@@ -114,7 +102,6 @@ async function maybeDownscaleImage(file: File, targetBytes = 0.8 * 1024 * 1024, 
   }
 }
 
-/** Fetch /submissions/:id/proof as blob with Authorization, return object URL */
 async function fetchProtectedProofAsObjectURL(submissionId: string, bearer?: string): Promise<{ src: string; revoke: () => void }> {
   const res = await http.get(`/submissions/${submissionId}/proof`, {
     responseType: 'blob',
@@ -125,7 +112,6 @@ async function fetchProtectedProofAsObjectURL(submissionId: string, bearer?: str
   return { src: obj, revoke: () => URL.revokeObjectURL(obj) };
 }
 
-/** Image-only renderer with robust Blob+Canvas fallback and debug output */
 function ProofImage({
   url,
   height = 560,
@@ -213,12 +199,17 @@ function ProofImage({
   );
 }
 
-function SubmissionPreview({ submission }: { submission: any }) {
+function SubmissionPreview({ submission }: { submission: SubmissionDTO }) {
   const auth = useAuthContext();
   const token = getBearer(auth);
 
-  const [displayUrl, setDisplayUrl] = useState<string | null>(null);
+  const [displayUrls, setDisplayUrls] = useState<string[]>([]);
   const revokeRef = useRef<(() => void) | null>(null);
+
+  const declaredCount =
+    (submission.proofUrls?.length ?? 0) ||
+    (submission.proofKeys?.length ?? 0) ||
+    0;
 
   useEffect(() => {
     let alive = true;
@@ -226,30 +217,46 @@ function SubmissionPreview({ submission }: { submission: any }) {
       if (!submission?.id) return;
 
       if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
-      setDisplayUrl(null);
+      setDisplayUrls([]);
 
-      // Try presigned URL — attach Authorization explicitly
+      // If your backend adds: GET /submissions/:id/proof-urls -> { urls: string[], expiresInSeconds }
+      try {
+        const { data } = await http.get<{ urls: string[]; expiresInSeconds: number }>(
+          `/submissions/${submission.id}/proof-urls`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
+        );
+        const urls = (data?.urls ?? []).map(toSameOriginS3).filter(Boolean) as string[];
+        if (alive && urls.length) {
+          setDisplayUrls(urls);
+          return;
+        }
+      } catch {
+        // fall through
+      }
+
+      // Existing single-proof presigned URL
       try {
         const { data } = await http.get<{ url: string; expiresInSeconds: number }>(
           `/submissions/${submission.id}/proof-url`,
           { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
         );
         if (!alive) return;
-        setDisplayUrl(toSameOriginS3(data.url));
+        const one = toSameOriginS3(data.url);
+        setDisplayUrls(one ? [one] : []);
         return;
       } catch {
         // fall through
       }
 
-      // Auth-required fallback → blob URL
+      // Auth-required fallback → blob URL (only supports primary proof)
       try {
         const { src, revoke } = await fetchProtectedProofAsObjectURL(String(submission.id), token ?? undefined);
         if (!alive) return;
         revokeRef.current = revoke;
-        setDisplayUrl(src);
+        setDisplayUrls([src]);
       } catch {
         if (!alive) return;
-        setDisplayUrl(null);
+        setDisplayUrls([]);
       }
     })();
 
@@ -259,14 +266,20 @@ function SubmissionPreview({ submission }: { submission: any }) {
     };
   }, [submission?.id, token]);
 
-  if (!displayUrl) {
+  if (displayUrls.length === 0) {
     return <div className="text-sm text-gray-500">Generating secure link…</div>;
   }
 
+  const first = displayUrls[0];
+  const shownCount = displayUrls.length;
+  const extra = Math.max(0, (declaredCount || shownCount) - 1);
+
   return (
     <div className="mt-3 space-y-2">
-      <div className="font-semibold text-sm">Proof</div>
-      <ProofImage url={displayUrl} />
+      <div className="font-semibold text-sm">
+        Proof{extra > 0 ? ` (+${extra} more)` : ''}
+      </div>
+      <ProofImage url={first} />
     </div>
   );
 }
@@ -297,8 +310,6 @@ function InfoModal({
   );
 }
 
-// ---- page ----------------------------------------------------------------
-
 export default function QuestDetail() {
   const { id } = useParams();
   const rawId = id ?? '';
@@ -316,7 +327,9 @@ export default function QuestDetail() {
   const leave = useLeaveQuest();
 
   const [comment, setComment] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [localJoined, setLocalJoined] = useState<boolean | null>(null);
   const [showOwnerLeaveModal, setShowOwnerLeaveModal] = useState(false);
@@ -348,8 +361,8 @@ export default function QuestDetail() {
 
   const mySubs = useMemo(() => {
     const uid = user?.id != null ? String(user.id) : '';
-    return (submissions ?? []).filter((s: any) => {
-      const subUserId = String((s.userId ?? s.user?.id ?? ''));
+    return (submissions ?? []).filter((s: SubmissionDTO) => {
+      const subUserId = String((s.userId ?? ''));
       return uid && subUserId === uid;
     });
   }, [submissions, user?.id]);
@@ -360,32 +373,62 @@ export default function QuestDetail() {
     joinedByMe && !completed && status !== 'ARCHIVED' && !notStartedYet && !ended
   );
 
-  const canSend = !!file; // image file required now
+  const canSend = files.length > 0;
   const canJoin = !joinedByMe && visibility === 'PUBLIC' && status !== 'ARCHIVED' && !!safeQuestId;
   const showLeaveButton = !ended && status !== 'ARCHIVED' && !!safeQuestId && joinedByMe;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!canSubmit) return;
+    if (files.length === 0) {
+      toast.error('Attach at least one image.');
+      return;
+    }
+
+    setBatchSubmitting(true);
+    const toastId = 'upload-many';
+
     try {
-      let sending: File | null = file;
-      if (sending) {
-        sending = await maybeDownscaleImage(sending);
+      toast.loading(`Preparing ${files.length} file(s)…`, { id: toastId });
+
+      // Downscale images before upload (keep order)
+      const processed: File[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const original = files[i];
+        toast.loading(`Optimizing ${i + 1}/${files.length}…`, { id: toastId });
+
+        let f: File = original;
+        if (/^image\//i.test(f.type)) {
+          // eslint-disable-next-line no-await-in-loop
+          f = await maybeDownscaleImage(f);
+        }
+        processed.push(f);
       }
 
+      toast.loading(`Uploading ${processed.length} file(s)…`, { id: toastId });
+
+      // One request, many files (typed)
       await create.mutateAsync({
         questId: safeQuestId,
         comment: comment || undefined,
-        file: sending,
+        files: processed,
       });
-      toast.success('Submission sent!');
-      setComment(''); setFile(null);
+
+      toast.success(`Uploaded ${processed.length} proof(s)!`, { id: toastId });
+
+      setComment('');
+      setFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err: any) {
       const msg =
         err?.response?.data?.message ||
         err?.response?.data?.error ||
         err?.message ||
         'Failed to create submission';
-      toast.error(String(msg));
+      toast.error(String(msg), { id: toastId });
+    } finally {
+      setBatchSubmitting(false);
     }
   };
 
@@ -521,9 +564,9 @@ export default function QuestDetail() {
                     </div>
                   ) : (
                     <ul className="space-y-3">
-                      {mySubs.map((s: any) => {
-                        const st = (s.status ?? s.reviewStatus);
-                        const closed = Boolean(s.closed);
+                      {mySubs.map((s) => {
+                        const st = (s.status as any) ?? (s as any).reviewStatus;
+                        const closed = Boolean((s as any).closed);
 
                         return (
                           <li key={s.id} className="border rounded-xl p-3 bg-white dark:bg-[#0f1115]">
@@ -604,36 +647,66 @@ export default function QuestDetail() {
                           value={comment}
                           onChange={(e) => setComment(e.target.value)}
                           placeholder="Add context for your proof…"
-                          disabled={create.isPending || !canSubmit}
+                          disabled={batchSubmitting || create.isPending || !canSubmit}
                         />
                       </div>
 
                       <div className="text-xs text-gray-500">
-                        Attach an image
+                        Attach one or more images
                       </div>
 
                       <div className="space-y-2">
                         <input
+                          ref={fileInputRef}
                           type="file"
                           accept="image/*"
-                          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                          multiple
+                          onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
                           className="block text-sm"
-                          disabled={create.isPending || !canSubmit}
+                          disabled={batchSubmitting || create.isPending || !canSubmit}
                         />
+
+                        {files.length > 0 && (
+                          <div className="text-xs text-gray-500">
+                            Selected: <span className="font-medium">{files.length}</span> file(s)
+                            <button
+                              type="button"
+                              className="ml-2 underline"
+                              onClick={() => {
+                                setFiles([]);
+                                if (fileInputRef.current) fileInputRef.current.value = '';
+                              }}
+                              disabled={batchSubmitting || create.isPending}
+                            >
+                              clear
+                            </button>
+
+                            <div className="mt-2 space-y-1 opacity-80">
+                              {files.slice(0, 6).map((f) => (
+                                <div key={`${f.name}-${f.size}`} className="truncate" title={f.name}>
+                                  • {f.name}
+                                </div>
+                              ))}
+                              {files.length > 6 ? (
+                                <div>• …and {files.length - 6} more</div>
+                              ) : null}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="pt-1 flex items-center gap-3">
                         <button
                           type="submit"
                           className="btn-primary disabled:opacity-60"
-                          disabled={create.isPending || !canSend || !canSubmit}
-                          title={!canSend ? 'Attach an image' : 'Submit'}
+                          disabled={batchSubmitting || create.isPending || !canSend || !canSubmit}
+                          title={!canSend ? 'Attach at least one image' : 'Submit'}
                         >
-                          {create.isPending ? 'Submitting…' : 'Submit'}
+                          {batchSubmitting || create.isPending ? 'Submitting…' : 'Submit'}
                         </button>
                         {!canSend && (
                           <span className="text-xs text-gray-500">
-                            Provide an image to submit.
+                            Provide at least one image to submit.
                           </span>
                         )}
                       </div>
@@ -646,7 +719,6 @@ export default function QuestDetail() {
         )}
       </div>
 
-      {/* Restored modal usage so showOwnerLeaveModal is actually read */}
       <InfoModal
         open={showOwnerLeaveModal}
         onClose={() => setShowOwnerLeaveModal(false)}
