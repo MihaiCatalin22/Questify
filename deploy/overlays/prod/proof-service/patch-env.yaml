@@ -1,20 +1,17 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: proof-service
-spec:
-  template:
-    spec:
-      containers:
-        - name: proof-service
-          env:
-            - name: SECURITY_INTERNAL_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: internal-token
-                  key: token
-            - name: INTERNAL_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: internal-token
-                  key: token
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SECURITY_INTERNAL_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: internal-token
+        key: token
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: INTERNAL_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: internal-token
+        key: token
