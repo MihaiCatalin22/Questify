@@ -8,20 +8,21 @@ spec:
       containers:
         - name: user-service
           env:
-            - name: KC_ADMIN_BASE_URL
+            - name: APP_KEYCLOAK_ADMIN_BASE_URL
               value: "http://keycloak:8080/auth"
-            - name: KC_ADMIN_REALM
+            - name: APP_KEYCLOAK_ADMIN_REALM
               value: "questify"
-            - name: KC_ADMIN_CLIENT_ID
+            - name: APP_KEYCLOAK_ADMIN_CLIENT_ID
               valueFrom:
                 secretKeyRef:
                   name: user-service-keycloak-admin
                   key: KC_ADMIN_CLIENT_ID
-            - name: KC_ADMIN_CLIENT_SECRET
+            - name: APP_KEYCLOAK_ADMIN_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: user-service-keycloak-admin
                   key: KC_ADMIN_CLIENT_SECRET
+
             - name: SECURITY_INTERNAL_TOKEN
               valueFrom:
                 secretKeyRef:
