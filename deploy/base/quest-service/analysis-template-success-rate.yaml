@@ -5,15 +5,14 @@ metadata:
   namespace: default
 spec:
   metrics:
-    - name: http-success-rate
+    - name: http-5xx-rate
       interval: 30s
       count: 4
       failureLimit: 1
-      successCondition: result[0] >= 0.99
+      consecutiveErrorLimit: 10
+      successCondition: result[0] <= 0
       provider:
         prometheus:
           address: http://kps-kube-prometheus-stack-prometheus.monitoring.svc:9090
           query: |
-            sum(rate(http_server_requests_seconds_count{namespace="default", job="quest-service", status!~"5..", uri!~"/actuator.*"}[2m]))
-            /
-            sum(rate(http_server_requests_seconds_count{namespace="default", job="quest-service", uri!~"/actuator.*"}[2m]))
+            sum(rate(http_server_requests_seconds_count{namespace="default", job="quest-service", status=~"5..", uri!~"/actuator.*"}[2m])) or vector(0)
