@@ -7,7 +7,7 @@ resources:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-quest-service
-    newTag: feat-cicd2-1e680cb
+    newTag: feat-cicd2-8d98a6c
 
 patchesJson6902:
   - target:
