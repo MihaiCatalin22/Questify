@@ -11,6 +11,8 @@ public interface SubmissionProofRepository extends JpaRepository<SubmissionProof
 
     Optional<SubmissionProof> findByProofKey(String proofKey);
 
+    List<SubmissionProof> findBySubmissionIdOrderByCreatedAtAsc(Long submissionId);
+
     List<SubmissionProof> findBySubmissionIdOrderByIdAsc(Long submissionId);
 
     long countBySubmissionId(Long submissionId);
