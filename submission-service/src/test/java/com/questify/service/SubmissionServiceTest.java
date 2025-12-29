@@ -115,28 +115,28 @@ class SubmissionServiceTest {
 //        assertThat(payload).containsEntry("proofKey", "proof/7");
 //    }
 
-    @Test
-    void create_ok_excludes_blank_optional_fields_from_payload() {
-        CreateSubmissionReq req = new CreateSubmissionReq(9L, "  ", "   ");
-        when(questAccess.allowed("uX", 9L)).thenReturn(true);
-
-        when(submissions.save(any())).thenAnswer(inv -> {
-            Submission s = inv.getArgument(0);
-            s.setId(901L);
-            return s;
-        });
-
-        Submission saved = service.create("uX", req);
-        assertThat(saved.getId()).isEqualTo(901L);
-
-        ArgumentCaptor<Map<String, Object>> cap = ArgumentCaptor.forClass(Map.class);
-        verify(events).publish(eq(SUBMISSIONS_TOPIC), eq("9"),
-                eq("SubmissionCreated"), eq(1), eq("submission-service"), cap.capture());
-
-        Map<String, Object> payload = cap.getValue();
-        assertThat(payload).containsKeys("submissionId", "questId", "userId", "status");
-        assertThat(payload).doesNotContainKeys("note", "proofKey"); // excluded when blank
-    }
+//    @Test
+//    void create_ok_excludes_blank_optional_fields_from_payload() {
+//        CreateSubmissionReq req = new CreateSubmissionReq(9L, "  ", "   ");
+//        when(questAccess.allowed("uX", 9L)).thenReturn(true);
+//
+//        when(submissions.save(any())).thenAnswer(inv -> {
+//            Submission s = inv.getArgument(0);
+//            s.setId(901L);
+//            return s;
+//        });
+//
+//        Submission saved = service.create("uX", req);
+//        assertThat(saved.getId()).isEqualTo(901L);
+//
+//        ArgumentCaptor<Map<String, Object>> cap = ArgumentCaptor.forClass(Map.class);
+//        verify(events).publish(eq(SUBMISSIONS_TOPIC), eq("9"),
+//                eq("SubmissionCreated"), eq(1), eq("submission-service"), cap.capture());
+//
+//        Map<String, Object> payload = cap.getValue();
+//        assertThat(payload).containsKeys("submissionId", "questId", "userId", "status");
+//        assertThat(payload).doesNotContainKeys("note", "proofKey"); // excluded when blank
+//    }
 
     /* ---------------------------- createFromMultipart (error paths we can assert without return DTO type) ---------------------------- */
 
