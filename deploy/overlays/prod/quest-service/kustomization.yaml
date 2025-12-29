@@ -1,17 +1,27 @@
 ﻿apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: default
+
 resources:
   - ../../../base/quest-service
+
 images:
   - name: ghcr.io/mihaicatalin22/questify-quest-service
     newTag: feat-cicd2-0116187
-patches:
-  - path: patch-env.yaml
-    target:
+
+patchesJson6902:
+  - target:
+      group: argoproj.io
+      version: v1alpha1
       kind: Rollout
       name: quest-service
-  - path: patch-resources.yaml
-    target:
+      namespace: default
+    path: patch-env.yaml
+
+  - target:
+      group: argoproj.io
+      version: v1alpha1
       kind: Rollout
       name: quest-service
+      namespace: default
+    path: patch-resources.yaml
