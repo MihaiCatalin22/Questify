@@ -4,4 +4,4 @@ resources:
   - serviceaccount.yaml
   - deployment.yaml
   - service.yaml
-  - analysis-template-success-rate.yaml
+  - analysis-template-5xx-rate.yaml
