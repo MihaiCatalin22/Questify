@@ -1,13 +1,9 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: Rollout
 metadata:
   name: quest-service
   namespace: default
 spec:
-  strategy:
-    rollingUpdate:
-      maxSurge: 0
-      maxUnavailable: 1
   template:
     spec:
       containers:

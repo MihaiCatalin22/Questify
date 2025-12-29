@@ -9,5 +9,9 @@ images:
 patches:
   - path: patch-env.yaml
     target:
-      kind: Deployment
+      kind: Rollout
+      name: quest-service
+  - path: patch-resources.yaml
+    target:
+      kind: Rollout
       name: quest-service

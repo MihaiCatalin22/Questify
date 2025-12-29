@@ -29,7 +29,17 @@ async function looksLikeImage(blob: Blob): Promise<boolean> {
     if (b[0] === 0xff && b[1] === 0xd8) return true; // JPEG
     if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return true; // PNG
     if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return true; // GIF
-    if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return true; // WEBP
+    if (
+      b[0] === 0x52 &&
+      b[1] === 0x49 &&
+      b[2] === 0x46 &&
+      b[3] === 0x46 &&
+      b[8] === 0x57 &&
+      b[9] === 0x45 &&
+      b[10] === 0x42 &&
+      b[11] === 0x50
+    )
+      return true; // WEBP
     return false;
   } catch {
     return false;
@@ -50,7 +60,9 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
   const imageish = /^image\//i.test(ct) || (await looksLikeImage(blob));
   if (!imageish) {
     let excerpt = '';
-    try { excerpt = (await blob.text()).slice(0, 300); } catch {}
+    try {
+      excerpt = (await blob.text()).slice(0, 300);
+    } catch {}
     throw new Error(excerpt ? `Non-image response:\n${excerpt}` : 'Non-image response (no preview)');
   }
 
@@ -71,11 +83,23 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
   }
 }
 
-async function maybeDownscaleImage(file: File, targetBytes = 0.8 * 1024 * 1024, maxSide = 1800): Promise<File> {
+/**
+ * ✅ Strips EXIF/GPS/time metadata by re-encoding via Canvas.
+ * - Resizes if needed
+ * - Tries to preserve original format (png/webp/jpeg)
+ * - Keeps GIF as-is (avoid breaking animation)
+ */
+async function sanitizeImageForUpload(
+  file: File,
+  targetBytes = 0.8 * 1024 * 1024,
+  maxSide = 1800
+): Promise<File> {
   try {
-    if (file.size <= targetBytes) return file;
+    // Keep GIFs as-is (canvas would flatten / break animation).
+    if (/^image\/gif$/i.test(file.type)) return file;
 
     const bmp = await createImageBitmap(file);
+
     const ratio = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
     const w = Math.max(1, Math.round(bmp.width * ratio));
     const h = Math.max(1, Math.round(bmp.height * ratio));
@@ -87,22 +111,55 @@ async function maybeDownscaleImage(file: File, targetBytes = 0.8 * 1024 * 1024, 
     if (!ctx) return file;
     ctx.drawImage(bmp, 0, 0, w, h);
 
-    let q = 0.85;
-    let blob: Blob | null = await new Promise(res => canvas.toBlob(res, 'image/jpeg', q));
-    while (blob && blob.size > targetBytes && q > 0.5) {
-      q -= 0.1;
-      blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', q));
+    if ((bmp as any).close) try { (bmp as any).close(); } catch {}
+
+    const inputType = (file.type || '').toLowerCase();
+    const preferredType =
+      inputType === 'image/png' ? 'image/png'
+      : inputType === 'image/webp' ? 'image/webp'
+      : 'image/jpeg';
+
+    const makeBlob = (type: string, quality?: number) =>
+      new Promise<Blob | null>((res) => canvas.toBlob(res, type, quality));
+
+    let outType = preferredType;
+
+    let q = 0.9;
+    let blob = await makeBlob(outType, outType === 'image/jpeg' ? q : undefined);
+
+    // Fallback if browser can't encode preferred type
+    if (!blob) {
+      outType = 'image/jpeg';
+      blob = await makeBlob(outType, q);
     }
     if (!blob) return file;
 
-    const name = file.name.replace(/\.(png|webp|gif|jpeg|jpg)$/i, '') + '.jpg';
-    return new File([blob], name, { type: 'image/jpeg' });
+    // Only JPEG supports quality tuning. PNG ignores it.
+    if (outType === 'image/jpeg') {
+      while (blob.size > targetBytes && q > 0.5) {
+        q -= 0.1;
+        const b2 = await makeBlob(outType, q);
+        if (!b2) break;
+        blob = b2;
+      }
+    }
+
+    const ext =
+      outType === 'image/png' ? '.png'
+      : outType === 'image/webp' ? '.webp'
+      : '.jpg';
+
+    const base = file.name.replace(/\.(png|webp|gif|jpeg|jpg)$/i, '');
+    return new File([blob], `${base}${ext}`, { type: outType });
   } catch {
     return file;
   }
 }
 
-async function fetchProtectedProofAsObjectURL(submissionId: string, bearer?: string): Promise<{ src: string; revoke: () => void }> {
+async function fetchProtectedProofAsObjectURL(
+  submissionId: string,
+  bearer?: string
+): Promise<{ src: string; revoke: () => void }> {
   const res = await http.get(`/submissions/${submissionId}/proof`, {
     responseType: 'blob',
     headers: bearer ? { Authorization: `Bearer ${bearer}` } : undefined,
@@ -116,7 +173,11 @@ function ProofImage({
   url,
   height = 560,
   eager = false,
-}: { url: string; height?: number; eager?: boolean }) {
+}: {
+  url: string;
+  height?: number;
+  eager?: boolean;
+}) {
   const box: React.CSSProperties = {
     width: '100%',
     height,
@@ -141,11 +202,16 @@ function ProofImage({
     setSrc(url);
     setDebug(null);
     setTriedFallback(false);
-    if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
+    if (revokeRef.current) {
+      revokeRef.current();
+      revokeRef.current = null;
+    }
   }, [url]);
 
   useEffect(() => {
-    return () => { if (revokeRef.current) revokeRef.current(); };
+    return () => {
+      if (revokeRef.current) revokeRef.current();
+    };
   }, []);
 
   const handleError = async () => {
@@ -199,6 +265,7 @@ function ProofImage({
   );
 }
 
+/** ✅ Collapsed by default, expandable to show all proofs (like SubmissionDetail) */
 function SubmissionPreview({ submission }: { submission: SubmissionDTO }) {
   const auth = useAuthContext();
   const token = getBearer(auth);
@@ -206,20 +273,24 @@ function SubmissionPreview({ submission }: { submission: SubmissionDTO }) {
   const [displayUrls, setDisplayUrls] = useState<string[]>([]);
   const revokeRef = useRef<(() => void) | null>(null);
 
-  const declaredCount =
-    (submission.proofUrls?.length ?? 0) ||
-    (submission.proofKeys?.length ?? 0) ||
-    0;
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [submission?.id]);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       if (!submission?.id) return;
 
-      if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
+      if (revokeRef.current) {
+        revokeRef.current();
+        revokeRef.current = null;
+      }
       setDisplayUrls([]);
 
-      // If your backend adds: GET /submissions/:id/proof-urls -> { urls: string[], expiresInSeconds }
+      // 1) Multi-proof endpoint
       try {
         const { data } = await http.get<{ urls: string[]; expiresInSeconds: number }>(
           `/submissions/${submission.id}/proof-urls`,
@@ -234,7 +305,7 @@ function SubmissionPreview({ submission }: { submission: SubmissionDTO }) {
         // fall through
       }
 
-      // Existing single-proof presigned URL
+      // 2) Single-proof endpoint
       try {
         const { data } = await http.get<{ url: string; expiresInSeconds: number }>(
           `/submissions/${submission.id}/proof-url`,
@@ -248,9 +319,12 @@ function SubmissionPreview({ submission }: { submission: SubmissionDTO }) {
         // fall through
       }
 
-      // Auth-required fallback → blob URL (only supports primary proof)
+      // 3) Auth fallback (primary proof only)
       try {
-        const { src, revoke } = await fetchProtectedProofAsObjectURL(String(submission.id), token ?? undefined);
+        const { src, revoke } = await fetchProtectedProofAsObjectURL(
+          String(submission.id),
+          token ?? undefined
+        );
         if (!alive) return;
         revokeRef.current = revoke;
         setDisplayUrls([src]);
@@ -262,7 +336,10 @@ function SubmissionPreview({ submission }: { submission: SubmissionDTO }) {
 
     return () => {
       alive = false;
-      if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
+      if (revokeRef.current) {
+        revokeRef.current();
+        revokeRef.current = null;
+      }
     };
   }, [submission?.id, token]);
 
@@ -270,23 +347,58 @@ function SubmissionPreview({ submission }: { submission: SubmissionDTO }) {
     return <div className="text-sm text-gray-500">Generating secure link…</div>;
   }
 
-  const first = displayUrls[0];
-  const shownCount = displayUrls.length;
-  const extra = Math.max(0, (declaredCount || shownCount) - 1);
+  const total = displayUrls.length;
+  const extra = Math.max(0, total - 1);
 
   return (
     <div className="mt-3 space-y-2">
-      <div className="font-semibold text-sm">
-        Proof{extra > 0 ? ` (+${extra} more)` : ''}
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-semibold text-sm">
+          Proof{!expanded && extra > 0 ? ` (+${extra} more)` : ''}
+        </div>
+
+        {total > 1 && (
+          <button
+            type="button"
+            className="text-xs underline opacity-70 hover:opacity-100"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? 'Hide' : `Show all (${total})`}
+          </button>
+        )}
       </div>
-      <ProofImage url={first} />
+
+      {!expanded ? (
+        <ProofImage url={displayUrls[0]} eager height={520} />
+      ) : (
+        <div className="space-y-4">
+          {displayUrls.map((u, idx) => (
+            <div key={`${u}-${idx}`}>
+              {total > 1 ? (
+                <div className="text-xs opacity-70 mb-2">
+                  Proof {idx + 1} of {total}
+                </div>
+              ) : null}
+              <ProofImage url={u} eager={idx === 0} height={520} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 function InfoModal({
-  open, onClose, title, children,
-}: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -294,7 +406,9 @@ function InfoModal({
       <div className="relative z-10 w-full max-w-md rounded-2xl border bg-white p-5 shadow-xl dark:bg-[#0f1115] dark:border-slate-700">
         <div className="flex items-start justify-between">
           <h3 className="text-lg font-semibold">{title}</h3>
-          <button className="text-sm opacity-70 hover:opacity-100" onClick={onClose}>✕</button>
+          <button className="text-sm opacity-70 hover:opacity-100" onClick={onClose}>
+            ✕
+          </button>
         </div>
         <div className="mt-3 text-sm">{children}</div>
         <div className="mt-5 text-right">
@@ -341,11 +455,12 @@ export default function QuestDetail() {
     null;
 
   const isOwner = !!(user && ownerId && String(user.id) === String(ownerId));
-  const joinedFromServer = isOwner || !!myQuests?.some((q) => String(q.id) === String((quest as any)?.id));
-  const joinedByMe = (localJoined == null) ? joinedFromServer : localJoined;
+  const joinedFromServer =
+    isOwner || !!myQuests?.some((q) => String(q.id) === String((quest as any)?.id));
+  const joinedByMe = localJoined == null ? joinedFromServer : localJoined;
 
   const startDate = (quest as any)?.startDate ? new Date((quest as any).startDate) : null;
-  const endDate   = (quest as any)?.endDate   ? new Date((quest as any).endDate)   : null;
+  const endDate = (quest as any)?.endDate ? new Date((quest as any).endDate) : null;
   const now = new Date();
 
   const notStartedYet = !!(startDate && now < startDate);
@@ -357,12 +472,14 @@ export default function QuestDetail() {
   const participantCount =
     typeof (quest as any)?.participantsCount === 'number'
       ? (quest as any).participantsCount
-      : (Array.isArray((quest as any)?.participants) ? (quest as any).participants.length : 0);
+      : Array.isArray((quest as any)?.participants)
+        ? (quest as any).participants.length
+        : 0;
 
   const mySubs = useMemo(() => {
     const uid = user?.id != null ? String(user.id) : '';
     return (submissions ?? []).filter((s: SubmissionDTO) => {
-      const subUserId = String((s.userId ?? ''));
+      const subUserId = String(s.userId ?? '');
       return uid && subUserId === uid;
     });
   }, [submissions, user?.id]);
@@ -392,7 +509,7 @@ export default function QuestDetail() {
     try {
       toast.loading(`Preparing ${files.length} file(s)…`, { id: toastId });
 
-      // Downscale images before upload (keep order)
+      // ✅ Always sanitize images (removes EXIF/GPS/time); also resizes if needed.
       const processed: File[] = [];
       for (let i = 0; i < files.length; i++) {
         const original = files[i];
@@ -401,19 +518,18 @@ export default function QuestDetail() {
         let f: File = original;
         if (/^image\//i.test(f.type)) {
           // eslint-disable-next-line no-await-in-loop
-          f = await maybeDownscaleImage(f);
+          f = await sanitizeImageForUpload(f);
         }
         processed.push(f);
       }
 
       toast.loading(`Uploading ${processed.length} file(s)…`, { id: toastId });
 
-      // One request, many files (typed)
       await create.mutateAsync({
         questId: safeQuestId,
         comment: comment || undefined,
         files: processed,
-      });
+      } as any);
 
       toast.success(`Uploaded ${processed.length} proof(s)!`, { id: toastId });
 
@@ -463,7 +579,9 @@ export default function QuestDetail() {
         ) : isLoading ? (
           <div className="p-6">Loading quest…</div>
         ) : isError || !quest ? (
-          <div className="p-6 text-red-600">{(error as any)?.message || 'Failed to load quest'}</div>
+          <div className="p-6 text-red-600">
+            {(error as any)?.message || 'Failed to load quest'}
+          </div>
         ) : (
           <div className="space-y-6">
             <div className="rounded-2xl border bg-white shadow-sm dark:bg-[#0f1115]">
@@ -474,7 +592,9 @@ export default function QuestDetail() {
                       {quest.title}
                     </h1>
                     {quest.description && (
-                      <p className="mt-2 text-gray-700 dark:text-gray-300">{quest.description}</p>
+                      <p className="mt-2 text-gray-700 dark:text-gray-300">
+                        {quest.description}
+                      </p>
                     )}
 
                     <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -497,12 +617,18 @@ export default function QuestDetail() {
                       </span>
 
                       {startDate && (
-                        <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border" title="Start date">
+                        <span
+                          className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border"
+                          title="Start date"
+                        >
                           Starts: {startDate.toLocaleDateString()}
                         </span>
                       )}
                       {endDate && (
-                        <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border" title="End date">
+                        <span
+                          className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border"
+                          title="End date"
+                        >
                           Ends: {endDate.toLocaleDateString()}
                         </span>
                       )}
@@ -519,14 +645,16 @@ export default function QuestDetail() {
                   </div>
 
                   <div className="shrink-0 flex items-center gap-2">
-                    {String(user?.id) === String((quest as any)?.createdByUserId) && !completed && status !== 'ARCHIVED' && (
-                      <Link
-                        to={`/quests/${quest.id}/edit`}
-                        className="px-3 py-1.5 rounded-lg border shadow text-sm hover:bg-gray-100 dark:hover:bg-[#161b26] dark:border-slate-700"
-                      >
-                        Edit
-                      </Link>
-                    )}
+                    {String(user?.id) === String((quest as any)?.createdByUserId) &&
+                      !completed &&
+                      status !== 'ARCHIVED' && (
+                        <Link
+                          to={`/quests/${quest.id}/edit`}
+                          className="px-3 py-1.5 rounded-lg border shadow text-sm hover:bg-gray-100 dark:hover:bg-[#161b26] dark:border-slate-700"
+                        >
+                          Edit
+                        </Link>
+                      )}
 
                     {canJoin && (
                       <button
@@ -543,7 +671,11 @@ export default function QuestDetail() {
                         onClick={onLeave}
                         className="px-3 py-1.5 rounded-lg border shadow text-sm hover:bg-gray-100 dark:hover:bg-[#161b26] dark:border-slate-700"
                         disabled={leave.isPending}
-                        title={String(user?.id) === String((quest as any)?.createdByUserId) ? "You can't leave quests you own" : "Leave this quest"}
+                        title={
+                          String(user?.id) === String((quest as any)?.createdByUserId)
+                            ? "You can't leave quests you own"
+                            : 'Leave this quest'
+                        }
                       >
                         {leave.isPending ? 'Leaving…' : 'Leave'}
                       </button>
@@ -569,7 +701,10 @@ export default function QuestDetail() {
                         const closed = Boolean((s as any).closed);
 
                         return (
-                          <li key={s.id} className="border rounded-xl p-3 bg-white dark:bg-[#0f1115]">
+                          <li
+                            key={s.id}
+                            className="border rounded-xl p-3 bg-white dark:bg-[#0f1115]"
+                          >
                             <div className="flex items-center justify-between gap-3">
                               <div className="text-sm">
                                 <div className="font-medium">{s.comment || 'Submission'}</div>
@@ -630,11 +765,13 @@ export default function QuestDetail() {
                     </div>
                   ) : notStartedYet ? (
                     <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-800 p-4 text-sm">
-                      Quest has not started yet, you can’t submit anything. {startDate ? `Starts on ${startDate.toLocaleString()}.` : ''}
+                      Quest has not started yet, you can’t submit anything.{' '}
+                      {startDate ? `Starts on ${startDate.toLocaleString()}.` : ''}
                     </div>
                   ) : ended ? (
                     <div className="rounded-lg border border-slate-300 bg-slate-50 text-slate-700 p-4 text-sm">
-                      Quest has ended, new submissions are closed. {endDate ? `Ended on ${endDate.toLocaleString()}.` : ''}
+                      Quest has ended, new submissions are closed.{' '}
+                      {endDate ? `Ended on ${endDate.toLocaleString()}.` : ''}
                     </div>
                   ) : (
                     <form className="space-y-4" onSubmit={submit}>
@@ -651,9 +788,7 @@ export default function QuestDetail() {
                         />
                       </div>
 
-                      <div className="text-xs text-gray-500">
-                        Attach one or more images
-                      </div>
+                      <div className="text-xs text-gray-500">Attach one or more images</div>
 
                       <div className="space-y-2">
                         <input
@@ -683,7 +818,11 @@ export default function QuestDetail() {
 
                             <div className="mt-2 space-y-1 opacity-80">
                               {files.slice(0, 6).map((f) => (
-                                <div key={`${f.name}-${f.size}`} className="truncate" title={f.name}>
+                                <div
+                                  key={`${f.name}-${f.size}`}
+                                  className="truncate"
+                                  title={f.name}
+                                >
                                   • {f.name}
                                 </div>
                               ))}
@@ -725,7 +864,8 @@ export default function QuestDetail() {
         title="Can’t leave your own quest"
       >
         <p>
-          You are the owner of this quest, so you can’t leave it. You can archive or delete the quest instead.
+          You are the owner of this quest, so you can’t leave it. You can archive or
+          delete the quest instead.
         </p>
       </InfoModal>
     </div>
