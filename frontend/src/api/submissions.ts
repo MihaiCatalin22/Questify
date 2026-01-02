@@ -10,15 +10,16 @@ export type PageResp<T> = {
   first: boolean;
   last: boolean;
 };
+
 export type SubmissionSummaryRes = {
   submissionsTotal: number;
 };
-
 
 const ALLOWED = new Set<string>([
   "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif",
   "video/mp4", "video/quicktime", "video/webm",
 ]);
+
 const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 
 function normalizeList<T>(payload: any): T[] {
@@ -36,6 +37,13 @@ function extractError(e: any): string {
     e?.message ||
     "Request failed."
   );
+}
+
+function validateFile(f: File) {
+  if (!ALLOWED.has(f.type)) {
+    throw new Error("Only images (jpeg/png/webp/gif) or videos (mp4/mov/webm) are allowed.");
+  }
+  if (f.size > MAX_BYTES) throw new Error("File exceeds 100MB limit.");
 }
 
 async function uploadViaProofService(file: File): Promise<{ key: string; url?: string }> {
@@ -89,17 +97,67 @@ export const SubmissionsApi = {
       "status" in (input as any) || "note" in (input as any)
         ? input
         : { status: (input as any).reviewStatus, note: (input as any).reviewNote };
+
     const { data } = await http.post<SubmissionDTO>(`/submissions/${id}/review`, body);
     return data;
   },
 
   async create(input: CreateSubmissionInput): Promise<SubmissionDTO> {
-    if (input.file) {
-      const f = input.file as File;
-      if (!ALLOWED.has(f.type)) {
-        throw new Error("Only images (jpeg/png/webp/gif) or videos (mp4/mov/webm) are allowed.");
+    const many = input.files?.filter(Boolean) ?? [];
+
+    // ---- multi-file (ONE submission) --------------------------------------
+    if (many.length > 0) {
+      many.forEach(validateFile);
+
+      // Prefer multipart /submissions with files[]
+      try {
+        const form = new FormData();
+        form.append("questId", String(input.questId));
+        if (input.comment) form.append("comment", input.comment);
+
+        for (const f of many) {
+          // backend expects @RequestParam("files") List<MultipartFile>
+          form.append("files", f, f.name);
+        }
+
+        const { data } = await http.post<SubmissionDTO>("/submissions", form, {
+          headers: { /* let browser set multipart boundary */ },
+        });
+        return data;
+      } catch (e: any) {
+        const status = e?.response?.status as number | undefined;
+
+        // Fallback: upload each file to proof-service, then create JSON submission with proofKeys[]
+        if (status === 415 || status === 404) {
+          try {
+            const uploads: { key: string; url?: string }[] = [];
+            for (const f of many) {
+              // eslint-disable-next-line no-await-in-loop
+              uploads.push(await uploadViaProofService(f));
+            }
+            const proofKeys = uploads.map(u => u.key);
+
+            const { data } = await http.post<SubmissionDTO>("/submissions", {
+              questId: input.questId,
+              note: input.comment ?? undefined,
+              proofKeys,
+            });
+
+            return data;
+          } catch (e2: any) {
+            throw new Error(extractError(e2));
+          }
+        }
+
+        if (status === 413) throw new Error("Request too large. Reduce file sizes or count.");
+        throw new Error(extractError(e));
       }
-      if (f.size > MAX_BYTES) throw new Error("File exceeds 100MB limit.");
+    }
+
+    // ---- single-file (legacy) --------------------------------------------
+    if (input.file) {
+      const f = input.file;
+      validateFile(f);
 
       try {
         const form = new FormData();
@@ -129,17 +187,21 @@ export const SubmissionsApi = {
         }
 
         if (status === 413) throw new Error("File too large. Max allowed is 100MB.");
-        if (status === 400) throw new Error(extractError(e));
         throw new Error(extractError(e));
       }
     }
 
+    // ---- JSON (keys/urls) ------------------------------------------------
     const body: any = {
       questId: input.questId,
       note: input.comment,
-      proofUrl: input.proofUrl,
-      proofKey: (input as any).proofKey,
     };
+
+    if (input.proofKey) body.proofKey = input.proofKey;
+    if (input.proofKeys?.length) body.proofKeys = input.proofKeys;
+
+    if (input.proofUrl) body.proofUrl = input.proofUrl;
+    if (input.proofUrls?.length) body.proofUrls = input.proofUrls;
 
     try {
       const { data } = await http.post<SubmissionDTO>("/submissions", body);
@@ -148,6 +210,7 @@ export const SubmissionsApi = {
       throw new Error(extractError(e));
     }
   },
+
   async minePage(page = 0, size = 10): Promise<PageResp<SubmissionDTO>> {
     const { data } = await http.get("/submissions/mine", {
       params: { page, size, sort: "createdAt,desc" },
@@ -168,11 +231,10 @@ export const SubmissionsApi = {
     return normalizePage<SubmissionDTO>(data);
   },
 
-    async mineSummary(): Promise<SubmissionSummaryRes> {
+  async mineSummary(): Promise<SubmissionSummaryRes> {
     const { data } = await http.get<SubmissionSummaryRes>("/submissions/mine/summary");
     return data;
   },
-
 };
 
 function normalizePage<T>(payload: any): PageResp<T> {

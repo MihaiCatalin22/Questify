@@ -9,11 +9,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
+
+import static org.springframework.http.HttpStatus.FORBIDDEN;
 
 @RestController
 @RequestMapping("/uploads")
@@ -61,14 +64,19 @@ public class UploadController {
 
     @GetMapping("/sign-get")
     public ResponseEntity<Map<String, String>> signGet(@RequestParam @NotBlank String key,
-                                                       @RequestParam(required = false) Long expires) {
+                                                       @RequestParam(required = false) Long expires,
+                                                       Authentication auth) {
+        enforceOwnership(key, auth);
+
         var ttl = expires != null ? expires : props.getGetExpirySeconds();
         var url = storage.presignGet(key, ttl);
         return ResponseEntity.ok(Map.of("getUrl", url));
     }
 
     @DeleteMapping
-    public ResponseEntity<Void> delete(@RequestParam @NotBlank String key) {
+    public ResponseEntity<Void> delete(@RequestParam @NotBlank String key, Authentication auth) {
+        enforceOwnership(key, auth);
+
         storage.delete(key);
         return ResponseEntity.noContent().build();
     }
@@ -79,5 +87,21 @@ public class UploadController {
             @RequestParam(required = false) Long expires,
             Authentication auth) {
         return signPut(contentType, expires, auth);
+    }
+
+    private void enforceOwnership(String key, Authentication auth) {
+        if (auth == null) {
+            throw new ResponseStatusException(FORBIDDEN, "Not authenticated");
+        }
+
+        boolean elevated = auth.getAuthorities().stream().anyMatch(a ->
+                "ROLE_ADMIN".equals(a.getAuthority()) || "ROLE_REVIEWER".equals(a.getAuthority())
+        );
+        if (elevated) return;
+
+        String userId = auth.getName();
+        if (key == null || !key.startsWith("proofs/" + userId + "/")) {
+            throw new ResponseStatusException(FORBIDDEN, "You do not own this proof key");
+        }
     }
 }

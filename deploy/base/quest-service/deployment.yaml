@@ -1,18 +1,21 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: quest-service
   namespace: default
-  labels: { app: quest-service }
+  labels:
+    app: quest-service
   annotations:
     argocd.argoproj.io/sync-options: Replace=true
 spec:
-  replicas: 1
+  replicas: 2
   selector:
-    matchLabels: { app: quest-service }
+    matchLabels:
+      app: quest-service
   template:
     metadata:
-      labels: { app: quest-service }
+      labels:
+        app: quest-service
     spec:
       serviceAccountName: quest-service
       volumes:
@@ -31,52 +34,106 @@ spec:
               mountPath: /config
               readOnly: true
           env:
-            - { name: SPRING_PROFILES_ACTIVE, value: "prod" }
-            - { name: SPRING_APPLICATION_NAME, value: "quest-service" }
-            - { name: SPRING_CONFIG_ADDITIONAL_LOCATION, value: "/config/" }
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+            - name: SPRING_APPLICATION_NAME
+              value: "quest-service"
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: "/config/"
 
-            - { name: SERVER_PORT, value: "8080" }
-            - { name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE, value: "health,info,prometheus" }
-            - { name: MANAGEMENT_HEALTH_PROBES_ENABLED, value: "true" }
-            - { name: SPRING_DATASOURCE_URL, value: "jdbc:mysql://mysql:3306/quest?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" }
+            - name: SERVER_PORT
+              value: "8080"
+            - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+              value: "health,info,prometheus"
+            - name: MANAGEMENT_HEALTH_PROBES_ENABLED
+              value: "true"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mysql://mysql:3306/quest?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
 
-            - { name: SPRING_DATASOURCE_USERNAME, value: "root" }
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "root"
             - name: SPRING_DATASOURCE_PASSWORD
-              valueFrom: { secretKeyRef: { name: mysql-root, key: password } }  # use MYSQL_ROOT_PASSWORD if that's your key
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-root
+                  key: password
 
-            - { name: SPRING_KAFKA_BOOTSTRAP_SERVERS, value: "questify-kafka-kafka-bootstrap.kafka.svc:9092" }
-            - { name: SPRING_KAFKA_PRODUCER_KEY_SERIALIZER, value: "org.apache.kafka.common.serialization.StringSerializer" }
-            - { name: SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER, value: "org.springframework.kafka.support.serializer.JsonSerializer" }
-            - { name: SPRING_KAFKA_PRODUCER_PROPERTIES_SPRING_JSON_ADD_TYPE_HEADERS, value: "false" }
-            - { name: SPRING_KAFKA_PRODUCER_PROPERTIES_ENABLE_IDEMPOTENCE, value: "true" }
-            - { name: SPRING_KAFKA_PRODUCER_ACKS, value: "all" }
-            - { name: SPRING_KAFKA_PRODUCER_PROPERTIES_MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, value: "5" }
-            - { name: SPRING_KAFKA_PROPERTIES_REQUEST_TIMEOUT_MS, value: "8000" }
-            - { name: SPRING_KAFKA_PROPERTIES_DELIVERY_TIMEOUT_MS, value: "15000" }
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: "questify-kafka-kafka-bootstrap.kafka.svc:9092"
+            - name: SPRING_KAFKA_PRODUCER_KEY_SERIALIZER
+              value: "org.apache.kafka.common.serialization.StringSerializer"
+            - name: SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER
+              value: "org.springframework.kafka.support.serializer.JsonSerializer"
+            - name: SPRING_KAFKA_PRODUCER_PROPERTIES_SPRING_JSON_ADD_TYPE_HEADERS
+              value: "false"
+            - name: SPRING_KAFKA_PRODUCER_PROPERTIES_ENABLE_IDEMPOTENCE
+              value: "true"
+            - name: SPRING_KAFKA_PRODUCER_ACKS
+              value: "all"
+            - name: SPRING_KAFKA_PRODUCER_PROPERTIES_MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION
+              value: "5"
+            - name: SPRING_KAFKA_PROPERTIES_REQUEST_TIMEOUT_MS
+              value: "8000"
+            - name: SPRING_KAFKA_PROPERTIES_DELIVERY_TIMEOUT_MS
+              value: "15000"
 
-            - { name: APP_KAFKA_TOPICS_SUBMISSIONS, value: "dev.questify.submissions" }
+            - name: APP_KAFKA_TOPICS_SUBMISSIONS
+              value: "dev.questify.submissions"
 
-            - { name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI, value: "https://questify.tail03c40b.ts.net/auth/realms/questify" }
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "https://questify.tail03c40b.ts.net/auth/realms/questify"
 
-            - { name: JAVA_OPTS, value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine" }
+            - name: JAVA_OPTS
+              value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine"
 
           startupProbe:
-            httpGet: { path: /actuator/health/liveness, port: http }
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
             periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 300
           readinessProbe:
-            httpGet: { path: /actuator/health/readiness, port: http }
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
             initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 12
           livenessProbe:
-            httpGet: { path: /actuator/health/liveness, port: http }
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
             initialDelaySeconds: 120
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
           resources:
-            requests: { cpu: "100m", memory: "256Mi" }
-            limits:   { cpu: "500m", memory: "512Mi" }
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+  strategy:
+    canary:
+      maxSurge: 1
+      maxUnavailable: 0
+      steps:
+        - setWeight: 20
+        - analysis:
+            templates:
+              - templateName: quest-service-success-rate
+        - pause:
+            duration: 60s
+
+        - setWeight: 50
+        - analysis:
+            templates:
+              - templateName: quest-service-success-rate
+        - pause:
+            duration: 120s
+
+        - setWeight: 100

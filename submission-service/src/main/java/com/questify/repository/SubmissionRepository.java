@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 public interface SubmissionRepository extends JpaRepository<Submission, Long> {
@@ -37,5 +39,10 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
            """)
     int clearReviewerUserId(@Param("userId") String userId);
     long countByUserId(String userId);
+    Page<Submission> findAllByOrderByCreatedAtDesc(Pageable pageable);
+    List<Submission> findByStatusInAndReviewedAtBeforeAndProofDeletedAtIsNull(
+            List<ReviewStatus> statuses,
+            Instant reviewedBefore
+    );
 
 }

@@ -39,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [quest-service, user-service, proof-service, submission-service]
+        service: [quest-service, user-service, proof-service, submission-service, frontend]
 
     env:
       OWNER: ${{ github.repository_owner }}
@@ -198,6 +198,7 @@ jobs:
             ("deploy/overlays/prod/quest-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-quest-service"),
             ("deploy/overlays/prod/submission-service/kustomization.yaml", f"ghcr.io/{owner_lc}/questify-submission-service"),
             ("deploy/overlays/prod/user-service/kustomization.yaml",       f"ghcr.io/{owner_lc}/questify-user-service"),
+            ("deploy/overlays/prod/frontend/kustomization.yaml",           f"ghcr.io/{owner_lc}/questify-frontend"),
           ]
 
           for file, img in targets:

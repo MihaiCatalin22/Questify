@@ -1,24 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import { useAuth } from "react-oidc-context";
 
-import { useDeleteMe, useExportMe, useMe, useUpdateMe } from "../../hooks/useUsers";
+import { useDeleteMe, useMe, useUpdateMe } from "../../hooks/useUsers";
 import { QuestsApi } from "../../api/quests";
 import { SubmissionsApi } from "../../api/submissions";
-import type { UpdateMeInput, UserExportDTO } from "../../api/users";
+import { UsersApi, type ExportJobDTO, type ExportJobStatus, type UpdateMeInput } from "../../api/users";
 
-function downloadJson(obj: unknown, filename: string) {
-  const text = JSON.stringify(obj, null, 2);
-  const blob = new Blob([text], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+const EXPORT_STORAGE_KEY = "questify:lastExportJob";
 
 function formatDate(iso?: string | null) {
   if (!iso) return "—";
@@ -35,25 +24,36 @@ function ageDays(createdAt?: string | null) {
   return Math.max(0, days);
 }
 
+function isTerminalStatus(s: ExportJobStatus) {
+  return s === "COMPLETED" || s === "FAILED" || s === "EXPIRED";
+}
+
+function safeParseStoredJob(raw: string | null): ExportJobDTO | null {
+  if (!raw) return null;
+  try {
+    const obj = JSON.parse(raw);
+    if (!obj?.jobId) return null;
+    return obj as ExportJobDTO;
+  } catch {
+    return null;
+  }
+}
 
 export default function ProfilePage() {
   const auth = useAuth();
 
   const meQ = useMe();
-  const exportQ = useExportMe();
   const upd = useUpdateMe();
   const del = useDeleteMe();
 
   const me = meQ.data;
-  const exp: UserExportDTO | undefined = exportQ.data;
 
-  const [form, setForm] = useState<UpdateMeInput>({
-    displayName: "",
-    bio: "",
-  });
+  const [form, setForm] = useState<UpdateMeInput>({ displayName: "", bio: "" });
   const [confirmText, setConfirmText] = useState("");
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-  const isDeleted = !!exp?.deletedAt;
+  const isDeleted = !!me?.deletedAt;
+  const accountAge = useMemo(() => ageDays(me?.createdAt ?? null), [me?.createdAt]);
 
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [summary, setSummary] = useState<{
@@ -63,15 +63,59 @@ export default function ProfilePage() {
     submissionsTotal: number;
   } | null>(null);
 
-  const accountAge = useMemo(() => ageDays(exp?.createdAt ?? null), [exp?.createdAt]);
+  const [exportJob, setExportJob] = useState<ExportJobDTO | null>(null);
+  const [exportStarting, setExportStarting] = useState(false);
+
+  const lastToastStatus = useRef<ExportJobStatus | null>(null);
+  const pollTimer = useRef<number | null>(null);
+
+  // avoid spamming download attempts
+  const lastSoftDownloadAttemptAt = useRef<number>(0);
 
   useEffect(() => {
     if (!me) return;
     setForm({
-        displayName: me.displayName ?? "",
-        bio: (me.bio ?? "") as any,
+      displayName: me.displayName ?? "",
+      bio: me.bio ?? "",
     });
-    }, [me?.id]);
+  }, [me?.id]);
+
+  // persist export job
+  useEffect(() => {
+    if (!exportJob) {
+      localStorage.removeItem(EXPORT_STORAGE_KEY);
+      return;
+    }
+    try {
+      localStorage.setItem(EXPORT_STORAGE_KEY, JSON.stringify(exportJob));
+    } catch {
+      // ignore
+    }
+  }, [exportJob]);
+
+  // restore last export job on mount
+  useEffect(() => {
+    if (!auth.isAuthenticated) return;
+
+    const stored = safeParseStoredJob(localStorage.getItem(EXPORT_STORAGE_KEY));
+    if (!stored?.jobId) return;
+
+    setExportJob(stored);
+    lastToastStatus.current = stored.status ?? null;
+
+    (async () => {
+      try {
+        const fresh = await UsersApi.getExportJob(stored.jobId);
+        setExportJob((prev) => ({ ...(prev ?? stored), ...fresh }));
+      } catch (e: any) {
+        const status = e?.response?.status;
+        if (status === 403 || status === 404) {
+          localStorage.removeItem(EXPORT_STORAGE_KEY);
+          setExportJob(null);
+        }
+      }
+    })();
+  }, [auth.isAuthenticated]);
 
   async function onSave() {
     try {
@@ -85,27 +129,149 @@ export default function ProfilePage() {
     }
   }
 
-  async function onExport() {
+  async function startExport() {
     try {
-      const data = exportQ.data ?? (await exportQ.refetch().then((r) => r.data));
-      if (!data) throw new Error("No export data");
+      setExportStarting(true);
 
-      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-      downloadJson(data, `questify-export-${ts}.json`);
-      toast.success("Download started");
+      const created = await UsersApi.requestExportJob();
+      const job: ExportJobDTO = {
+        jobId: created.jobId,
+        status: created.status,
+        expiresAt: created.expiresAt,
+      };
+
+      setExportJob(job);
+      lastToastStatus.current = created.status;
+      toast.success("Export job started. We'll download the ZIP when it's ready.");
     } catch (e: any) {
-      toast.error(e?.message ?? "Export failed");
+      toast.error(e?.message ?? "Failed to start export");
+    } finally {
+      setExportStarting(false);
     }
   }
 
-  async function onDelete() {
+  async function downloadExport(jobId: string, quiet409: boolean = false) {
+    try {
+      const url = await UsersApi.getExportDownloadUrl(jobId);
+      window.location.href = url;
+      return true;
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const data = e?.response?.data;
+
+      if (status === 409) {
+        if (quiet409) return false;
+
+        if (data?.reason) {
+          toast.error(String(data.reason));
+          return false;
+        }
+        if (data?.error) {
+          toast.error(String(data.error));
+          return false;
+        }
+        toast("Export not ready yet — try again in a moment.");
+        return false;
+      }
+
+      if (status === 410) {
+        toast.error("Export expired. Please request a new one.");
+        return false;
+      }
+
+      toast.error(e?.message ?? "Failed to download export");
+      return false;
+    }
+  }
+
+  // poll export status
+  useEffect(() => {
+    const jobId = exportJob?.jobId;
+    const status = exportJob?.status;
+
+    if (!jobId) return;
+
+    if (pollTimer.current) {
+      window.clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+
+    if (!status || isTerminalStatus(status)) return;
+
+    pollTimer.current = window.setInterval(async () => {
+      try {
+        const next = await UsersApi.getExportJob(jobId);
+
+        setExportJob((prev) => ({
+          ...(prev ?? { jobId, status: next.status }),
+          ...next,
+        }));
+
+        // toast transitions
+        if (lastToastStatus.current !== next.status) {
+          lastToastStatus.current = next.status;
+
+          if (next.status === "FAILED") {
+            const msg =
+              next.failureReason
+                ? `Export failed: ${next.failureReason}`
+                : next.missingParts?.length
+                  ? `Export failed (missing: ${next.missingParts.join(", ")})`
+                  : "Export failed.";
+            toast.error(msg);
+          }
+
+          if (next.status === "EXPIRED") toast.error("Export expired. Please request a new one.");
+        }
+
+        // normal completion path
+        if (next.status === "COMPLETED") {
+          if (pollTimer.current) {
+            window.clearInterval(pollTimer.current);
+            pollTimer.current = null;
+          }
+          toast.success("Export ready! Downloading…");
+          await downloadExport(jobId);
+          return;
+        }
+
+        // ✅ soft attempt: if parts are done but status hasn't flipped yet
+        if (next.status === "RUNNING" && (next.missingParts?.length ?? 0) === 0) {
+          const now = Date.now();
+          if (now - lastSoftDownloadAttemptAt.current > 8000) {
+            lastSoftDownloadAttemptAt.current = now;
+            await downloadExport(jobId, true); // quiet 409
+          }
+        }
+      } catch (e: any) {
+        toast.error(e?.message ?? "Failed to check export status");
+        if (pollTimer.current) {
+          window.clearInterval(pollTimer.current);
+          pollTimer.current = null;
+        }
+      }
+    }, 4000);
+
+    return () => {
+      if (pollTimer.current) {
+        window.clearInterval(pollTimer.current);
+        pollTimer.current = null;
+      }
+    };
+  }, [exportJob?.jobId, exportJob?.status]);
+
+  function onDeleteClick() {
     if (confirmText.trim().toUpperCase() !== "DELETE") {
       toast.error('Type "DELETE" to confirm');
       return;
     }
+    setDeleteModalOpen(true);
+  }
+
+  async function confirmDelete() {
     try {
       await del.mutateAsync();
-      toast.success("Account data deleted/anonymized");
+      toast.success("Account deleted. Signing you out…");
 
       try {
         await auth.signoutRedirect();
@@ -115,10 +281,12 @@ export default function ProfilePage() {
       }
     } catch (e: any) {
       toast.error(e?.message ?? "Deletion failed");
+    } finally {
+      setDeleteModalOpen(false);
     }
   }
 
-    async function loadSummary() {
+  async function loadSummary() {
     try {
       setLoadingSummary(true);
 
@@ -141,20 +309,63 @@ export default function ProfilePage() {
     }
   }
 
+  useEffect(() => {
+    if (!me) return;
+    loadSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me?.id]);
+
   if (meQ.isLoading) return <div className="p-6 opacity-70">Loading…</div>;
-  if (meQ.isError)
+  if (meQ.isError) {
     return (
       <div className="p-6 text-red-600">
         {(meQ.error as any)?.message || "Failed to load profile"}
       </div>
     );
+  }
 
   return (
     <div className="p-6 space-y-6 max-w-4xl">
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f1115] p-5 space-y-4">
+            <div className="text-lg font-semibold text-red-700 dark:text-red-300">
+              Confirm account deletion
+            </div>
+
+            <div className="text-sm opacity-80 space-y-2">
+              <p>You are about to permanently delete your account.</p>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>You will be signed out immediately.</li>
+                <li>You won’t be able to log in again with this account.</li>
+                <li>If you want to use Questify again, you will need a new account.</li>
+              </ul>
+              <p className="text-xs opacity-70">This action is irreversible.</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setDeleteModalOpen(false)}
+                className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
+                           bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={del.isPending}
+                className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
+                           border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 disabled:opacity-60"
+              >
+                {del.isPending ? "Deleting…" : "Yes, delete my account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-          Profile
-        </h1>
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Profile</h1>
         {isDeleted && (
           <span className="text-xs px-2 py-1 rounded-full border border-red-300 text-red-700 dark:border-red-800 dark:text-red-300">
             Deleted
@@ -163,12 +374,13 @@ export default function ProfilePage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f1115] p-5 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-xs opacity-70">User ID</div>
-            <div className="font-mono text-xs break-all">{me?.id}</div>
+            <div className="text-lg font-semibold">{me?.username || "—"}</div>
+            <div className="text-sm opacity-70">{me?.email || "—"}</div>
           </div>
-          <div>
+
+          <div className="text-right text-sm opacity-70">
             <div className="text-xs opacity-70">Account age</div>
             <div>{accountAge == null ? "—" : `${accountAge} day(s)`}</div>
           </div>
@@ -210,27 +422,55 @@ export default function ProfilePage() {
           </button>
 
           <button
-            onClick={onExport}
-            className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
-                       bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800"
-          >
-            Export my data (JSON)
-          </button>
-
-          <button
-            onClick={loadSummary}
-            disabled={loadingSummary}
+            onClick={startExport}
+            disabled={exportStarting || isDeleted || exportJob?.status === "RUNNING" || exportJob?.status === "PENDING"}
             className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
                        bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800 disabled:opacity-60"
           >
-            {loadingSummary ? "Loading stats…" : "Load stats"}
+            {exportStarting
+              ? "Starting export…"
+              : exportJob?.status === "RUNNING" || exportJob?.status === "PENDING"
+                ? "Export in progress…"
+                : "Request data export (ZIP)"}
           </button>
+
+          {exportJob?.jobId && (
+            <button
+              onClick={() => downloadExport(exportJob.jobId)}
+              disabled={isDeleted}
+              className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
+                         bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800 disabled:opacity-60"
+            >
+              Download export (if ready)
+            </button>
+          )}
         </div>
 
-        <div className="text-xs opacity-70">
-          <div>Created: {formatDate(exp?.createdAt)}</div>
-          <div>Updated: {formatDate(exp?.updatedAt)}</div>
+        <div className="text-xs opacity-70 space-y-1">
+          <div>Created: {formatDate(me?.createdAt)}</div>
+          <div>Updated: {formatDate(me?.updatedAt)}</div>
+
+          {exportJob && (
+            <div className="pt-1 space-y-1">
+              <div>
+                Export status: <span className="font-medium">{exportJob.status}</span>
+              </div>
+              <div>
+                Export jobId: <span className="font-mono">{exportJob.jobId}</span>
+              </div>
+              {exportJob.expiresAt && <div>Export expires: {formatDate(exportJob.expiresAt)}</div>}
+              {exportJob.createdAt && <div>Export created: {formatDate(exportJob.createdAt)}</div>}
+              {exportJob.lastProgressAt && <div>Last progress: {formatDate(exportJob.lastProgressAt)}</div>}
+              {!!exportJob.missingParts?.length && <div>Missing parts: {exportJob.missingParts.join(", ")}</div>}
+
+              {exportJob.status === "FAILED" && exportJob.failureReason && (
+                <div className="text-xs text-red-700 dark:text-red-300">Reason: {exportJob.failureReason}</div>
+              )}
+            </div>
+          )}
         </div>
+
+        {loadingSummary && <div className="text-xs opacity-70">Loading summary…</div>}
 
         {summary && (
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
@@ -254,16 +494,15 @@ export default function ProfilePage() {
       </div>
 
       <div className="rounded-2xl border border-red-200 dark:border-red-900 bg-white dark:bg-[#0f1115] p-5 space-y-3">
-        <h2 className="text-lg font-semibold text-red-700 dark:text-red-300">
-          Danger zone
-        </h2>
+        <h2 className="text-lg font-semibold text-red-700 dark:text-red-300">Danger zone</h2>
+
         <p className="text-sm opacity-80">
-          Deleting your account will anonymize your profile and trigger removal of your submissions,
-          participation/completion records, and uploaded proofs.
+          Deleting your account will permanently disable your login and remove/anonymize your data (submissions,
+          participation/completion records, and uploaded proofs).
         </p>
+
         <p className="text-xs opacity-70">
-          Prototype note: this does not delete your Keycloak account (identity provider). In production we would
-          also disable/delete the IdP account and block logins.
+          This action is irreversible. If you want to use Questify again, you will need to create a new account.
         </p>
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -276,18 +515,18 @@ export default function ProfilePage() {
                        border-red-200 dark:border-red-900 disabled:opacity-60"
           />
           <button
-            onClick={onDelete}
+            onClick={onDeleteClick}
             disabled={del.isPending || isDeleted}
             className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
                        border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 disabled:opacity-60"
           >
-            {del.isPending ? "Deleting…" : "Delete my account data"}
+            Delete my account
           </button>
         </div>
 
         {isDeleted && (
           <div className="text-xs text-red-700 dark:text-red-300">
-            Deleted at: {formatDate(exp?.deletedAt)}
+            Deleted at: {formatDate(me?.deletedAt)}
           </div>
         )}
       </div>

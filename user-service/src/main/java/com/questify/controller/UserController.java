@@ -1,4 +1,3 @@
-// src/main/java/com/questify/controller/UserController.java
 package com.questify.controller;
 
 import com.questify.config.JwtAuth;
@@ -26,21 +25,30 @@ public class UserController {
         this.jwt = jwt;
     }
 
-    record ApiError (String message) {}
+    record ApiError(String message) {}
 
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ProfileRes> me(Authentication auth) {
+    public ResponseEntity<?> me(Authentication auth) {
         var id      = jwt.userId(auth);
         var uname   = jwt.username(auth);
         var display = jwt.name(auth);
         var email   = jwt.email(auth);
         var avatar  = jwt.avatar(auth);
+
         var p = service.ensure(id, uname, display, email, avatar);
+
+        if (p.isDeleted()) {
+            return ResponseEntity.status(HttpStatus.GONE)
+                    .header("Cache-Control", "no-store")
+                    .body(new ApiError("Profile is deleted"));
+        }
+
         return ResponseEntity.ok()
                 .header("Cache-Control", "no-store")
                 .body(ProfilePrivacyMapper.toResForViewer(p, auth));
     }
+
 
     @PutMapping("/me")
     @PreAuthorize("isAuthenticated()")
@@ -67,6 +75,7 @@ public class UserController {
         var display = jwt.name(auth);
         var email   = jwt.email(auth);
         var avatar  = jwt.avatar(auth);
+
         service.ensure(id, uname, display, email, avatar);
 
         var res = service.exportMe(id);
@@ -83,6 +92,7 @@ public class UserController {
         var display = jwt.name(auth);
         var email   = jwt.email(auth);
         var avatar  = jwt.avatar(auth);
+
         service.ensure(id, uname, display, email, avatar);
 
         var res = service.deleteMe(id);
@@ -90,13 +100,14 @@ public class UserController {
                 .header("Cache-Control", "no-store")
                 .body(res);
     }
+
     @GetMapping("/{id}")
     public ProfileRes byId(@PathVariable String id, Authentication auth) {
         return ProfilePrivacyMapper.toResForViewer(service.get(id), auth);
     }
 
     @GetMapping
-    public java.util.List<ProfileRes> search(@RequestParam(name="username", defaultValue="") String q,
+    public java.util.List<ProfileRes> search(@RequestParam(name = "username", defaultValue = "") String q,
                                              Authentication auth) {
         return service.search(q).stream()
                 .map(p -> ProfilePrivacyMapper.toResForViewer(p, auth))

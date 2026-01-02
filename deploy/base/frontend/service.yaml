@@ -2,7 +2,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: questify-frontend
-  labels: { app: questify-frontend }
+  labels:
+    app: questify-frontend
 spec:
   type: ClusterIP
   selector:

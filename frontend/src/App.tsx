@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useAuth } from "react-oidc-context";
 
 import HomePage from "./pages/HomePage";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
 import Login from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
 import OidcCallback from "./pages/auth/OidcCallback";
@@ -45,15 +46,15 @@ function Shell() {
                 <img
                   src={logo}
                   alt="Questify"
-                  className="h-7 w-7 rounded-xl"
+                  className="h-6 w-6"
+                  width={24}
+                  height={24}
                   onError={() => setLogoOk(false)}
                 />
               ) : (
-                <div className="h-7 w-7 rounded-xl border border-slate-200 dark:border-slate-800" />
+                <span className="text-sm font-semibold">Questify</span>
               )}
-              <span className="font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                Questify
-              </span>
+              <span className="sr-only">Questify</span>
             </Link>
 
             <nav className="flex gap-4 text-sm">
@@ -108,6 +109,8 @@ export default function App() {
 
       <Routes>
         <Route index element={<HomePage />} />
+
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
 
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<RegisterPage />} />

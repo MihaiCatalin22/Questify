@@ -5,9 +5,6 @@ import { useAuthContext } from '../../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import http from '../../api/https';
 
-// ---- helpers --------------------------------------------------------------
-
-/** Get the bearer token from our AuthContext. */
 function getBearer(auth: ReturnType<typeof useAuthContext> | any): string | null {
   try {
     const fromFn = auth?.getAuthToken?.();
@@ -35,7 +32,6 @@ function hasReviewerRole(user?: any): boolean {
   );
 }
 
-/** IMPORTANT: Do NOT rewrite presigned URLs */
 function toSameOriginS3(url?: string | null): string | null {
   if (!url) return null;
   return url;
@@ -74,16 +70,15 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
   }
 
   try {
-    // @ts-ignore
-    const bmp = await createImageBitmap(blob);
+    const bmp = await createImageBitmap(blob as any);
     const canvas = document.createElement('canvas');
-    canvas.width = bmp.width || 1;
-    canvas.height = bmp.height || 1;
+    canvas.width = (bmp as any).width || 1;
+    canvas.height = (bmp as any).height || 1;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('No 2D context');
-    ctx.drawImage(bmp, 0, 0);
+    ctx.drawImage(bmp as any, 0, 0);
     const dataUrl = canvas.toDataURL('image/png');
-    if (bmp.close) try { bmp.close(); } catch {}
+    if ((bmp as any).close) try { (bmp as any).close(); } catch {}
     return { src: dataUrl };
   } catch {
     const obj = URL.createObjectURL(blob);
@@ -91,7 +86,6 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
   }
 }
 
-/** Auth-required fallback: axios → blob URL with explicit Authorization header */
 async function fetchProtectedProofAsObjectURL(submissionId: string, bearer?: string): Promise<{ src: string; revoke: () => void }> {
   const res = await http.get(`/submissions/${submissionId}/proof`, {
     responseType: 'blob',
@@ -101,7 +95,6 @@ async function fetchProtectedProofAsObjectURL(submissionId: string, bearer?: str
   return { src: obj, revoke: () => URL.revokeObjectURL(obj) };
 }
 
-/** Image-only renderer */
 function ProofImage({
   url,
   height = 560,
@@ -189,8 +182,6 @@ function ProofImage({
   );
 }
 
-// ---- page ----------------------------------------------------------------
-
 export default function SubmissionDetail() {
   const { id } = useParams();
   const { data: s, isLoading, isError, error } = useSubmission(id ?? '');
@@ -200,7 +191,7 @@ export default function SubmissionDetail() {
   const { user } = auth;
 
   const [note, setNote] = useState('');
-  const [displayUrl, setDisplayUrl] = useState<string | null>(null);
+  const [displayUrls, setDisplayUrls] = useState<string[]>([]);
   const [fail, setFail] = useState<string | null>(null);
   const revokeRef = useRef<(() => void) | null>(null);
 
@@ -231,28 +222,44 @@ export default function SubmissionDetail() {
       if (!id) return;
 
       if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
-      setDisplayUrl(null);
+      setDisplayUrls([]);
       setFail(null);
 
-      // Prefer presigned URL — attach Authorization explicitly
+      // 1) Optional multi endpoint: /submissions/:id/proof-urls -> { urls: string[] }
+      try {
+        const { data } = await http.get<{ urls: string[]; expiresInSeconds: number }>(
+          `/submissions/${id}/proof-urls`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
+        );
+        const urls = (data?.urls ?? []).map(toSameOriginS3).filter(Boolean) as string[];
+        if (alive && urls.length) {
+          setDisplayUrls(urls);
+          return;
+        }
+      } catch {
+        // fall through
+      }
+
+      // 2) Existing single endpoint: /submissions/:id/proof-url
       try {
         const { data } = await http.get<{ url: string; expiresInSeconds: number }>(
           `/submissions/${id}/proof-url`,
           { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
         );
         if (!alive) return;
-        setDisplayUrl(toSameOriginS3(data.url));
+        const one = toSameOriginS3(data.url);
+        if (one) setDisplayUrls([one]);
         return;
       } catch {
         // fall through
       }
 
-      // Auth fallback: axios -> blob URL
+      // 3) Auth fallback for primary proof only
       try {
         const { src, revoke } = await fetchProtectedProofAsObjectURL(String(id), token ?? undefined);
         if (!alive) return;
         revokeRef.current = revoke;
-        setDisplayUrl(src);
+        setDisplayUrls([src]);
       } catch (e: any) {
         if (!alive) return;
         setFail(String(e?.message || e) || 'Failed to fetch proof');
@@ -263,7 +270,7 @@ export default function SubmissionDetail() {
       alive = false;
       if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
     };
-  }, [id, s?.id, token]);
+  }, [id, (s as any)?.id, token]);
 
   if (isLoading) return <div className="p-6">Loading submission…</div>;
   if (isError || !s) return <div className="p-6 text-red-600">{(error as any)?.message || 'Failed to load submission'}</div>;
@@ -298,13 +305,13 @@ export default function SubmissionDetail() {
     <div className="p-6 space-y-5 max-w-3xl">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Submission</h1>
-        <Link to={`/quests/${s.questId}`} className="underline text-sm">View Quest</Link>
+        <Link to={`/quests/${(s as any).questId}`} className="underline text-sm">View Quest</Link>
       </div>
 
       <div className="card">
         <div className="card-body space-y-2">
-          <div className="text-sm opacity-70">Quest ID: {s.questId}</div>
-          <div className="text-sm opacity-70">User ID: {s.userId ?? '—'}</div>
+          <div className="text-sm opacity-70">Quest ID: {(s as any).questId}</div>
+          <div className="text-sm opacity-70">User ID: {(s as any).userId ?? '—'}</div>
 
           <div className="mt-1">
             <span className="font-medium">Status: </span>
@@ -319,10 +326,10 @@ export default function SubmissionDetail() {
           )}
 
           <div className="text-xs muted">
-            Created: {new Date(s.createdAt).toLocaleString()}
+            Created: {new Date((s as any).createdAt).toLocaleString()}
           </div>
 
-          {s.comment && <p className="mt-2">{s.comment}</p>}
+          {(s as any).comment && <p className="mt-2">{(s as any).comment}</p>}
         </div>
       </div>
 
@@ -331,10 +338,19 @@ export default function SubmissionDetail() {
           <h2 className="section-title">Proof</h2>
 
           {fail && <div className="text-sm text-red-600">{fail}</div>}
-          {!fail && !displayUrl && <div className="text-sm text-gray-500">Generating secure link…</div>}
+          {!fail && displayUrls.length === 0 && <div className="text-sm text-gray-500">Generating secure link…</div>}
 
-          {displayUrl && (
-            <ProofImage url={displayUrl} eager />
+          {displayUrls.length > 0 && (
+            <div className="space-y-4">
+              {displayUrls.map((u, idx) => (
+                <div key={`${u}-${idx}`}>
+                  {displayUrls.length > 1 ? (
+                    <div className="text-xs opacity-70 mb-2">Proof {idx + 1} of {displayUrls.length}</div>
+                  ) : null}
+                  <ProofImage url={u} eager={idx === 0} height={520} />
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </section>

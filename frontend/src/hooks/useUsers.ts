@@ -5,7 +5,6 @@ import {
   type CreateUserInput,
   type UpdateUserInput,
   type UpdateMeInput,
-  type UserExportDTO,
   type DeleteMeRes,
 } from "../api/users";
 
@@ -13,7 +12,6 @@ const KEY = {
   all: (q: string) => ["users", "list", q] as const,
   detail: (id: string) => ["users", "detail", id] as const,
   me: ["users", "me"] as const,
-  export: ["users", "me", "export"] as const,
 };
 
 function sanitize<T extends object>(obj: T): Partial<T> {
@@ -55,22 +53,12 @@ export function useMe() {
   });
 }
 
-export function useExportMe() {
-  return useQuery<UserExportDTO>({
-    queryKey: KEY.export,
-    queryFn: () => UsersApi.exportMe(),
-    refetchOnMount: "always",
-    refetchOnWindowFocus: false,
-  });
-}
-
 export function useUpdateMe() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: UpdateMeInput) => UsersApi.updateMe(sanitize(input) as UpdateMeInput),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEY.me });
-      qc.invalidateQueries({ queryKey: KEY.export });
     },
   });
 }
@@ -79,11 +67,12 @@ export function useDeleteMe() {
   const qc = useQueryClient();
   return useMutation<DeleteMeRes, unknown, void>({
     mutationFn: () => UsersApi.deleteMe(),
-    onSuccess: () => {
-      qc.invalidateQueries();
+    onSuccess: async () => {
+      await qc.invalidateQueries();
     },
   });
 }
+
 
 export function useCreateUser() {
   const qc = useQueryClient();

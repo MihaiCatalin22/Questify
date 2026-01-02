@@ -80,6 +80,15 @@ export default function HomePage() {
                 </div>
               </div>
             )}
+
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                to="/privacy"
+                className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md hover:bg-gray-100 dark:hover:bg-[#161b26]"
+              >
+                Privacy Policy
+              </Link>
+            </div>
           </div>
 
           <div className="mx-auto mt-8 w-full max-w-3xl grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1,4 +1,3 @@
-// src/lib/https.ts
 import axios from "axios";
 import { getAccessToken } from "./token";
 
@@ -18,5 +17,26 @@ http.interceptors.request.use((config) => {
   }
   return config;
 });
+
+const FORCE_LOGOUT_EVENT = "questify:force-logout";
+let forceLogoutEmitted = false;
+
+function emitForceLogout(reason: "deleted" | "unauthorized") {
+  if (forceLogoutEmitted) return;
+  forceLogoutEmitted = true;
+  window.dispatchEvent(new CustomEvent(FORCE_LOGOUT_EVENT, { detail: { reason } }));
+}
+
+http.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    const status = err?.response?.status as number | undefined;
+
+    if (status === 410) emitForceLogout("deleted");
+    if (status === 401) emitForceLogout("unauthorized");
+
+    return Promise.reject(err);
+  }
+);
 
 export default http;

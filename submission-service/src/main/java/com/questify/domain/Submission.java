@@ -48,7 +48,11 @@ public class Submission {
     @Column(name = "reviewer_user_id", length = 128)
     private String reviewerUserId;
 
+    @Column(name = "reviewed_at")
     private Instant reviewedAt;
+
+    @Column(name = "proof_deleted_at")
+    private Instant proofDeletedAt;
 
     @Column(nullable = false)
     private Instant createdAt;

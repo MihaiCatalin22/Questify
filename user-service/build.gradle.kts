@@ -26,6 +26,11 @@ dependencies {
     implementation("io.opentelemetry:opentelemetry-exporter-otlp")
     runtimeOnly("com.mysql:mysql-connector-j")
 
+    implementation("software.amazon.awssdk:s3")
+    implementation("software.amazon.awssdk:auth")
+    implementation("software.amazon.awssdk:apache-client")
+    implementation(platform("software.amazon.awssdk:bom:2.25.70"))
+
     compileOnly("org.projectlombok:lombok:1.18.34")
     annotationProcessor("org.projectlombok:lombok:1.18.34")
 

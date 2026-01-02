@@ -1,0 +1,47 @@
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: APP_KEYCLOAK_ADMIN_BASE_URL
+    value: "http://keycloak:8080/auth"
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: APP_KEYCLOAK_ADMIN_REALM
+    value: "questify"
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: APP_KEYCLOAK_ADMIN_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: user-service-keycloak-admin
+        key: KC_ADMIN_CLIENT_ID
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: APP_KEYCLOAK_ADMIN_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: user-service-keycloak-admin
+        key: KC_ADMIN_CLIENT_SECRET
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SECURITY_INTERNAL_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: internal-token
+        key: token
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: INTERNAL_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: internal-token
+        key: token
