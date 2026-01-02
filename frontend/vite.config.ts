@@ -1,25 +1,34 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 import fs from "fs";
 import path from "path";
 
-// https://vite.dev/config/
-export default defineConfig({
+const keyPath = path.resolve(__dirname, ".cert/localhost-key.pem");
+const certPath = path.resolve(__dirname, ".cert/localhost.pem");
+
+function httpsIfCertsExist() {
+  if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+    return {
+      key: fs.readFileSync(keyPath),
+      cert: fs.readFileSync(certPath),
+    };
+  }
+  return undefined;
+}
+
+export default defineConfig(({ command }) => ({
   plugins: [react()],
   server: {
-    https: {
-      key: fs.readFileSync(path.resolve(__dirname, ".cert/localhost-key.pem")),
-      cert: fs.readFileSync(path.resolve(__dirname, ".cert/localhost.pem")),
-    },
+    https: command === "serve" ? httpsIfCertsExist() : undefined,
     port: 5173,
     host: "localhost",
     proxy: {
-      '/api': {
-        target: 'https://localhost:8080',
+      "/api": {
+        target: "https://localhost:8080",
         changeOrigin: true,
         secure: true,
-        rewrite: (p) => p.replace(/^\/api/, ''),
-      }
-    }
+        rewrite: (p) => p.replace(/^\/api/, ""),
+      },
+    },
   },
-});
+}));

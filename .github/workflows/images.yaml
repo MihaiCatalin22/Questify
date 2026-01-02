@@ -19,8 +19,6 @@ jobs:
     name: Build & Push • ${{ matrix.service }}
     runs-on: ubuntu-latest
 
-    # Only run automatically when CI succeeded AND original event was push AND branch is main/dev/feat/**
-    # Skip gitops commits to avoid loops.
     if: >
       github.event_name == 'workflow_dispatch' ||
       (
@@ -84,7 +82,6 @@ jobs:
           base="ghcr.io/${OWNER_LC}/questify-${{ matrix.service }}"
           tags="${base}:${FULL_TAG}\n${base}:${BRANCH_TAG}"
 
-          # Optional convenience tag for main only
           if [ "${IS_MAIN}" = "true" ]; then
             tags="${tags}\n${base}:latest"
           fi

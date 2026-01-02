@@ -20,7 +20,6 @@ jobs:
   gitguardian-scan:
     name: GitGuardian • Secret Scan
     runs-on: ubuntu-latest
-    # Secrets are not exposed to fork PRs, so skip those to avoid false failures
     if: >
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
@@ -303,7 +302,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Create CI HTTPS certs
+      - name: Create CI HTTPS certs (dev only)
         run: |
           mkdir -p .cert
           openssl req -x509 -nodes -newkey rsa:2048 \
