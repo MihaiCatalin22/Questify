@@ -1,34 +1,35 @@
-import { defineConfig } from "vite";
+import { defineConfig, type UserConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import fs from "fs";
 import path from "path";
+import type { ServerOptions } from "https";
 
-const keyPath = path.resolve(__dirname, ".cert/localhost-key.pem");
-const certPath = path.resolve(__dirname, ".cert/localhost.pem");
+const certDir = path.resolve(__dirname, ".cert");
+const keyPath = path.join(certDir, "localhost-key.pem");
+const certPath = path.join(certDir, "localhost.pem");
 
-function httpsIfCertsExist() {
-  if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-    return {
+const hasCerts = fs.existsSync(keyPath) && fs.existsSync(certPath);
+
+const httpsOptions: ServerOptions | undefined = hasCerts
+  ? {
       key: fs.readFileSync(keyPath),
       cert: fs.readFileSync(certPath),
-    };
-  }
-  return undefined;
-}
+    }
+  : undefined;
 
-export default defineConfig(({ command }) => ({
+export default defineConfig({
   plugins: [react()],
   server: {
-    https: command === "serve" ? httpsIfCertsExist() : undefined,
-    port: 5173,
     host: "localhost",
+    port: 5173,
+    https: httpsOptions,
     proxy: {
       "/api": {
-        target: "https://localhost:8080",
+        target: hasCerts ? "https://localhost:8080" : "http://localhost:8080",
         changeOrigin: true,
-        secure: true,
+        secure: false,
         rewrite: (p) => p.replace(/^\/api/, ""),
       },
     },
   },
-}));
+} satisfies UserConfig);

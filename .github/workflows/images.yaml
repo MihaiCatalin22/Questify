@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   build-and-push:
-    name: Build & Push • ${{ matrix.service }}
+    name: Build & Push • ${{ matrix.name }}
     runs-on: ubuntu-latest
 
     if: >
@@ -37,7 +37,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [quest-service, user-service, proof-service, submission-service, frontend]
+        include:
+          - name: quest-service
+            dir: quest-service
+            image: questify-quest-service
+          - name: user-service
+            dir: user-service
+            image: questify-user-service
+          - name: proof-service
+            dir: proof-service
+            image: questify-proof-service
+          - name: submission-service
+            dir: submission-service
+            image: questify-submission-service
+          - name: frontend
+            dir: frontend
+            image: questify-frontend
 
     env:
       OWNER: ${{ github.repository_owner }}
@@ -79,7 +94,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          base="ghcr.io/${OWNER_LC}/questify-${{ matrix.service }}"
+          base="ghcr.io/${OWNER_LC}/${{ matrix.image }}"
           tags="${base}:${FULL_TAG}\n${base}:${BRANCH_TAG}"
 
           if [ "${IS_MAIN}" = "true" ]; then
@@ -102,11 +117,11 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build & push ${{ matrix.service }}
+      - name: Build & push ${{ matrix.name }}
         uses: docker/build-push-action@v5
         with:
-          context: ./${{ matrix.service }}
-          file: ./${{ matrix.service }}/Dockerfile
+          context: ./${{ matrix.dir }}
+          file: ./${{ matrix.dir }}/Dockerfile
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           labels: |
@@ -117,19 +132,19 @@ jobs:
         uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: image
-          image-ref: ghcr.io/${{ env.OWNER_LC }}/questify-${{ matrix.service }}:${{ env.FULL_TAG }}
+          image-ref: ghcr.io/${{ env.OWNER_LC }}/${{ matrix.image }}:${{ env.FULL_TAG }}
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           format: table
-          output: trivy-${{ matrix.service }}.txt
+          output: trivy-${{ matrix.name }}.txt
           exit-code: "0"
 
       - name: Upload Trivy image report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-image-${{ matrix.service }}
-          path: trivy-${{ matrix.service }}.txt
+          name: trivy-image-${{ matrix.name }}
+          path: trivy-${{ matrix.name }}.txt
           if-no-files-found: ignore
 
   update-manifests:
@@ -191,11 +206,11 @@ jobs:
           tag = os.environ["FULL_TAG"]
 
           targets = [
+            ("deploy/overlays/prod/frontend/kustomization.yaml",            f"ghcr.io/{owner_lc}/questify-frontend"),
             ("deploy/overlays/prod/proof-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-proof-service"),
             ("deploy/overlays/prod/quest-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-quest-service"),
             ("deploy/overlays/prod/submission-service/kustomization.yaml", f"ghcr.io/{owner_lc}/questify-submission-service"),
             ("deploy/overlays/prod/user-service/kustomization.yaml",       f"ghcr.io/{owner_lc}/questify-user-service"),
-            ("deploy/overlays/prod/frontend/kustomization.yaml",           f"ghcr.io/{owner_lc}/questify-frontend"),
           ]
 
           for file, img in targets:

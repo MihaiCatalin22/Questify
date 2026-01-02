@@ -18,5 +18,5 @@ generatorOptions:
   disableNameSuffixHash: true
 
 images:
-  - name: ghcr.io/mihiacatalin22/questify-frontend
+  - name: ghcr.io/mihaicatalin22/questify-frontend
     newTag: latest
