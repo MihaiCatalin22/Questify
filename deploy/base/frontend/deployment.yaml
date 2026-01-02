@@ -2,14 +2,17 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: questify-frontend
-  labels: { app: questify-frontend }
+  labels:
+    app: questify-frontend
 spec:
   replicas: 1
   selector:
-    matchLabels: { app: questify-frontend }
+    matchLabels:
+      app: questify-frontend
   template:
     metadata:
-      labels: { app: questify-frontend }
+      labels:
+        app: questify-frontend
     spec:
       containers:
         - name: frontend
@@ -19,10 +22,14 @@ spec:
             - containerPort: 80
               name: http
           readinessProbe:
-            httpGet: { path: /, port: http }
+            httpGet:
+              path: /
+              port: http
             initialDelaySeconds: 3
             periodSeconds: 10
           livenessProbe:
-            httpGet: { path: /, port: http }
+            httpGet:
+              path: /
+              port: http
             initialDelaySeconds: 20
             periodSeconds: 20
