@@ -14,9 +14,9 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: questify-api-gateway
+                name: questify-frontend
                 port:
-                  number: 8080
+                  number: 80
 
           - path: /auth
             pathType: Prefix
