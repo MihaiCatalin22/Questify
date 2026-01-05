@@ -4,7 +4,7 @@ namespace: default
 
 resources:
   - ../../../base/frontend
-  - ingress-tailscale.yaml
+  - ingress-tailscale1.yaml
 
 patches:
   - path: patch-nginx.yaml
