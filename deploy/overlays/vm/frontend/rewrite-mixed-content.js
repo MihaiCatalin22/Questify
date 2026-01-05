@@ -1,25 +1,31 @@
 (function () {
-  function escapeRegExp(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }
-
-  const hostname = window.location.hostname;      // no port
-  const goodOrigin = window.location.origin;      // should be https://questify-1.tail...
-
-  const reHttpHost = new RegExp("^http://" + escapeRegExp(hostname) + "(?::\\d+)?", "i");
-  const reProtoRel = new RegExp("^//" + escapeRegExp(hostname) + "(?::\\d+)?", "i");
+  const BAD_PORT = ":8080";
 
   function rewrite(url) {
     if (typeof url !== "string") return url;
 
-    // leave special schemes alone
-    if (/^(data|blob|mailto|tel):/i.test(url)) return url;
+    try {
+      const hostname = window.location.hostname; // no port
+      const goodOrigin = "https://" + hostname;
 
-    // rewrite same-host http -> https (and strip any port)
-    if (reHttpHost.test(url)) return url.replace(reHttpHost, goodOrigin);
-    if (reProtoRel.test(url)) return url.replace(reProtoRel, goodOrigin);
+      const badHttpPort = "http://" + hostname + BAD_PORT;
+      const badHttpsPort = "https://" + hostname + BAD_PORT;
+      const badHttp = "http://" + hostname;
 
-    return url;
+      if (url.startsWith(badHttpPort)) {
+        return goodOrigin + url.substring(badHttpPort.length);
+      }
+      if (url.startsWith(badHttpsPort)) {
+        return goodOrigin + url.substring(badHttpsPort.length);
+      }
+      if (url.startsWith(badHttp)) {
+        return goodOrigin + url.substring(badHttp.length);
+      }
+
+      return url;
+    } catch (e) {
+      return url;
+    }
   }
 
   // Patch window.fetch
@@ -32,34 +38,38 @@
         } else if (input && typeof input.url === "string") {
           input = new Request(rewrite(input.url), input);
         }
-      } catch (_) {}
+      } catch (e) {}
       return origFetch(input, init);
     };
   }
 
-  // Patch XHR (axios uses this)
+  // Patch XHR (axios uses this often)
   const origOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function () {
-    try {
-      const args = Array.prototype.slice.call(arguments);
-      if (typeof args[1] === "string") args[1] = rewrite(args[1]);
-      return origOpen.apply(this, args);
-    } catch (_) {
-      return origOpen.apply(this, arguments);
-    }
+  XMLHttpRequest.prototype.open = function (method, url) {
+    const args = Array.prototype.slice.call(arguments);
+    args[1] = rewrite(args[1]);
+    return origOpen.apply(this, args);
   };
 
-  // Patch WebSocket (just in case)
-  if (window.WebSocket) {
-    const OrigWS = window.WebSocket;
-    window.WebSocket = function (url, protocols) {
-      if (typeof url === "string") {
-        // ws://samehost:8080 -> wss://samehost
-        url = url.replace(/^ws:\/\//i, "wss://");
-        url = rewrite(url); // handles //host:port too
-      }
-      return protocols ? new OrigWS(url, protocols) : new OrigWS(url);
-    };
-    window.WebSocket.prototype = OrigWS.prototype;
+  // Best-effort axios patch (if axios is on window)
+  function patchAxios() {
+    const ax = window.axios;
+    if (!ax || ax.__questifyPatched) return;
+    ax.__questifyPatched = true;
+
+    if (ax.defaults && typeof ax.defaults.baseURL === "string") {
+      ax.defaults.baseURL = rewrite(ax.defaults.baseURL);
+    }
+
+    if (ax.interceptors && ax.interceptors.request) {
+      ax.interceptors.request.use(function (config) {
+        if (config && typeof config.baseURL === "string") config.baseURL = rewrite(config.baseURL);
+        if (config && typeof config.url === "string") config.url = rewrite(config.url);
+        return config;
+      });
+    }
   }
+
+  patchAxios();
+  window.addEventListener("load", patchAxios);
 })();
