@@ -51,3 +51,16 @@
   value:
     name: SERVER_TOMCAT_MAX_SWALLOW_SIZE
     value: "-1"
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SERVER_FORWARD_HEADERS_STRATEGY
+    value: framework
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SERVER_TOMCAT_USE_RELATIVE_REDIRECTS
+    value: "true"
+

@@ -22,17 +22,17 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: keycloak
+                name: questify-frontend
                 port:
-                  number: 8080
+                  number: 80
 
           - path: /s3
             pathType: Prefix
             backend:
               service:
-                name: minio
+                name: questify-frontend
                 port:
-                  number: 9000
+                  number: 80
 
           - path: /
             pathType: Prefix
