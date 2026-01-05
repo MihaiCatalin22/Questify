@@ -1,0 +1,53 @@
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: QUEST_SERVICE_BASE
+    value: http://quest-service
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: PROOF_SERVICE_BASE
+    value: http://proof-service
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: INTERNAL_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: internal-token
+        key: token
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SECURITY_INTERNAL_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: internal-token
+        key: token
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE
+    value: 100MB
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE
+    value: 100MB
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SERVER_TOMCAT_MAX_HTTP_FORM_POST_SIZE
+    value: "104857600"
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SERVER_TOMCAT_MAX_SWALLOW_SIZE
+    value: "-1"

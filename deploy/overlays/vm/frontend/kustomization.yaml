@@ -12,11 +12,12 @@ patches:
 configMapGenerator:
   - name: nginx-config
     files:
-      - default.conf
+      - default.conf=nginx/default.conf
+      - rewrite-mixed-content.js=rewrite-mixed-content.js
 
 generatorOptions:
   disableNameSuffixHash: true
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-frontend
-    newTag: feat-cicd2-c68c474
+    newTag: latest

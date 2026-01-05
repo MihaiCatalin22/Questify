@@ -1,0 +1,17 @@
+- op: replace
+  path: /spec/template/spec/containers/0/env/6/value
+  value: https://questify-1.tail03c40b.ts.net/auth/realms/questify
+- op: replace
+  path: /spec/template/spec/containers/0/env/7/value
+  value: https://questify-1.tail03c40b.ts.net/auth/realms/questify
+- op: replace
+  path: /spec/template/spec/containers/0/env/8/value
+  value: http://keycloak:8080/auth/realms/questify/protocol/openid-connect/certs
+- op: replace
+  path: /spec/template/spec/containers/0/env/10/value
+  value: https://questify-1.tail03c40b.ts.net/s3
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+    value: http://keycloak:8080/auth/realms/questify/protocol/openid-connect/certs

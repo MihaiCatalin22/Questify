@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: quest-service
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/MihaiCatalin22/Questify.git
+    path: deploy/overlays/vm/quest-service
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=false

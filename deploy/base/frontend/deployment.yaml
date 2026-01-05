@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/mihiacatalin22/questify-frontend
+          image: ghcr.io/mihaicatalin22/questify-frontend
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
