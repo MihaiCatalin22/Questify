@@ -7,7 +7,7 @@ resources:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-user-service
-    newTag: feat-cicd2-8b5ec76
+    newTag: feat-cicd2-cbf2776
 
 patchesJson6902:
   - target:
