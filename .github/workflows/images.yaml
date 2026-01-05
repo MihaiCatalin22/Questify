@@ -194,35 +194,45 @@ jobs:
 
           echo "FULL_TAG=$full_tag"
 
-      - name: Patch prod overlays (set newTag = FULL_TAG)
+      - name: Patch prod + vm overlays (set newTag = FULL_TAG)
         shell: bash
         run: |
           set -euo pipefail
 
           python - <<'PY'
           import os, re
+          from pathlib import Path
 
           owner_lc = os.environ["OWNER_LC"]
           tag = os.environ["FULL_TAG"]
 
-          targets = [
-            ("deploy/overlays/prod/frontend/kustomization.yaml",            f"ghcr.io/{owner_lc}/questify-frontend"),
-            ("deploy/overlays/prod/proof-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-proof-service"),
-            ("deploy/overlays/prod/quest-service/kustomization.yaml",      f"ghcr.io/{owner_lc}/questify-quest-service"),
-            ("deploy/overlays/prod/submission-service/kustomization.yaml", f"ghcr.io/{owner_lc}/questify-submission-service"),
-            ("deploy/overlays/prod/user-service/kustomization.yaml",       f"ghcr.io/{owner_lc}/questify-user-service"),
-          ]
+          # We patch both overlays. Missing files are skipped (so old branches won't fail).
+          overlays = ["prod", "vm"]
 
-          for file, img in targets:
-            txt = open(file, "r", encoding="utf-8").read()
+          images = {
+            "frontend":            f"ghcr.io/{owner_lc}/questify-frontend",
+            "proof-service":       f"ghcr.io/{owner_lc}/questify-proof-service",
+            "quest-service":       f"ghcr.io/{owner_lc}/questify-quest-service",
+            "submission-service":  f"ghcr.io/{owner_lc}/questify-submission-service",
+            "user-service":        f"ghcr.io/{owner_lc}/questify-user-service",
+          }
+
+          def patch_file(file_path: Path, img: str):
+            txt = file_path.read_text(encoding="utf-8")
             pattern = rf"(^\s*-\s*name:\s*{re.escape(img)}\s*\n\s*newTag:\s*)([^\s#]+)(\s*$)"
             new_txt, n = re.subn(pattern, rf"\1{tag}\3", txt, flags=re.MULTILINE)
-
             if n != 1:
-              raise SystemExit(f"[ERROR] Expected to update exactly 1 newTag for {img} in {file}, updated={n}")
+              raise SystemExit(f"[ERROR] Expected to update exactly 1 newTag for {img} in {file_path}, updated={n}")
+            file_path.write_text(new_txt, encoding="utf-8")
+            print(f"[OK] {file_path} -> {img}:{tag}")
 
-            open(file, "w", encoding="utf-8").write(new_txt)
-            print(f"[OK] {file} -> {img}:{tag}")
+          for ov in overlays:
+            for svc, img in images.items():
+              file_path = Path(f"deploy/overlays/{ov}/{svc}/kustomization.yaml")
+              if not file_path.exists():
+                print(f"[SKIP] {file_path} (missing)")
+                continue
+              patch_file(file_path, img)
           PY
 
       - name: Commit & push (if changed)
@@ -238,6 +248,9 @@ jobs:
             exit 0
           fi
 
-          git add deploy/overlays/prod/*/kustomization.yaml
+          # Add what exists; don't fail if a glob matches nothing.
+          git add deploy/overlays/prod/*/kustomization.yaml 2>/dev/null || true
+          git add deploy/overlays/vm/*/kustomization.yaml   2>/dev/null || true
+
           git commit -m "chore(gitops): deploy ${FULL_TAG} [skip images]"
           git push origin HEAD:${BRANCH_NAME}

@@ -1,0 +1,23 @@
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SUBMISSION_SERVICE_BASE
+    value: http://submission-service/api
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: INTERNAL_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: internal-token
+        key: token
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SECURITY_INTERNAL_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: internal-token
+        key: token
