@@ -10,8 +10,8 @@ spec:
           configMap:
             name: nginx-config
             items:
-              - key: default.conf
-                path: default.conf
+              - key: configuration.conf
+                path: configuration.conf
               - key: rewrite-mixed-content.js
                 path: rewrite-mixed-content.js
       containers:
@@ -19,7 +19,7 @@ spec:
           volumeMounts:
             - name: nginx-config
               mountPath: /etc/nginx/conf.d/default.conf
-              subPath: default.conf
+              subPath: configuration.conf
               readOnly: true
             - name: nginx-config
               mountPath: /usr/share/nginx/html/rewrite-mixed-content.js

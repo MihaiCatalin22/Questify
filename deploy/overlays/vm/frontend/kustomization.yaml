@@ -12,7 +12,7 @@ patches:
 configMapGenerator:
   - name: nginx-config
     files:
-      - default.conf=nginx/default.conf
+      - configuration.conf=configuration.conf
       - rewrite-mixed-content.js=rewrite-mixed-content.js
 
 generatorOptions:
