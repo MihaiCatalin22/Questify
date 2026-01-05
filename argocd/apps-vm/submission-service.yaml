@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/MihaiCatalin22/Questify.git
     path: deploy/overlays/vm/user-service
-    targetRevision: main
+    targetRevision: feat/CICD2
   destination:
     server: https://kubernetes.default.svc
     namespace: default

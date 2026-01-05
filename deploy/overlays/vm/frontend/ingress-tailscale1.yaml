@@ -2,13 +2,22 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: questify
-  namespace: default
+  annotations:
+    tailscale.com/funnel: "true"
 spec:
   ingressClassName: tailscale
   rules:
     - host: questify-1.tail03c40b.ts.net
       http:
         paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: questify-api-gateway
+                port:
+                  number: 8080
+
           - path: /auth
             pathType: Prefix
             backend:
@@ -16,14 +25,6 @@ spec:
                 name: keycloak
                 port:
                   number: 8080
-
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: questify-api-gateway
-                port:
-                  number: 80
 
           - path: /s3
             pathType: Prefix
@@ -43,3 +44,4 @@ spec:
   tls:
     - hosts:
         - questify-1.tail03c40b.ts.net
+        - questify-1
