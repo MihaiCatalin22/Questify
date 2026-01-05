@@ -1,91 +1,63 @@
 (function () {
-  const HOST = window.location.hostname;
-  const GOOD_PROTOCOL = "https:";
-  const BAD_PORT = "8080";
+  // Useful sanity check in DevTools:
+  //   window.__questifyRewriteLoaded === true
+  window.__questifyRewriteLoaded = true;
 
-  function fixedUrl(input) {
-    if (input == null) return input;
+  function toStr(u) {
+    if (typeof u === "string") return u;
+    if (u && typeof u.href === "string") return u.href;      // URL
+    if (u && typeof u.url === "string") return u.url;        // Request-ish
+    if (u && typeof u.toString === "function") return u.toString();
+    try { return String(u); } catch { return ""; }
+  }
 
-    // Always coerce to string for matching (handles URL objects too)
-    const s = String(input);
-
-    // Ignore obvious non-http(s) schemes and relative paths
-    if (
-      s.startsWith("/") ||
-      s.startsWith("./") ||
-      s.startsWith("../") ||
-      s.startsWith("data:") ||
-      s.startsWith("blob:")
-    ) {
-      return s;
-    }
+  function rewrite(input) {
+    const s = toStr(input);
+    if (!s) return input;
 
     try {
-      // Parse relative/protocol-relative/absolute uniformly
-      const u = new URL(s, window.location.href);
+      // Always resolve relative URLs against the current origin
+      const url = new URL(s, window.location.origin);
 
-      // Only rewrite same-host URLs (prevents breaking external calls)
-      if (u.hostname !== HOST) return s;
+      // Only rewrite URLs that target THIS host (your app host)
+      if (url.hostname !== window.location.hostname) return s;
 
-      // If it’s http OR it’s hitting :8080, normalize to https with no port
-      if (u.protocol === "http:" || u.port === BAD_PORT) {
-        u.protocol = GOOD_PROTOCOL;
-        u.port = ""; // drop :8080 (and any port)
-        return u.toString();
-      }
+      // If it’s http, upgrade it.
+      if (url.protocol === "http:") url.protocol = "https:";
 
-      return u.toString();
-    } catch (e) {
+      // If it’s using port 8080, drop the port entirely (go to 443 on funnel).
+      if (url.port === "8080") url.port = "";
+
+      return url.toString();
+    } catch {
       return s;
     }
   }
 
-  // Flag for quick verification in the browser console
-  window.__questifyMixedContentPatch = true;
-
-  // Patch fetch
+  // Patch fetch (covers libraries using fetch under the hood)
   if (window.fetch) {
     const origFetch = window.fetch.bind(window);
     window.fetch = function (input, init) {
       try {
-        if (typeof input === "string" || input instanceof URL) {
-          input = fixedUrl(input);
+        // string or URL
+        if (typeof input === "string" || (input && typeof input.href === "string")) {
+          input = rewrite(input);
         } else if (input && typeof input.url === "string") {
-          input = new Request(fixedUrl(input.url), input);
+          // Request objects are immutable; recreate
+          input = new Request(rewrite(input.url), input);
         }
-      } catch (e) {}
+      } catch {}
       return origFetch(input, init);
     };
   }
 
-  // Patch XHR (axios uses this commonly)
+  // Patch XHR (axios XHR adapter uses this)
   const origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function () {
     const args = Array.prototype.slice.call(arguments);
-    args[1] = fixedUrl(args[1]); // url param
+    try {
+      args[1] = rewrite(args[1]);
+    } catch {}
     return origOpen.apply(this, args);
   };
-
-  // Best-effort axios patch if axios is exposed on window
-  function patchAxios() {
-    const ax = window.axios;
-    if (!ax || ax.__questifyPatched) return;
-
-    ax.__questifyPatched = true;
-
-    if (ax.defaults && typeof ax.defaults.baseURL === "string") {
-      ax.defaults.baseURL = fixedUrl(ax.defaults.baseURL);
-    }
-
-    if (ax.interceptors && ax.interceptors.request) {
-      ax.interceptors.request.use(function (config) {
-        if (config && config.baseURL) config.baseURL = fixedUrl(config.baseURL);
-        if (config && config.url) config.url = fixedUrl(config.url);
-        return config;
-      });
-    }
-  }
-
-  patchAxios();
-  window.addEventListener("load", patchAxios);
 })();
