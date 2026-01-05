@@ -1,70 +1,86 @@
 (function () {
-  const BAD_PORT = ":8080";
+  const HOST = window.location.hostname;
+  const GOOD_PROTOCOL = "https:";
+  const BAD_PORT = "8080";
 
-  function rewrite(url) {
-    if (typeof url !== "string") return url;
+  function fixedUrl(input) {
+    if (input == null) return input;
+
+    // Always coerce to string for matching (handles URL objects too)
+    const s = String(input);
+
+    // Ignore obvious non-http(s) schemes and relative paths
+    if (
+      s.startsWith("/") ||
+      s.startsWith("./") ||
+      s.startsWith("../") ||
+      s.startsWith("data:") ||
+      s.startsWith("blob:")
+    ) {
+      return s;
+    }
 
     try {
-      const hostname = window.location.hostname; // no port
-      const goodOrigin = "https://" + hostname;
+      // Parse relative/protocol-relative/absolute uniformly
+      const u = new URL(s, window.location.href);
 
-      const badHttpPort = "http://" + hostname + BAD_PORT;
-      const badHttpsPort = "https://" + hostname + BAD_PORT;
-      const badHttp = "http://" + hostname;
+      // Only rewrite same-host URLs (prevents breaking external calls)
+      if (u.hostname !== HOST) return s;
 
-      if (url.startsWith(badHttpPort)) {
-        return goodOrigin + url.substring(badHttpPort.length);
-      }
-      if (url.startsWith(badHttpsPort)) {
-        return goodOrigin + url.substring(badHttpsPort.length);
-      }
-      if (url.startsWith(badHttp)) {
-        return goodOrigin + url.substring(badHttp.length);
+      // If it’s http OR it’s hitting :8080, normalize to https with no port
+      if (u.protocol === "http:" || u.port === BAD_PORT) {
+        u.protocol = GOOD_PROTOCOL;
+        u.port = ""; // drop :8080 (and any port)
+        return u.toString();
       }
 
-      return url;
+      return u.toString();
     } catch (e) {
-      return url;
+      return s;
     }
   }
 
-  // Patch window.fetch
+  // Flag for quick verification in the browser console
+  window.__questifyMixedContentPatch = true;
+
+  // Patch fetch
   if (window.fetch) {
     const origFetch = window.fetch.bind(window);
     window.fetch = function (input, init) {
       try {
-        if (typeof input === "string") {
-          input = rewrite(input);
+        if (typeof input === "string" || input instanceof URL) {
+          input = fixedUrl(input);
         } else if (input && typeof input.url === "string") {
-          input = new Request(rewrite(input.url), input);
+          input = new Request(fixedUrl(input.url), input);
         }
       } catch (e) {}
       return origFetch(input, init);
     };
   }
 
-  // Patch XHR (axios uses this often)
+  // Patch XHR (axios uses this commonly)
   const origOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function (method, url) {
+  XMLHttpRequest.prototype.open = function () {
     const args = Array.prototype.slice.call(arguments);
-    args[1] = rewrite(args[1]);
+    args[1] = fixedUrl(args[1]); // url param
     return origOpen.apply(this, args);
   };
 
-  // Best-effort axios patch (if axios is on window)
+  // Best-effort axios patch if axios is exposed on window
   function patchAxios() {
     const ax = window.axios;
     if (!ax || ax.__questifyPatched) return;
+
     ax.__questifyPatched = true;
 
     if (ax.defaults && typeof ax.defaults.baseURL === "string") {
-      ax.defaults.baseURL = rewrite(ax.defaults.baseURL);
+      ax.defaults.baseURL = fixedUrl(ax.defaults.baseURL);
     }
 
     if (ax.interceptors && ax.interceptors.request) {
       ax.interceptors.request.use(function (config) {
-        if (config && typeof config.baseURL === "string") config.baseURL = rewrite(config.baseURL);
-        if (config && typeof config.url === "string") config.url = rewrite(config.url);
+        if (config && config.baseURL) config.baseURL = fixedUrl(config.baseURL);
+        if (config && config.url) config.url = fixedUrl(config.url);
         return config;
       });
     }
