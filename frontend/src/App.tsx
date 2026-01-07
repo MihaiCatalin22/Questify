@@ -46,9 +46,7 @@ function Shell() {
                 <img
                   src={logo}
                   alt="Questify"
-                  className="h-6 w-6"
-                  width={24}
-                  height={24}
+                  className="h-8 w-8"
                   onError={() => setLogoOk(false)}
                 />
               ) : (
@@ -67,9 +65,6 @@ function Shell() {
               <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/submissions">
                 Submissions
               </Link>
-              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/users">
-                Users
-              </Link>
               <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/profile">
                 Profile
               </Link>
@@ -77,25 +72,32 @@ function Shell() {
           </div>
 
           <div className="flex items-center gap-3">
-            {auth.isAuthenticated && (
-              <>
-                <Link to="/profile" className="text-sm opacity-80 hover:opacity-100">
-                  {displayName}
-                </Link>
-                <button
-                  onClick={() => auth.signoutRedirect()}
-                  className="px-3 py-1.5 rounded-lg border shadow text-sm hover:bg-gray-100 dark:hover:bg-[#161b26]"
-                >
-                  Log out
-                </button>
-              </>
-            )}
             <ThemeToggle />
+
+            <span className="hidden sm:inline text-sm text-slate-600 dark:text-slate-300">
+              {displayName}
+            </span>
+
+            {auth.isAuthenticated ? (
+              <button
+                className="text-sm px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"
+                onClick={() => auth.signoutRedirect()}
+              >
+                Logout
+              </button>
+            ) : (
+              <Link
+                className="text-sm px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"
+                to="/login"
+              >
+                Login
+              </Link>
+            )}
           </div>
         </div>
       </header>
 
-      <main className="p-6 dark:bg-[#0b0d12] min-h-[calc(100vh-56px)]">
+      <main className="px-6 py-6">
         <Outlet />
       </main>
     </div>
@@ -111,7 +113,6 @@ export default function App() {
         <Route index element={<HomePage />} />
 
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
-
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/oidc/callback" element={<OidcCallback />} />
@@ -126,7 +127,6 @@ export default function App() {
             <Route path="/quests" element={<QuestsList />} />
             <Route path="/quests/new" element={<QuestForm />} />
             <Route path="/quests/:id" element={<QuestDetail />} />
-            <Route path="/quests/:id/edit" element={<QuestForm />} />
             <Route path="/quests/discover" element={<DiscoverQuests />} />
 
             <Route path="/submissions" element={<SubmissionsList />} />
