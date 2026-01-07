@@ -1,8 +1,9 @@
 (function () {
+  // Avoid double-patching
   if (window.__questifyRewriteLoaded) return;
   window.__questifyRewriteLoaded = true;
 
-  const QUESTIFY_REWRITE_VERSION = "v6-diagnostic-2026-01-07";
+  const VERSION = "v7-redirect-proof-2026-01-07";
 
   const DEBUG = (() => {
     try {
@@ -18,8 +19,6 @@
     try { console.warn("[questify-rewrite]", ...args); } catch {}
   }
 
-  log("loaded", QUESTIFY_REWRITE_VERSION, "origin=", location.origin, "baseURI=", document.baseURI);
-
   function toStr(u) {
     if (typeof u === "string") return u;
     if (u && typeof u.href === "string") return u.href;
@@ -27,127 +26,176 @@
     try { return String(u); } catch { return ""; }
   }
 
-  function shouldTrace(s) {
-    if (!s) return false;
-    return (
-      s.includes("/api/users") ||
-      s.includes(":8080") ||
-      (s.startsWith("http:") && s.includes(window.location.hostname))
-    );
-  }
-
-  // Force resolve against location.origin (NOT document.baseURI)
-  function rewriteAbsoluteNetworkUrl(input) {
+  // Rewrites:
+  // - http://<same-host>:8080/...  -> https://<same-host>/...
+  // - http://<same-host>/...       -> https://<same-host>/...
+  // - ws://<same-host>:8080/...    -> wss://<same-host>/...
+  // Only touches same-host URLs OR anything explicitly using port 8080.
+  function rewrite(input) {
     const s = toStr(input);
-    if (!s) return s;
+    if (!s) return input;
 
     try {
-      const u = new URL(s, window.location.origin);
+      const url = new URL(s, window.location.origin);
 
-      const sameHost = u.hostname === window.location.hostname;
-      const is8080 = u.port === "8080";
+      const sameHost = url.hostname === window.location.hostname;
+      const is8080 = url.port === "8080";
 
-      // Only touch same-host or explicit :8080
-      if (!sameHost && !is8080) return u.toString();
+      // Only rewrite same-host or explicit :8080
+      if (!sameHost && !is8080) return s;
 
-      if (u.protocol === "http:") u.protocol = "https:";
-      if (u.protocol === "ws:") u.protocol = "wss:";
+      // Upgrade protocol
+      if (url.protocol === "http:") url.protocol = "https:";
+      if (url.protocol === "ws:") url.protocol = "wss:";
 
-      if (is8080) u.port = "";
+      // Strip :8080
+      if (is8080) url.port = "";
 
-      if (u.protocol === "https:" && u.port === "443") u.port = "";
-      if (u.protocol === "http:" && u.port === "80") u.port = "";
-      if (u.protocol === "wss:" && u.port === "443") u.port = "";
-      if (u.protocol === "ws:" && u.port === "80") u.port = "";
+      // Strip default ports if present
+      if (url.protocol === "https:" && url.port === "443") url.port = "";
+      if (url.protocol === "http:" && url.port === "80") url.port = "";
+      if (url.protocol === "wss:" && url.port === "443") url.port = "";
+      if (url.protocol === "ws:" && url.port === "80") url.port = "";
 
-      return u.toString();
+      return url.toString();
     } catch {
       return s;
     }
   }
 
-  // ---- Patch XHR.open with ALWAYS-TRACE for users/8080/http ----
-  const origOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function () {
-    const args = Array.prototype.slice.call(arguments);
-    const before = toStr(args[1]);
+  function rewriteWithDebug(original, kind) {
+    const before = toStr(original);
+    const after = rewrite(original);
+    const afterStr = toStr(after);
 
-    // Always normalize to absolute https URL for network calls
-    const after = rewriteAbsoluteNetworkUrl(args[1]);
-    args[1] = after;
-
-    if (DEBUG && (shouldTrace(before) || shouldTrace(after))) {
-      try {
-        console.warn("[questify-rewrite] XHR.open BEFORE =", before);
-        console.warn("[questify-rewrite] XHR.open AFTER  =", after);
-        console.warn("[questify-rewrite] location.href   =", location.href);
-        console.warn("[questify-rewrite] document.baseURI=", document.baseURI);
-        console.trace("[questify-rewrite] XHR.open stack trace");
-      } catch {}
+    if (DEBUG && before && afterStr && before !== afterStr) {
+      let stack = "";
+      try { stack = (new Error()).stack || ""; } catch {}
+      log(`${kind}:`, before, "=>", afterStr, stack ? `\n${stack}` : "");
     }
+    return after;
+  }
 
-    return origOpen.apply(this, args);
-  };
-  log("patched XMLHttpRequest.open");
+  log("loaded", VERSION, "origin=", window.location.origin, "baseURI=", document.baseURI);
 
-  // ---- Patch fetch similarly (also traces) ----
+  // ---- Patch XHR.open ----
+  (function patchXHR() {
+    const origOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function () {
+      const args = Array.prototype.slice.call(arguments);
+
+      if (DEBUG) log("XHR.open BEFORE =", args[1]);
+
+      try {
+        args[1] = rewriteWithDebug(args[1], "XHR.open");
+      } catch {}
+
+      if (DEBUG) {
+        log("XHR.open AFTER  =", args[1]);
+        log("location.href   =", window.location.href);
+        log("document.baseURI=", document.baseURI);
+        try { log("XHR.open stack trace"); console.trace(); } catch {}
+      }
+
+      return origOpen.apply(this, args);
+    };
+
+    // Also patch send() to help confirm redirect targets (responseURL shows final URL when available).
+    const origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function () {
+      if (DEBUG) {
+        try {
+          const xhr = this;
+          xhr.addEventListener("error", function () {
+            try { log("XHR error responseURL=", xhr.responseURL || "(empty)"); } catch {}
+          });
+          xhr.addEventListener("readystatechange", function () {
+            if (xhr.readyState === 4) {
+              try { log("XHR done status=", xhr.status, "responseURL=", xhr.responseURL || "(empty)"); } catch {}
+            }
+          });
+        } catch {}
+      }
+      return origSend.apply(this, arguments);
+    };
+
+    log("patched XMLHttpRequest.open");
+  })();
+
+  // ---- Patch fetch ----
   if (window.fetch) {
     const origFetch = window.fetch.bind(window);
     window.fetch = function (input, init) {
-      const before = toStr(input);
-      let after = before;
-
       try {
         if (typeof input === "string" || (input && typeof input.href === "string")) {
-          after = rewriteAbsoluteNetworkUrl(input);
-          input = after;
-        } else if (typeof Request !== "undefined" && input instanceof Request) {
-          after = rewriteAbsoluteNetworkUrl(input.url);
-          if (after && after !== input.url) input = new Request(after, input);
+          input = rewriteWithDebug(input, "fetch");
+        } else if (input && typeof input.url === "string") {
+          const newUrl = rewriteWithDebug(input.url, "fetch(Request)");
+          if (newUrl !== input.url) input = new Request(newUrl, input);
         }
       } catch {}
-
-      if (DEBUG && (shouldTrace(before) || shouldTrace(after))) {
-        try {
-          console.warn("[questify-rewrite] fetch BEFORE =", before);
-          console.warn("[questify-rewrite] fetch AFTER  =", after);
-          console.trace("[questify-rewrite] fetch stack trace");
-        } catch {}
-      }
-
       return origFetch(input, init);
     };
     log("patched fetch");
   }
 
-  // ---- Patch Request constructor (so code can't sneak http in via new Request()) ----
+  // ---- Patch Request constructor ----
   if (window.Request) {
     const OrigRequest = window.Request;
     window.Request = function Request(input, init) {
-      const before = toStr(input);
-      let after = before;
-
       try {
-        if (typeof input === "string" || (input && typeof input.href === "string")) {
-          after = rewriteAbsoluteNetworkUrl(input);
-          input = after;
+        if (typeof input === "string") {
+          input = rewriteWithDebug(input, "Request");
         } else if (input && typeof input.url === "string") {
-          after = rewriteAbsoluteNetworkUrl(input.url);
-          if (after && after !== input.url) input = new OrigRequest(after, input);
+          const newUrl = rewriteWithDebug(input.url, "Request(Request)");
+          if (newUrl !== input.url) input = new OrigRequest(newUrl, input);
         }
       } catch {}
-
-      if (DEBUG && (shouldTrace(before) || shouldTrace(after))) {
-        try {
-          console.warn("[questify-rewrite] Request BEFORE =", before);
-          console.warn("[questify-rewrite] Request AFTER  =", after);
-          console.trace("[questify-rewrite] Request stack trace");
-        } catch {}
-      }
-
       return new OrigRequest(input, init);
     };
     window.Request.prototype = OrigRequest.prototype;
     log("patched Request");
+  }
+
+  // ---- Patch sendBeacon ----
+  if (navigator && navigator.sendBeacon) {
+    const origBeacon = navigator.sendBeacon.bind(navigator);
+    navigator.sendBeacon = function (url, data) {
+      try { url = rewriteWithDebug(url, "sendBeacon"); } catch {}
+      return origBeacon(url, data);
+    };
+    log("patched navigator.sendBeacon");
+  }
+
+  // ---- Patch EventSource ----
+  if (window.EventSource) {
+    const OrigES = window.EventSource;
+    window.EventSource = function EventSource(url, conf) {
+      try { url = rewriteWithDebug(url, "EventSource"); } catch {}
+      return new OrigES(url, conf);
+    };
+    window.EventSource.prototype = OrigES.prototype;
+    log("patched EventSource");
+  }
+
+  // ---- Patch WebSocket ----
+  if (window.WebSocket) {
+    const OrigWS = window.WebSocket;
+    window.WebSocket = function WebSocket(url, protocols) {
+      try { url = rewriteWithDebug(url, "WebSocket"); } catch {}
+      return protocols ? new OrigWS(url, protocols) : new OrigWS(url);
+    };
+    window.WebSocket.prototype = OrigWS.prototype;
+    log("patched WebSocket");
+  }
+
+  // ---- Patch window.open ----
+  if (window.open) {
+    const origOpenWin = window.open.bind(window);
+    window.open = function (url, name, features) {
+      try { url = rewriteWithDebug(url, "window.open"); } catch {}
+      return origOpenWin(url, name, features);
+    };
+    log("patched window.open");
   }
 })();
