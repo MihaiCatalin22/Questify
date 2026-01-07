@@ -46,7 +46,9 @@ function Shell() {
                 <img
                   src={logo}
                   alt="Questify"
-                  className="h-8 w-8"
+                  className="h-6 w-6"
+                  width={24}
+                  height={24}
                   onError={() => setLogoOk(false)}
                 />
               ) : (
