@@ -5,7 +5,7 @@ resources:
 - ../../../base/submission-service
 images:
 - name: ghcr.io/mihaicatalin22/questify-submission-service
-  newTag: feat-cicd2-b5a01e5
+  newTag: feat-cicd2-24eb963
 patchesJson6902:
 - target:
     group: argoproj.io
