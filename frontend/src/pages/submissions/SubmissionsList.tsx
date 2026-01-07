@@ -3,10 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useSubmissions } from "../../hooks/useSubmissions";
 import type { SubmissionStatus } from "../../types/submission";
 
-const TABS: Array<SubmissionStatus | "ALL"> = ["PENDING", "APPROVED", "REJECTED", "SCANNING", "ALL"];
+const TABS: Array<SubmissionStatus | "ALL"> = ["ALL", "APPROVED", "REJECTED", "SCANNING", "PENDING"];
 
 export default function SubmissionsList() {
-  const [tab, setTab] = useState<SubmissionStatus | "ALL">("PENDING");
+  const [tab, setTab] = useState<SubmissionStatus | "ALL">("ALL");
   const [q, setQ] = useState("");
 
   const [page, setPage] = useState(0);
