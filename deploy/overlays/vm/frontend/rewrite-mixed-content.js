@@ -17,6 +17,26 @@
     try { console.warn("[questify-rewrite]", ...args); } catch {}
   }
 
+  // ---- Base guard (optional but useful) ----
+  // If something injects a <base href="http://...:8080/">, relative XHRs become mixed content.
+  (function ensureSafeBase() {
+    try {
+      const desired = window.location.origin + "/";
+      const bases = document.getElementsByTagName("base");
+      if (bases && bases.length) {
+        const b = bases[0];
+        if (b && typeof b.href === "string" && b.href !== desired) {
+          if (DEBUG) log("base href was", b.href, "=>", desired);
+          b.href = desired;
+        }
+        // remove extra bases if any
+        for (let i = bases.length - 1; i >= 1; i--) {
+          try { bases[i].remove(); } catch {}
+        }
+      }
+    } catch {}
+  })();
+
   function toStr(u) {
     if (typeof u === "string") return u;
     if (u && typeof u.href === "string") return u.href; // URL-like
@@ -25,7 +45,6 @@
   }
 
   function isRelativeLike(s) {
-    // Keep changes minimal: don't turn safe relative URLs into absolute unless necessary.
     return (
       s.startsWith("/") ||
       s.startsWith("./") ||
@@ -42,25 +61,27 @@
    * - ws://<same-host>:8080/...    -> wss://<same-host>/...
    * Only touches same-host URLs OR anything explicitly using port 8080.
    *
-   * Returns a STRING URL (or the original string if unchanged).
+   * forceAbsolute:
+   * - if true, relative inputs are returned as ABSOLUTE https://... URLs.
+   *   This prevents bad document.baseURI / <base> from poisoning requests.
    */
-  function rewriteToString(input, kind) {
+  function rewriteToString(input, kind, forceAbsolute) {
     const s = toStr(input);
     if (!s) return s;
 
-    // Fast path: if it's already relative and doesn't mention http/ws/8080, leave it alone.
-    if (isRelativeLike(s) && !s.includes("http:") && !s.includes("ws:") && !s.includes("8080")) {
-      return s;
-    }
-
     try {
+      // IMPORTANT: resolve against window.location.origin (NOT document.baseURI)
       const url = new URL(s, window.location.origin);
 
       const sameHost = url.hostname === window.location.hostname;
       const is8080 = url.port === "8080";
 
       // Only rewrite same-host or explicit :8080
-      if (!sameHost && !is8080) return s;
+      if (!sameHost && !is8080) {
+        // Still: if forceAbsolute and it was relative, return absolute on same origin
+        if (forceAbsolute && isRelativeLike(s)) return url.toString();
+        return s;
+      }
 
       // Upgrade protocol
       if (url.protocol === "http:") url.protocol = "https:";
@@ -69,16 +90,17 @@
       // Strip :8080
       if (is8080) url.port = "";
 
-      // Also strip default ports if they appear
+      // Strip default ports if they appear
       if (url.protocol === "https:" && url.port === "443") url.port = "";
       if (url.protocol === "http:" && url.port === "80") url.port = "";
       if (url.protocol === "wss:" && url.port === "443") url.port = "";
       if (url.protocol === "ws:" && url.port === "80") url.port = "";
 
-      // Preserve relative inputs as relative outputs when possible
-      if (isRelativeLike(s)) {
-        return url.pathname + url.search + url.hash;
-      }
+      // For network calls: force absolute so baseURI can’t interfere
+      if (forceAbsolute) return url.toString();
+
+      // For DOM attributes etc: keep relative if input was relative
+      if (isRelativeLike(s)) return url.pathname + url.search + url.hash;
 
       return url.toString();
     } catch {
@@ -86,9 +108,9 @@
     }
   }
 
-  function rewriteWithDebug(original, kind) {
+  function rewriteWithDebug(original, kind, forceAbsolute) {
     const before = toStr(original);
-    const after = rewriteToString(original, kind);
+    const after = rewriteToString(original, kind, forceAbsolute);
 
     if (DEBUG && before && after && before !== after) {
       let stack = "";
@@ -105,12 +127,10 @@
       try {
         // fetch("string" | URL | Request)
         if (typeof input === "string" || (input && typeof input.href === "string")) {
-          input = rewriteWithDebug(input, "fetch");
+          input = rewriteWithDebug(input, "fetch", true /*forceAbsolute*/);
         } else if (typeof Request !== "undefined" && input instanceof Request) {
-          const newUrl = rewriteWithDebug(input.url, "fetch(Request)");
-          if (newUrl && newUrl !== input.url) {
-            input = new Request(newUrl, input);
-          }
+          const newUrl = rewriteWithDebug(input.url, "fetch(Request)", true);
+          if (newUrl && newUrl !== input.url) input = new Request(newUrl, input);
         }
       } catch {}
       return origFetch(input, init);
@@ -118,15 +138,15 @@
     log("patched fetch");
   }
 
-  // ---- Patch Request constructor (covers code that does new Request("http://..")) ----
+  // ---- Patch Request constructor ----
   if (window.Request) {
     const OrigRequest = window.Request;
     window.Request = function Request(input, init) {
       try {
         if (typeof input === "string" || (input && typeof input.href === "string")) {
-          input = rewriteWithDebug(input, "Request");
+          input = rewriteWithDebug(input, "Request", true);
         } else if (input && typeof input.url === "string") {
-          const newUrl = rewriteWithDebug(input.url, "Request(RequestLike)");
+          const newUrl = rewriteWithDebug(input.url, "Request(RequestLike)", true);
           if (newUrl && newUrl !== input.url) input = new OrigRequest(newUrl, input);
         }
       } catch {}
@@ -142,7 +162,11 @@
     const args = Array.prototype.slice.call(arguments);
     try {
       // args[1] is the URL
-      args[1] = rewriteWithDebug(args[1], "XHR.open");
+      args[1] = rewriteWithDebug(args[1], "XHR.open", true /*forceAbsolute*/);
+      // Extra: if it STILL contains :8080 in debug, print a trace
+      if (DEBUG && typeof args[1] === "string" && args[1].includes(":8080")) {
+        console.trace("[questify-rewrite] STILL :8080 after rewrite", args[1], "baseURI=", document.baseURI);
+      }
     } catch {}
     return origOpen.apply(this, args);
   };
@@ -152,7 +176,7 @@
   if (navigator && navigator.sendBeacon) {
     const origBeacon = navigator.sendBeacon.bind(navigator);
     navigator.sendBeacon = function (url, data) {
-      try { url = rewriteWithDebug(url, "sendBeacon"); } catch {}
+      try { url = rewriteWithDebug(url, "sendBeacon", true); } catch {}
       return origBeacon(url, data);
     };
     log("patched navigator.sendBeacon");
@@ -162,7 +186,7 @@
   if (window.EventSource) {
     const OrigES = window.EventSource;
     window.EventSource = function EventSource(url, conf) {
-      try { url = rewriteWithDebug(url, "EventSource"); } catch {}
+      try { url = rewriteWithDebug(url, "EventSource", true); } catch {}
       return new OrigES(url, conf);
     };
     window.EventSource.prototype = OrigES.prototype;
@@ -173,43 +197,35 @@
   if (window.WebSocket) {
     const OrigWS = window.WebSocket;
     window.WebSocket = function WebSocket(url, protocols) {
-      try { url = rewriteWithDebug(url, "WebSocket"); } catch {}
+      try { url = rewriteWithDebug(url, "WebSocket", true); } catch {}
       return protocols ? new OrigWS(url, protocols) : new OrigWS(url);
     };
     window.WebSocket.prototype = OrigWS.prototype;
     log("patched WebSocket");
   }
 
-  // ---- Patch window.open (covers window.open("http://...:8080/...")) ----
+  // ---- Patch window.open (navigation; keep relative) ----
   if (window.open) {
     const origWinOpen = window.open.bind(window);
     window.open = function (url, target, features) {
-      try { url = rewriteWithDebug(url, "window.open"); } catch {}
+      try { url = rewriteWithDebug(url, "window.open", false); } catch {}
       return origWinOpen(url, target, features);
     };
     log("patched window.open");
   }
 
-  // ---- Patch setAttribute for src/href/action-ish attributes (covers <img src="http://..."> etc.) ----
+  // ---- Patch setAttribute for URL-ish attrs (keep relative) ----
   (function patchSetAttribute() {
     if (!Element || !Element.prototype) return;
 
-    const URL_ATTRS = new Set([
-      "src",
-      "href",
-      "action",
-      "formaction",
-      "poster",
-      "data-src",
-      "data-href",
-    ]);
-
+    const URL_ATTRS = new Set(["src", "href", "action", "formaction", "poster", "data-src", "data-href"]);
     const origSetAttribute = Element.prototype.setAttribute;
+
     Element.prototype.setAttribute = function (name, value) {
       try {
         const n = (name || "").toLowerCase();
         if (URL_ATTRS.has(n) && typeof value === "string") {
-          value = rewriteWithDebug(value, `setAttribute(${n})`);
+          value = rewriteWithDebug(value, `setAttribute(${n})`, false);
         }
       } catch {}
       return origSetAttribute.call(this, name, value);
@@ -221,7 +237,7 @@
         try {
           const n = (name || "").toLowerCase();
           if (URL_ATTRS.has(n) && typeof value === "string") {
-            value = rewriteWithDebug(value, `setAttributeNS(${n})`);
+            value = rewriteWithDebug(value, `setAttributeNS(${n})`, false);
           }
         } catch {}
         return origSetAttributeNS.call(this, ns, name, value);
@@ -231,7 +247,7 @@
     log("patched Element.setAttribute(/NS)");
   })();
 
-  // ---- Patch common property setters (.src/.href) where available ----
+  // ---- Patch common URL properties (.src/.href) (keep relative) ----
   (function patchUrlProps() {
     function patchProp(proto, prop, kind) {
       if (!proto) return;
@@ -243,7 +259,7 @@
         enumerable: desc.enumerable,
         get: desc.get,
         set: function (v) {
-          try { v = rewriteWithDebug(v, `${kind}.${prop}`); } catch {}
+          try { v = rewriteWithDebug(v, `${kind}.${prop}`, false); } catch {}
           return desc.set.call(this, v);
         },
       });
