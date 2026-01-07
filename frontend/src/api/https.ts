@@ -1,11 +1,46 @@
 import axios from "axios";
 import { getAccessToken } from "./token";
 
-const baseURL =
-  (import.meta.env && (import.meta.env as any).VITE_API_BASE) || "/api";
+function normalizeApiBase(raw?: string): string {
+  const v = (raw ?? "").trim();
+  if (!v) return "/api";
+
+  if (v.startsWith("/")) return v.replace(/\/$/, "");
+
+  const hasLocation =
+    typeof window !== "undefined" &&
+    typeof window.location !== "undefined" &&
+    typeof window.location.origin === "string";
+
+  try {
+    const baseOrigin = hasLocation ? window.location.origin : "http://localhost";
+    const pageProto = hasLocation ? window.location.protocol : "https:";
+    const pageHost = hasLocation ? window.location.hostname : "";
+    const pagePort = hasLocation ? window.location.port : ""; 
+
+    const u = new URL(v, baseOrigin);
+
+    if (hasLocation && u.hostname === pageHost) {
+      if (u.protocol === "http:") u.protocol = pageProto;
+
+      if (u.port === "8080") u.port = pagePort;
+
+      if (u.protocol === "https:" && u.port === "443") u.port = "";
+      if (u.protocol === "http:" && u.port === "80") u.port = "";
+    }
+
+    return u.toString().replace(/\/$/, "");
+  } catch {
+    return "/api";
+  }
+}
+
+const baseURL = normalizeApiBase(
+  (import.meta.env && (import.meta.env as any).VITE_API_BASE) || "/api"
+);
 
 const http = axios.create({
-  baseURL: baseURL.replace(/\/$/, ""),
+  baseURL,
   withCredentials: false,
 });
 
@@ -24,7 +59,9 @@ let forceLogoutEmitted = false;
 function emitForceLogout(reason: "deleted" | "unauthorized") {
   if (forceLogoutEmitted) return;
   forceLogoutEmitted = true;
-  window.dispatchEvent(new CustomEvent(FORCE_LOGOUT_EVENT, { detail: { reason } }));
+  window.dispatchEvent(
+    new CustomEvent(FORCE_LOGOUT_EVENT, { detail: { reason } })
+  );
 }
 
 http.interceptors.response.use(

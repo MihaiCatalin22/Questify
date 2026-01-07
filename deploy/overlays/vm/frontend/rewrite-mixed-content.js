@@ -19,19 +19,39 @@
 
   function toStr(u) {
     if (typeof u === "string") return u;
-    if (u && typeof u.href === "string") return u.href;
-    if (u && typeof u.url === "string") return u.url;
+    if (u && typeof u.href === "string") return u.href; // URL-like
+    if (u && typeof u.url === "string") return u.url;   // Request-like (some libs)
     try { return String(u); } catch { return ""; }
   }
 
-  // Rewrites:
-  // - http://<same-host>:8080/...  -> https://<same-host>/...
-  // - http://<same-host>/...       -> https://<same-host>/...
-  // - ws://<same-host>:8080/...    -> wss://<same-host>/...
-  // Only touches same-host URLs OR anything explicitly using port 8080.
-  function rewrite(input, kind) {
+  function isRelativeLike(s) {
+    // Keep changes minimal: don't turn safe relative URLs into absolute unless necessary.
+    return (
+      s.startsWith("/") ||
+      s.startsWith("./") ||
+      s.startsWith("../") ||
+      s.startsWith("?") ||
+      s.startsWith("#")
+    );
+  }
+
+  /**
+   * Rewrites:
+   * - http://<same-host>:8080/...  -> https://<same-host>/...
+   * - http://<same-host>/...       -> https://<same-host>/...
+   * - ws://<same-host>:8080/...    -> wss://<same-host>/...
+   * Only touches same-host URLs OR anything explicitly using port 8080.
+   *
+   * Returns a STRING URL (or the original string if unchanged).
+   */
+  function rewriteToString(input, kind) {
     const s = toStr(input);
-    if (!s) return input;
+    if (!s) return s;
+
+    // Fast path: if it's already relative and doesn't mention http/ws/8080, leave it alone.
+    if (isRelativeLike(s) && !s.includes("http:") && !s.includes("ws:") && !s.includes("8080")) {
+      return s;
+    }
 
     try {
       const url = new URL(s, window.location.origin);
@@ -55,6 +75,11 @@
       if (url.protocol === "wss:" && url.port === "443") url.port = "";
       if (url.protocol === "ws:" && url.port === "80") url.port = "";
 
+      // Preserve relative inputs as relative outputs when possible
+      if (isRelativeLike(s)) {
+        return url.pathname + url.search + url.hash;
+      }
+
       return url.toString();
     } catch {
       return s;
@@ -63,13 +88,12 @@
 
   function rewriteWithDebug(original, kind) {
     const before = toStr(original);
-    const after = rewrite(original, kind);
-    const afterStr = toStr(after);
+    const after = rewriteToString(original, kind);
 
-    if (DEBUG && before && afterStr && before !== afterStr) {
+    if (DEBUG && before && after && before !== after) {
       let stack = "";
       try { stack = (new Error()).stack || ""; } catch {}
-      log(`${kind}:`, before, "=>", afterStr, stack ? `\n${stack}` : "");
+      log(`${kind}:`, before, "=>", after, stack ? `\n${stack}` : "");
     }
     return after;
   }
@@ -79,11 +103,14 @@
     const origFetch = window.fetch.bind(window);
     window.fetch = function (input, init) {
       try {
+        // fetch("string" | URL | Request)
         if (typeof input === "string" || (input && typeof input.href === "string")) {
           input = rewriteWithDebug(input, "fetch");
-        } else if (input && typeof input.url === "string") {
+        } else if (typeof Request !== "undefined" && input instanceof Request) {
           const newUrl = rewriteWithDebug(input.url, "fetch(Request)");
-          if (newUrl !== input.url) input = new Request(newUrl, input);
+          if (newUrl && newUrl !== input.url) {
+            input = new Request(newUrl, input);
+          }
         }
       } catch {}
       return origFetch(input, init);
@@ -96,11 +123,11 @@
     const OrigRequest = window.Request;
     window.Request = function Request(input, init) {
       try {
-        if (typeof input === "string") {
+        if (typeof input === "string" || (input && typeof input.href === "string")) {
           input = rewriteWithDebug(input, "Request");
         } else if (input && typeof input.url === "string") {
-          const newUrl = rewriteWithDebug(input.url, "Request(Request)");
-          if (newUrl !== input.url) input = new OrigRequest(newUrl, input);
+          const newUrl = rewriteWithDebug(input.url, "Request(RequestLike)");
+          if (newUrl && newUrl !== input.url) input = new OrigRequest(newUrl, input);
         }
       } catch {}
       return new OrigRequest(input, init);
@@ -114,6 +141,7 @@
   XMLHttpRequest.prototype.open = function () {
     const args = Array.prototype.slice.call(arguments);
     try {
+      // args[1] is the URL
       args[1] = rewriteWithDebug(args[1], "XHR.open");
     } catch {}
     return origOpen.apply(this, args);
@@ -151,4 +179,84 @@
     window.WebSocket.prototype = OrigWS.prototype;
     log("patched WebSocket");
   }
+
+  // ---- Patch window.open (covers window.open("http://...:8080/...")) ----
+  if (window.open) {
+    const origWinOpen = window.open.bind(window);
+    window.open = function (url, target, features) {
+      try { url = rewriteWithDebug(url, "window.open"); } catch {}
+      return origWinOpen(url, target, features);
+    };
+    log("patched window.open");
+  }
+
+  // ---- Patch setAttribute for src/href/action-ish attributes (covers <img src="http://..."> etc.) ----
+  (function patchSetAttribute() {
+    if (!Element || !Element.prototype) return;
+
+    const URL_ATTRS = new Set([
+      "src",
+      "href",
+      "action",
+      "formaction",
+      "poster",
+      "data-src",
+      "data-href",
+    ]);
+
+    const origSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name, value) {
+      try {
+        const n = (name || "").toLowerCase();
+        if (URL_ATTRS.has(n) && typeof value === "string") {
+          value = rewriteWithDebug(value, `setAttribute(${n})`);
+        }
+      } catch {}
+      return origSetAttribute.call(this, name, value);
+    };
+
+    const origSetAttributeNS = Element.prototype.setAttributeNS;
+    if (origSetAttributeNS) {
+      Element.prototype.setAttributeNS = function (ns, name, value) {
+        try {
+          const n = (name || "").toLowerCase();
+          if (URL_ATTRS.has(n) && typeof value === "string") {
+            value = rewriteWithDebug(value, `setAttributeNS(${n})`);
+          }
+        } catch {}
+        return origSetAttributeNS.call(this, ns, name, value);
+      };
+    }
+
+    log("patched Element.setAttribute(/NS)");
+  })();
+
+  // ---- Patch common property setters (.src/.href) where available ----
+  (function patchUrlProps() {
+    function patchProp(proto, prop, kind) {
+      if (!proto) return;
+      const desc = Object.getOwnPropertyDescriptor(proto, prop);
+      if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function") return;
+
+      Object.defineProperty(proto, prop, {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: desc.get,
+        set: function (v) {
+          try { v = rewriteWithDebug(v, `${kind}.${prop}`); } catch {}
+          return desc.set.call(this, v);
+        },
+      });
+    }
+
+    try {
+      patchProp(HTMLImageElement && HTMLImageElement.prototype, "src", "HTMLImageElement");
+      patchProp(HTMLScriptElement && HTMLScriptElement.prototype, "src", "HTMLScriptElement");
+      patchProp(HTMLLinkElement && HTMLLinkElement.prototype, "href", "HTMLLinkElement");
+      patchProp(HTMLAnchorElement && HTMLAnchorElement.prototype, "href", "HTMLAnchorElement");
+      patchProp(HTMLSourceElement && HTMLSourceElement.prototype, "src", "HTMLSourceElement");
+      patchProp(HTMLMediaElement && HTMLMediaElement.prototype, "src", "HTMLMediaElement");
+      log("patched common URL properties");
+    } catch {}
+  })();
 })();
