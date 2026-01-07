@@ -5,7 +5,7 @@ resources:
 - ../../../base/proof-service
 images:
 - name: ghcr.io/mihaicatalin22/questify-proof-service
-  newTag: feat-cicd2-66d6e73
+  newTag: feat-cicd2-198feaf
 patchesJson6902:
 - target:
     group: argoproj.io
