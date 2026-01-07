@@ -20,4 +20,4 @@ generatorOptions:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-frontend
-    newTag: feat-cicd2-e162b32
+    newTag: feat-cicd2-3c912a7
