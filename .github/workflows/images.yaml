@@ -132,7 +132,7 @@ jobs:
             org.opencontainers.image.revision=${{ env.HEAD_SHA }}
 
       - name: Trivy image scan (report)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           scan-type: image
           image-ref: ghcr.io/${{ env.OWNER_LC }}/${{ matrix.image }}:${{ env.FULL_TAG }}

@@ -28,7 +28,7 @@ class PromptBuilderTest {
         var prompt = builder.buildPrimaryPrompt(context, com.questify.dto.CoachDtos.CoachSuggestionMode.DEFAULT);
 
         assertThat(prompt.systemPrompt()).contains("You are Questify Coach.");
-        assertThat(prompt.userPrompt()).contains("\"status\": {");
+        assertThat(prompt.userPrompt()).contains("\"suggestions\": {");
         assertThat(prompt.userPrompt()).contains("Walk after dinner");
         assertThat(prompt.userPrompt()).contains("Morning run @ 2026-03-01T08:00:00Z");
         assertThat(prompt.userPrompt()).contains("Do not include status, source, model, or generatedAt.");

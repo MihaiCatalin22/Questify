@@ -9,7 +9,7 @@
   "properties": {
     "suggestions": {
       "type": "array",
-      "minItems": 3,
+      "minItems": 0,
       "maxItems": 3,
       "items": {
         "type": "object",

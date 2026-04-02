@@ -28,7 +28,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    @Value("${INTERNAL_TOKEN:dev-internal-token}")
+    @Value("${SECURITY_INTERNAL_TOKEN:${INTERNAL_TOKEN:${internal.token:dev-internal-token}}}")
     private String internalToken;
 
     /** Simple header token filter for /internal/** */
@@ -38,8 +38,7 @@ public class SecurityConfig {
 
         @Override
         protected boolean shouldNotFilter(HttpServletRequest request) {
-            // use servletPath to ignore contextPath (e.g. "/api")
-            String p = request.getServletPath();
+            String p = request.getRequestURI();
             return p == null || !p.startsWith("/internal/");
         }
 
@@ -51,7 +50,7 @@ public class SecurityConfig {
             if (hdr != null && !hdr.isBlank() && hdr.equals(token)) {
                 chain.doFilter(request, response);
             } else {
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+                response.sendError(HttpServletResponse.SC_FORBIDDEN);
             }
         }
     }
@@ -61,10 +60,7 @@ public class SecurityConfig {
     @Order(0)
     SecurityFilterChain internalChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher(req -> {
-                    String p = req.getServletPath();
-                    return p != null && p.startsWith("/internal/");
-                })
+                .securityMatcher("/internal/**")
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(a -> a.anyRequest().permitAll())

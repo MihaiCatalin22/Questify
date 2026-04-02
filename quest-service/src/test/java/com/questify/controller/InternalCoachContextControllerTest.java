@@ -11,6 +11,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -25,6 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = InternalCoachContextController.class)
 @AutoConfigureMockMvc
 @Import(SecurityConfig.class)
+@TestPropertySource(properties = "SECURITY_INTERNAL_TOKEN=test-internal-token")
 class InternalCoachContextControllerTest {
 
     @Autowired MockMvc mvc;
@@ -33,9 +35,9 @@ class InternalCoachContextControllerTest {
     @MockitoBean JwtDecoder jwtDecoder;
 
     @Test
-    void internalEndpoint_401_without_internal_token() throws Exception {
+    void internalEndpoint_403_without_internal_token() throws Exception {
         mvc.perform(get("/internal/users/u1/coach-context").accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -48,7 +50,7 @@ class InternalCoachContextControllerTest {
         ));
 
         mvc.perform(get("/internal/users/u1/coach-context")
-                        .header("X-Internal-Token", "dev-internal-token")
+                        .header("X-Internal-Token", "test-internal-token")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.activeQuestTitles[0]").value("Walk daily"))
