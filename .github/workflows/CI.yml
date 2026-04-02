@@ -129,6 +129,48 @@ jobs:
           projectBaseDir: quest-service
 
   # ───────────────────────────
+  # Coach Service
+  # ───────────────────────────
+  coach-service:
+    name: Coach Service • Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.10.2
+
+      - name: Build & Test
+        run: |
+          gradle --no-daemon -p coach-service clean test
+          if gradle -q -p coach-service tasks --all | grep -q '^jacocoTestReport'; then
+            gradle --no-daemon -p coach-service jacocoTestReport
+          else
+            echo "JaCoCo not configured in coach-service"
+          fi
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coach-tests
+          path: coach-service/build/reports/tests/test/**
+          if-no-files-found: ignore
+
+      - name: Upload JaCoCo XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coach-jacoco-xml
+          path: coach-service/build/reports/jacoco/test/jacocoTestReport.xml
+          if-no-files-found: ignore
+
+  # ───────────────────────────
   # User Service
   # ───────────────────────────
   user-service:

@@ -13,6 +13,7 @@ import OidcCallback from "./pages/auth/OidcCallback";
 import UsersList from "./pages/users/UsersList";
 import UserDetail from "./pages/users/UserDetail";
 
+import CoachPage from "./pages/coach/CoachPage";
 import ProfilePage from "./pages/profile/ProfilePage";
 
 import QuestsList from "./pages/quests/QuestsList";
@@ -26,14 +27,23 @@ import SubmissionDetail from "./pages/submissions/SubmissionDetail";
 import logo from "./assets/questify_logo_mark_compass.png";
 import { ThemeToggle } from "./components/ThemeToggle";
 
+function readProfileClaim(
+  profile: Record<string, unknown> | undefined,
+  key: "name" | "preferred_username" | "email"
+) {
+  const value = profile?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 function Shell() {
   const auth = useAuth();
   const [logoOk, setLogoOk] = useState(true);
+  const profile = auth.user?.profile as Record<string, unknown> | undefined;
 
   const displayName =
-    (auth.user?.profile as any)?.name ||
-    (auth.user?.profile as any)?.preferred_username ||
-    (auth.user?.profile as any)?.email ||
+    readProfileClaim(profile, "name") ||
+    readProfileClaim(profile, "preferred_username") ||
+    readProfileClaim(profile, "email") ||
     "Account";
 
   return (
@@ -66,6 +76,9 @@ function Shell() {
               </Link>
               <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/submissions">
                 Submissions
+              </Link>
+              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/coach">
+                Coach
               </Link>
               <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/profile">
                 Profile
@@ -121,6 +134,7 @@ export default function App() {
 
         <Route element={<ProtectedRoute />}>
           <Route element={<Shell />}>
+            <Route path="/coach" element={<CoachPage />} />
             <Route path="/profile" element={<ProfilePage />} />
 
             <Route path="/users" element={<UsersList />} />

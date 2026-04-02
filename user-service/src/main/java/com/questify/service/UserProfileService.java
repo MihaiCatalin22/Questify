@@ -2,7 +2,9 @@ package com.questify.service;
 
 import com.questify.domain.UserProfile;
 import com.questify.dto.ProfileDtos;
+import com.questify.dto.ProfileDtos.CoachSettingsRes;
 import com.questify.dto.ProfileDtos.UpsertMeReq;
+import com.questify.dto.ProfileDtos.UpsertCoachSettingsReq;
 import com.questify.kafka.EventPublisher;
 import com.questify.repository.UserProfileRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -130,6 +132,28 @@ public class UserProfileService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public CoachSettingsRes getCoachSettings(String userId) {
+        return repo.findById(userId)
+                .filter(p -> !p.isDeleted())
+                .map(this::toCoachSettings)
+                .orElseGet(() -> new CoachSettingsRes(false, null));
+    }
+
+    @Transactional
+    public CoachSettingsRes upsertCoachSettings(String userId, UpsertCoachSettingsReq req) {
+        var p = repo.findById(userId).orElseThrow(() -> new EntityNotFoundException("Profile not found"));
+
+        if (p.isDeleted()) {
+            throw new IllegalStateException("Profile has been deleted");
+        }
+
+        p.setAiCoachEnabled(Boolean.TRUE.equals(req.aiCoachEnabled()));
+        p.setCoachGoal(nullIfBlank(req.coachGoal()));
+
+        return toCoachSettings(repo.save(p));
+    }
+
     @Transactional
     public ProfileDtos.DeleteMeRes deleteMe(String userId) {
         var p = repo.findById(userId).orElseThrow(() -> new EntityNotFoundException("Profile not found"));
@@ -229,5 +253,9 @@ public class UserProfileService {
         if (aa != null) return aa;
         var bb = nullIfBlank(b);
         return bb;
+    }
+
+    private CoachSettingsRes toCoachSettings(UserProfile profile) {
+        return new CoachSettingsRes(profile.isAiCoachEnabled(), profile.getCoachGoal());
     }
 }

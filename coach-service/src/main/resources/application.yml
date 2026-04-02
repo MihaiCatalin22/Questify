@@ -1,0 +1,53 @@
+spring:
+  application:
+    name: coach-service
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER:https://questify.tail03c40b.ts.net/auth/realms/questify}
+          jwk-set-uri: ${OIDC_JWKS:http://keycloak:8080/auth/realms/questify/protocol/openid-connect/certs}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    enabled: true
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+    propagation:
+      type: ${MANAGEMENT_TRACING_PROPAGATION_TYPE:W3C}
+  otlp:
+    tracing:
+      endpoint: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:http://otel-collector.monitoring:4317}
+      protocol: ${MANAGEMENT_OTLP_TRACING_PROTOCOL:grpc}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+coach:
+  runtime: ${COACH_RUNTIME:ollama}
+  model: ${COACH_MODEL:smollm2:1.7b}
+  timeout-ms: ${COACH_TIMEOUT_MS:15000}
+  max-output-tokens: ${COACH_MAX_OUTPUT_TOKENS:400}
+  temperature: ${COACH_TEMPERATURE:0.3}
+  retry-enabled: ${COACH_RETRY_ENABLED:true}
+  max-retries: ${COACH_MAX_RETRIES:1}
+  debug-logging: ${COACH_DEBUG_LOGGING:false}
+  schema-version: ${COACH_SCHEMA_VERSION:v1}
+  runtime-base-url: ${COACH_RUNTIME_BASE_URL:http://ollama:11434}
+
+user:
+  service:
+    base: ${USER_SERVICE_BASE:http://user-service}
+
+quest:
+  service:
+    base: ${QUEST_SERVICE_BASE:http://quest-service}

@@ -1,0 +1,17 @@
+Return JSON that exactly matches this schema:
+{{schema}}
+
+Do not include status, source, model, or generatedAt.
+The server sets those fields.
+
+Suggestion mode:
+{{mode}}
+
+User goal:
+{{goal}}
+
+Recent quest history:
+{{recentQuestHistory}}
+
+Recent pattern:
+{{recentPattern}}

@@ -1,0 +1,304 @@
+[
+  {
+    "id": "walking-new-user",
+    "title": "New user walking goal without history",
+    "description": "New user, explicit walking goal, no recent history.",
+    "request": {
+      "mode": "DEFAULT",
+      "includeRecentHistory": false
+    },
+    "coachSettings": {
+      "aiCoachEnabled": true,
+      "coachGoal": "Build a simple habit of taking a short walk after dinner."
+    },
+    "questContext": {
+      "activeQuestTitles": [
+        "Evening walk"
+      ],
+      "recentCompletions": [],
+      "activeQuestCount": 1,
+      "totalCompletedCount": 0
+    }
+  },
+  {
+    "id": "exercise-sporadic",
+    "title": "Exercise goal with sporadic completions",
+    "description": "Exercise goal with recent but inconsistent completions.",
+    "request": {
+      "mode": "DEFAULT",
+      "includeRecentHistory": true
+    },
+    "coachSettings": {
+      "aiCoachEnabled": true,
+      "coachGoal": "Stay consistent with short workouts three times a week."
+    },
+    "questContext": {
+      "activeQuestTitles": [
+        "Lunch walk",
+        "10-minute bodyweight circuit",
+        "Stretch after training"
+      ],
+      "recentCompletions": [
+        {
+          "title": "Lunch walk",
+          "completedAt": "2026-03-28T12:18:00Z"
+        },
+        {
+          "title": "10-minute bodyweight circuit",
+          "completedAt": "2026-03-25T18:42:00Z"
+        }
+      ],
+      "activeQuestCount": 3,
+      "totalCompletedCount": 8
+    }
+  },
+  {
+    "id": "study-busy-weekdays",
+    "title": "Study goal during busy weekdays",
+    "description": "Study goal with limited weekday capacity.",
+    "request": {
+      "mode": "DEFAULT",
+      "includeRecentHistory": true
+    },
+    "coachSettings": {
+      "aiCoachEnabled": true,
+      "coachGoal": "Keep up with studying during busy weekdays without burning out."
+    },
+    "questContext": {
+      "activeQuestTitles": [
+        "Review lecture notes",
+        "Practice flashcards",
+        "Plan tomorrow's study block"
+      ],
+      "recentCompletions": [
+        {
+          "title": "Practice flashcards",
+          "completedAt": "2026-03-30T20:10:00Z"
+        },
+        {
+          "title": "Review lecture notes",
+          "completedAt": "2026-03-27T21:05:00Z"
+        },
+        {
+          "title": "Practice flashcards",
+          "completedAt": "2026-03-24T19:35:00Z"
+        }
+      ],
+      "activeQuestCount": 3,
+      "totalCompletedCount": 14
+    }
+  },
+  {
+    "id": "sleep-low-consistency",
+    "title": "Sleep routine with low consistency",
+    "description": "Sleep routine goal with low recent consistency.",
+    "request": {
+      "mode": "DEFAULT",
+      "includeRecentHistory": true
+    },
+    "coachSettings": {
+      "aiCoachEnabled": true,
+      "coachGoal": "Create a calmer evening routine so I can get to sleep earlier."
+    },
+    "questContext": {
+      "activeQuestTitles": [
+        "Phone down by 22:30",
+        "Read 10 pages before bed"
+      ],
+      "recentCompletions": [
+        {
+          "title": "Read 10 pages before bed",
+          "completedAt": "2026-03-29T22:11:00Z"
+        }
+      ],
+      "activeQuestCount": 2,
+      "totalCompletedCount": 4
+    }
+  },
+  {
+    "id": "hydration-focus-workdays",
+    "title": "Hydration and focus during workdays",
+    "description": "Hydration and focus micro-habit during workdays.",
+    "request": {
+      "mode": "DEFAULT",
+      "includeRecentHistory": true
+    },
+    "coachSettings": {
+      "aiCoachEnabled": true,
+      "coachGoal": "Stay hydrated and keep focus steady during workdays."
+    },
+    "questContext": {
+      "activeQuestTitles": [
+        "Water break every afternoon",
+        "25-minute focus block",
+        "Stand up between meetings"
+      ],
+      "recentCompletions": [
+        {
+          "title": "25-minute focus block",
+          "completedAt": "2026-03-31T08:35:00Z"
+        },
+        {
+          "title": "Water break every afternoon",
+          "completedAt": "2026-03-31T14:20:00Z"
+        },
+        {
+          "title": "Stand up between meetings",
+          "completedAt": "2026-03-30T15:02:00Z"
+        }
+      ],
+      "activeQuestCount": 3,
+      "totalCompletedCount": 19
+    }
+  },
+  {
+    "id": "screen-time-evening",
+    "title": "Reduce evening screen time",
+    "description": "Reduce evening screen time without using recent history.",
+    "request": {
+      "mode": "DEFAULT",
+      "includeRecentHistory": false
+    },
+    "coachSettings": {
+      "aiCoachEnabled": true,
+      "coachGoal": "Spend less time scrolling on my phone in the evening."
+    },
+    "questContext": {
+      "activeQuestTitles": [
+        "Charge phone outside bedroom",
+        "Tea instead of scrolling"
+      ],
+      "recentCompletions": [],
+      "activeQuestCount": 2,
+      "totalCompletedCount": 5
+    }
+  },
+  {
+    "id": "weekend-momentum",
+    "title": "Weekend-only momentum pattern",
+    "description": "Momentum happens mainly on weekends.",
+    "request": {
+      "mode": "DEFAULT",
+      "includeRecentHistory": true
+    },
+    "coachSettings": {
+      "aiCoachEnabled": true,
+      "coachGoal": "Use weekends to build momentum that still feels doable."
+    },
+    "questContext": {
+      "activeQuestTitles": [
+        "Saturday reset",
+        "Sunday meal prep",
+        "Short weekday reset"
+      ],
+      "recentCompletions": [
+        {
+          "title": "Saturday reset",
+          "completedAt": "2026-03-29T09:12:00Z"
+        },
+        {
+          "title": "Sunday meal prep",
+          "completedAt": "2026-03-30T16:18:00Z"
+        }
+      ],
+      "activeQuestCount": 3,
+      "totalCompletedCount": 9
+    }
+  },
+  {
+    "id": "over-ambitious-pattern",
+    "title": "Over-ambitious quest pattern",
+    "description": "User has active quests that are probably too ambitious.",
+    "request": {
+      "mode": "DEFAULT",
+      "includeRecentHistory": true
+    },
+    "coachSettings": {
+      "aiCoachEnabled": true,
+      "coachGoal": "Make progress on fitness goals without setting myself up to fail."
+    },
+    "questContext": {
+      "activeQuestTitles": [
+        "90-minute gym session",
+        "Run 10 km",
+        "Full meal prep Sunday"
+      ],
+      "recentCompletions": [
+        {
+          "title": "90-minute gym session",
+          "completedAt": "2026-03-20T17:40:00Z"
+        }
+      ],
+      "activeQuestCount": 3,
+      "totalCompletedCount": 6
+    }
+  },
+  {
+    "id": "streak-progression",
+    "title": "Consistent streak without burnout",
+    "description": "Consistent streak user who needs progression without burnout.",
+    "request": {
+      "mode": "DEFAULT",
+      "includeRecentHistory": true
+    },
+    "coachSettings": {
+      "aiCoachEnabled": true,
+      "coachGoal": "Keep a healthy streak going without overdoing it."
+    },
+    "questContext": {
+      "activeQuestTitles": [
+        "Morning mobility",
+        "Evening walk",
+        "Prep tomorrow's workout"
+      ],
+      "recentCompletions": [
+        {
+          "title": "Morning mobility",
+          "completedAt": "2026-03-31T06:45:00Z"
+        },
+        {
+          "title": "Evening walk",
+          "completedAt": "2026-03-30T19:05:00Z"
+        },
+        {
+          "title": "Prep tomorrow's workout",
+          "completedAt": "2026-03-29T20:40:00Z"
+        }
+      ],
+      "activeQuestCount": 3,
+      "totalCompletedCount": 31
+    }
+  },
+  {
+    "id": "low-energy-week",
+    "title": "Low-energy week",
+    "description": "Low-energy week that needs safe, minimal actions.",
+    "request": {
+      "mode": "DEFAULT",
+      "includeRecentHistory": true
+    },
+    "coachSettings": {
+      "aiCoachEnabled": true,
+      "coachGoal": "Keep moving forward gently during a low-energy week."
+    },
+    "questContext": {
+      "activeQuestTitles": [
+        "2-minute tidy-up",
+        "Gentle stretch",
+        "Walk to the mailbox"
+      ],
+      "recentCompletions": [
+        {
+          "title": "Gentle stretch",
+          "completedAt": "2026-03-31T20:08:00Z"
+        },
+        {
+          "title": "2-minute tidy-up",
+          "completedAt": "2026-03-30T18:15:00Z"
+        }
+      ],
+      "activeQuestCount": 3,
+      "totalCompletedCount": 12
+    }
+  }
+]

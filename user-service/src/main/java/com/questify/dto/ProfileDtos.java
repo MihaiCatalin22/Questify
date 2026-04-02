@@ -1,6 +1,7 @@
 package com.questify.dto;
 
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
@@ -16,6 +17,11 @@ public class ProfileDtos {
             @Size(max=512) String bio
     ) {}
 
+    public record UpsertCoachSettingsReq(
+            @NotNull Boolean aiCoachEnabled,
+            @Size(max = 500) String coachGoal
+    ) {}
+
     public record ProfileRes(
             String userId,
             String username,
@@ -23,6 +29,11 @@ public class ProfileDtos {
             String email,
             String avatarUrl,
             String bio
+    ) {}
+
+    public record CoachSettingsRes(
+            boolean aiCoachEnabled,
+            String coachGoal
     ) {}
 
     public record BulkRequest(List<String> ids) {}

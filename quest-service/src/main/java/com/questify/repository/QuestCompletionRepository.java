@@ -9,6 +9,11 @@ import java.util.List;
 import java.util.Optional;
 
 public interface QuestCompletionRepository extends JpaRepository<QuestCompletion, Long> {
+    interface RecentCoachCompletionProjection {
+        String getTitle();
+        java.time.Instant getCompletedAt();
+    }
+
     Optional<QuestCompletion> findByQuestIdAndUserId(Long questId, String userId);
     boolean existsByQuestIdAndUserId(Long questId, String userId);
     long countByQuestId(Long questId);
@@ -29,8 +34,18 @@ public interface QuestCompletionRepository extends JpaRepository<QuestCompletion
                or (:archived = true and q.status = com.questify.domain.QuestStatus.ARCHIVED)
                or (:archived = false and q.status <> com.questify.domain.QuestStatus.ARCHIVED)
              )
-         )
+       )
        """)
     long countMyCompletedFiltered(@Param("userId") String userId, @Param("archived") Boolean archived);
+
+    @Query("""
+       select q.title as title, c.completedAt as completedAt
+       from QuestCompletion c
+       join Quest q on q.id = c.questId
+       where c.userId = :userId
+       order by c.completedAt desc
+       """)
+    List<RecentCoachCompletionProjection> findRecentCoachCompletions(@Param("userId") String userId,
+                                                                     org.springframework.data.domain.Pageable pageable);
 
 }

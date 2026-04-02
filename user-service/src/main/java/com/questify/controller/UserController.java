@@ -67,6 +67,55 @@ public class UserController {
         }
     }
 
+    @GetMapping("/me/coach-settings")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> myCoachSettings(Authentication auth) {
+        var id      = jwt.userId(auth);
+        var uname   = jwt.username(auth);
+        var display = jwt.name(auth);
+        var email   = jwt.email(auth);
+        var avatar  = jwt.avatar(auth);
+
+        var p = service.ensure(id, uname, display, email, avatar);
+        if (p.isDeleted()) {
+            return ResponseEntity.status(HttpStatus.GONE)
+                    .header("Cache-Control", "no-store")
+                    .body(new ApiError("Profile is deleted"));
+        }
+
+        return ResponseEntity.ok()
+                .header("Cache-Control", "no-store")
+                .body(service.getCoachSettings(id));
+    }
+
+    @PutMapping("/me/coach-settings")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> updateMyCoachSettings(@Valid @RequestBody UpsertCoachSettingsReq req,
+                                                   Authentication auth) {
+        var id      = jwt.userId(auth);
+        var uname   = jwt.username(auth);
+        var display = jwt.name(auth);
+        var email   = jwt.email(auth);
+        var avatar  = jwt.avatar(auth);
+
+        var p = service.ensure(id, uname, display, email, avatar);
+        if (p.isDeleted()) {
+            return ResponseEntity.status(HttpStatus.GONE)
+                    .header("Cache-Control", "no-store")
+                    .body(new ApiError("Profile is deleted"));
+        }
+
+        try {
+            return ResponseEntity.ok()
+                    .header("Cache-Control", "no-store")
+                    .body(service.upsertCoachSettings(id, req));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.GONE)
+                    .header("Cache-Control", "no-store")
+                    .body(new ApiError("Profile is deleted"));
+        }
+    }
+
     @GetMapping("/me/export")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ExportRes> exportMe(Authentication auth) {

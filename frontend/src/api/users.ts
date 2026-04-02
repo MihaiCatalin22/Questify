@@ -43,6 +43,16 @@ export interface UpdateMeInput {
   bio?: string | null;
 }
 
+export interface CoachSettingsDTO {
+  aiCoachEnabled: boolean;
+  coachGoal?: string | null;
+}
+
+export interface UpdateCoachSettingsInput {
+  aiCoachEnabled: boolean;
+  coachGoal?: string | null;
+}
+
 export type UserProfileDTO = UserDTO;
 export type UpsertMeReq = UpdateMeInput;
 
@@ -70,47 +80,71 @@ export interface ExportJobDownloadDTO {
   url: string;
 }
 
-function mapUser(raw: any): UserDTO {
-  const id = String(raw?.id ?? raw?.userId ?? "");
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function readString(value: unknown, fallback: string = "") {
+  if (typeof value === "string") return value;
+  if (value == null) return fallback;
+  return String(value);
+}
+
+function readOptionalString(value: unknown) {
+  return typeof value === "string" ? value : undefined;
+}
+
+function readNullableString(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+function readRoles(value: unknown): Role[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is Role => item === "USER" || item === "REVIEWER" || item === "ADMIN");
+}
+
+function mapUser(rawInput: unknown): UserDTO {
+  const raw = asRecord(rawInput);
+  const id = readString(raw?.id ?? raw?.userId, "");
   return {
     id,
-    username: String(raw?.username ?? ""),
-    email: String(raw?.email ?? ""),
-    displayName: raw?.displayName ?? undefined,
-    roles: Array.isArray(raw?.roles) ? (raw.roles as Role[]) : [],
+    username: readString(raw?.username, ""),
+    email: readString(raw?.email, ""),
+    displayName: readOptionalString(raw?.displayName),
+    roles: readRoles(raw?.roles),
 
-    createdAt: String(raw?.createdAt ?? ""),
-    updatedAt: String(raw?.updatedAt ?? ""),
+    createdAt: readString(raw?.createdAt, ""),
+    updatedAt: readString(raw?.updatedAt, ""),
 
-    bio: raw?.bio ?? null,
+    bio: readNullableString(raw?.bio),
 
-    deletedAt: raw?.deletedAt ?? null,
-    deletionRequestedAt: raw?.deletionRequestedAt ?? null,
+    deletedAt: readNullableString(raw?.deletedAt),
+    deletionRequestedAt: readNullableString(raw?.deletionRequestedAt),
   };
 }
 
 export const UsersApi = {
   async list(username: string = ""): Promise<UserDTO[]> {
-    const { data } = await http.get<any>("/users", { params: { username } });
+    const { data } = await http.get<unknown>("/users", { params: { username } });
     if (Array.isArray(data)) return data.map(mapUser);
-    const content = (data as any)?.content;
+    const content = asRecord(data)?.content;
     return Array.isArray(content) ? content.map(mapUser) : [];
   },
 
   async get(id: string): Promise<UserDTO> {
-    const { data } = await http.get<any>(`/users/${encodeURIComponent(id)}`);
+    const { data } = await http.get<unknown>(`/users/${encodeURIComponent(id)}`);
     return mapUser(data);
   },
 
   async me(): Promise<UserProfileDTO> {
-    const { data } = await http.get<any>("/users/me", {
+    const { data } = await http.get<unknown>("/users/me", {
       headers: { "Cache-Control": "no-store" },
     });
     return mapUser(data);
   },
 
   async updateMe(input: UpsertMeReq): Promise<UserProfileDTO> {
-    const { data } = await http.put<any>("/users/me", input, {
+    const { data } = await http.put<unknown>("/users/me", input, {
       headers: { "Cache-Control": "no-store" },
     });
     return mapUser(data);
@@ -121,6 +155,26 @@ export const UsersApi = {
       headers: { "Cache-Control": "no-store" },
     });
     return data;
+  },
+
+  async getCoachSettings(): Promise<CoachSettingsDTO> {
+    const { data } = await http.get<CoachSettingsDTO>("/users/me/coach-settings", {
+      headers: { "Cache-Control": "no-store" },
+    });
+    return {
+      aiCoachEnabled: Boolean(data?.aiCoachEnabled),
+      coachGoal: data?.coachGoal ?? null,
+    };
+  },
+
+  async updateCoachSettings(input: UpdateCoachSettingsInput): Promise<CoachSettingsDTO> {
+    const { data } = await http.put<CoachSettingsDTO>("/users/me/coach-settings", input, {
+      headers: { "Cache-Control": "no-store" },
+    });
+    return {
+      aiCoachEnabled: Boolean(data?.aiCoachEnabled),
+      coachGoal: data?.coachGoal ?? null,
+    };
   },
 
   async requestExportJob(): Promise<ExportJobCreatedDTO> {
@@ -145,14 +199,18 @@ export const UsersApi = {
   },
 
   async create(_input: CreateUserInput): Promise<UserDTO> {
+    void _input;
     throw new Error("User creation is handled by Keycloak/OIDC.");
   },
 
   async update(_id: string, _input: UpdateUserInput): Promise<UserDTO> {
+    void _id;
+    void _input;
     throw new Error("User updates are handled by Keycloak/OIDC.");
   },
 
   async remove(_id: string): Promise<void> {
+    void _id;
     throw new Error("User deletion is handled by Keycloak/OIDC.");
   },
 };

@@ -2,6 +2,7 @@ package com.questify.service;
 
 import com.questify.domain.UserProfile;
 import com.questify.dto.ProfileDtos;
+import com.questify.dto.ProfileDtos.UpsertCoachSettingsReq;
 import com.questify.dto.ProfileDtos.UpsertMeReq;
 import com.questify.kafka.EventPublisher;
 import com.questify.repository.UserProfileRepository;
@@ -153,6 +154,44 @@ class UserProfileServiceTest {
     }
 
     @Test
+    void getCoachSettings_returns_defaults_when_profile_missing() {
+        when(repo.findById("missing")).thenReturn(Optional.empty());
+
+        var res = service.getCoachSettings("missing");
+
+        assertThat(res.aiCoachEnabled()).isFalse();
+        assertThat(res.coachGoal()).isNull();
+    }
+
+    @Test
+    void getCoachSettings_returns_defaults_when_profile_deleted() {
+        var deleted = existing.toBuilder()
+                .deletedAt(Instant.parse("2025-01-10T00:00:00Z"))
+                .aiCoachEnabled(true)
+                .coachGoal("Walk daily")
+                .build();
+        when(repo.findById("u1")).thenReturn(Optional.of(deleted));
+
+        var res = service.getCoachSettings("u1");
+
+        assertThat(res.aiCoachEnabled()).isFalse();
+        assertThat(res.coachGoal()).isNull();
+    }
+
+    @Test
+    void upsertCoachSettings_updates_fields_and_trims_blank_goal() {
+        when(repo.findById("u1")).thenReturn(Optional.of(existing));
+        when(repo.save(any(UserProfile.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var res = service.upsertCoachSettings("u1", new UpsertCoachSettingsReq(true, "  "));
+
+        assertThat(res.aiCoachEnabled()).isTrue();
+        assertThat(res.coachGoal()).isNull();
+        assertThat(existing.isAiCoachEnabled()).isTrue();
+        assertThat(existing.getCoachGoal()).isNull();
+    }
+
+    @Test
     void deleteMe_soft_deletes_profile_publishes_UserDeleted_and_attempts_idp_disable() {
         var p = existing.toBuilder()
                 .userId("abcdef123456")
@@ -249,6 +288,27 @@ class UserProfileServiceTest {
         assertThatThrownBy(() -> service.exportMe("missing"))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("Profile not found");
+    }
+
+    @Test
+    void upsertCoachSettings_throws_when_not_found() {
+        when(repo.findById("missing")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.upsertCoachSettings("missing", new UpsertCoachSettingsReq(true, "goal")))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining("Profile not found");
+    }
+
+    @Test
+    void upsertCoachSettings_throws_when_deleted() {
+        var deleted = existing.toBuilder()
+                .deletedAt(Instant.parse("2025-01-10T00:00:00Z"))
+                .build();
+        when(repo.findById("u1")).thenReturn(Optional.of(deleted));
+
+        assertThatThrownBy(() -> service.upsertCoachSettings("u1", new UpsertCoachSettingsReq(true, "goal")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Profile has been deleted");
     }
 
     @Test

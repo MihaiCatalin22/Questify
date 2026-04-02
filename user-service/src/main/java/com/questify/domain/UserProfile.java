@@ -39,6 +39,13 @@ public class UserProfile {
     @Size(max = 512)
     private String bio;
 
+    @Column(nullable = false)
+    private boolean aiCoachEnabled;
+
+    @Size(max = 500)
+    @Column(length = 500)
+    private String coachGoal;
+
     private Instant deletionRequestedAt;
     private Instant deletedAt;
 

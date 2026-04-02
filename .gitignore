@@ -1,4 +1,5 @@
 .gradle
+.gradle-home/
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
@@ -155,6 +156,8 @@ fe-port.yaml
 frontend.yaml
 nginx-fixed.conf
 settings.gradle.kts
+!coach-service/settings.gradle.kts
 build.gradle.kts
+!coach-service/build.gradle.kts
 docker-compose.yml
 infra/keycloak/realm-questify.json/realm-questify.json

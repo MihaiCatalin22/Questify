@@ -41,6 +41,9 @@ jobs:
           - name: quest-service
             dir: quest-service
             image: questify-quest-service
+          - name: coach-service
+            dir: coach-service
+            image: questify-coach-service
           - name: user-service
             dir: user-service
             image: questify-user-service
@@ -210,6 +213,7 @@ jobs:
           overlays = ["prod", "vm"]
 
           images = {
+            "coach-service":       f"ghcr.io/{owner_lc}/questify-coach-service",
             "frontend":            f"ghcr.io/{owner_lc}/questify-frontend",
             "proof-service":       f"ghcr.io/{owner_lc}/questify-proof-service",
             "quest-service":       f"ghcr.io/{owner_lc}/questify-quest-service",

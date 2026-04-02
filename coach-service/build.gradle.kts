@@ -1,0 +1,63 @@
+plugins {
+    id("org.springframework.boot") version "3.5.7"
+    id("io.spring.dependency-management") version "1.1.6"
+    id("java")
+    jacoco
+}
+
+group = "org.example"
+version = "1.0-SNAPSHOT"
+
+java { toolchain { languageVersion.set(JavaLanguageVersion.of(21)) } }
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-webflux")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
+    implementation("com.networknt:json-schema-validator:1.5.8")
+    implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
+
+    compileOnly("org.projectlombok:lombok:1.18.34")
+    annotationProcessor("org.projectlombok:lombok:1.18.34")
+
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.security:spring-security-test")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+}
+
+tasks.test {
+    useJUnitPlatform {
+        excludeTags("coach-benchmark")
+    }
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.register<Test>("coachBenchmark") {
+    group = "verification"
+    description = "Runs the local Ollama-backed Questify coach model benchmark"
+    useJUnitPlatform {
+        includeTags("coach-benchmark")
+    }
+    systemProperty("coach.benchmark.enabled", System.getProperty("coach.benchmark.enabled", "true"))
+    shouldRunAfter(tasks.test)
+}
+
+jacoco { toolVersion = "0.8.12" }
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
+}

@@ -1,0 +1,124 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: coach-service
+  namespace: default
+  labels:
+    app: coach-service
+  annotations:
+    argocd.argoproj.io/sync-options: Replace=true
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: coach-service
+  template:
+    metadata:
+      labels:
+        app: coach-service
+    spec:
+      serviceAccountName: coach-service
+      volumes:
+        - name: app-config
+          secret:
+            secretName: coach-service-app-yml
+      containers:
+        - name: coach-service
+          image: ghcr.io/mihaicatalin22/questify-coach-service:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: app-config
+              mountPath: /config
+              readOnly: true
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+            - name: SPRING_APPLICATION_NAME
+              value: "coach-service"
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: "/config/"
+            - name: SERVER_PORT
+              value: "8080"
+            - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+              value: "health,info,prometheus"
+            - name: MANAGEMENT_HEALTH_PROBES_ENABLED
+              value: "true"
+            - name: OIDC_ISSUER
+              value: "https://questify.tail03c40b.ts.net/auth/realms/questify"
+            - name: OIDC_JWKS
+              value: "https://questify.tail03c40b.ts.net/auth/realms/questify/protocol/openid-connect/certs"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "https://questify.tail03c40b.ts.net/auth/realms/questify"
+            - name: USER_SERVICE_BASE
+              value: "http://user-service"
+            - name: QUEST_SERVICE_BASE
+              value: "http://quest-service"
+            - name: COACH_RUNTIME_BASE_URL
+              value: "http://ollama:11434"
+            - name: COACH_RUNTIME
+              value: "ollama"
+            - name: COACH_MODEL
+              value: "smollm2:1.7b"
+            - name: COACH_TIMEOUT_MS
+              value: "15000"
+            - name: COACH_MAX_OUTPUT_TOKENS
+              value: "400"
+            - name: COACH_TEMPERATURE
+              value: "0.3"
+            - name: COACH_RETRY_ENABLED
+              value: "true"
+            - name: COACH_MAX_RETRIES
+              value: "1"
+            - name: JAVA_OPTS
+              value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine"
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+  strategy:
+    canary:
+      maxSurge: 1
+      maxUnavailable: 0
+      steps:
+        - setWeight: 20
+        - analysis:
+            templates:
+              - templateName: coach-service-5xx-rate
+        - pause:
+            duration: 60s
+        - setWeight: 50
+        - analysis:
+            templates:
+              - templateName: coach-service-5xx-rate
+        - pause:
+            duration: 120s
+        - setWeight: 100

@@ -215,6 +215,74 @@ class UserControllerTest {
     }
 
     @Test
+    void myCoachSettings_200_sets_no_store_and_calls_ensure() throws Exception {
+        var a = auth(10);
+
+        when(jwt.userId(any())).thenReturn("u10");
+        when(jwt.username(any())).thenReturn("alice");
+        when(jwt.name(any())).thenReturn("Alice");
+        when(jwt.email(any())).thenReturn("a@x.com");
+        when(jwt.avatar(any())).thenReturn("http://a.png");
+        when(service.ensure("u10", "alice", "Alice", "a@x.com", "http://a.png"))
+                .thenReturn(p("u10", "alice"));
+        when(service.getCoachSettings("u10")).thenReturn(new CoachSettingsRes(true, "Walk daily"));
+
+        mvc.perform(get("/users/me/coach-settings")
+                        .session(sessionWithAuth(a))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.aiCoachEnabled").value(true))
+                .andExpect(jsonPath("$.coachGoal").value("Walk daily"));
+    }
+
+    @Test
+    void updateMyCoachSettings_200_sets_no_store() throws Exception {
+        var a = auth(10);
+
+        when(jwt.userId(any())).thenReturn("u10");
+        when(jwt.username(any())).thenReturn("alice");
+        when(jwt.name(any())).thenReturn("Alice");
+        when(jwt.email(any())).thenReturn("a@x.com");
+        when(jwt.avatar(any())).thenReturn("http://a.png");
+        when(service.ensure("u10", "alice", "Alice", "a@x.com", "http://a.png"))
+                .thenReturn(p("u10", "alice"));
+        when(service.upsertCoachSettings(eq("u10"), any()))
+                .thenReturn(new CoachSettingsRes(true, "Walk daily"));
+
+        mvc.perform(put("/users/me/coach-settings")
+                        .session(sessionWithAuth(a))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"aiCoachEnabled\":true,\"coachGoal\":\"Walk daily\"}")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.aiCoachEnabled").value(true))
+                .andExpect(jsonPath("$.coachGoal").value("Walk daily"));
+    }
+
+    @Test
+    void updateMyCoachSettings_410_when_profile_deleted() throws Exception {
+        var a = auth(10);
+
+        when(jwt.userId(any())).thenReturn("u10");
+        when(jwt.username(any())).thenReturn("alice");
+        when(jwt.name(any())).thenReturn("Alice");
+        when(jwt.email(any())).thenReturn("a@x.com");
+        when(jwt.avatar(any())).thenReturn("http://a.png");
+        when(service.ensure("u10", "alice", "Alice", "a@x.com", "http://a.png"))
+                .thenReturn(deleted("u10", "alice"));
+
+        mvc.perform(put("/users/me/coach-settings")
+                        .session(sessionWithAuth(a))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"aiCoachEnabled\":true,\"coachGoal\":\"Walk daily\"}")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.message").value("Profile is deleted"));
+    }
+
+    @Test
     void exportMe_200_calls_ensure_then_export() throws Exception {
         var a = auth(10);
 

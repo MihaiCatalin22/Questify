@@ -1,0 +1,4 @@
+Your previous output was invalid.
+Return ONLY corrected valid JSON matching the required schema.
+Do not include status, source, model, or generatedAt.
+Do not add any explanations.

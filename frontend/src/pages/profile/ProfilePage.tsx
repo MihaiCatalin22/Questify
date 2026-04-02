@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import { useAuth } from "react-oidc-context";
+import { Link } from "react-router-dom";
 
 import { useDeleteMe, useMe, useUpdateMe } from "../../hooks/useUsers";
 import { QuestsApi } from "../../api/quests";
@@ -8,6 +9,20 @@ import { SubmissionsApi } from "../../api/submissions";
 import { UsersApi, type ExportJobDTO, type ExportJobStatus, type UpdateMeInput } from "../../api/users";
 
 const EXPORT_STORAGE_KEY = "questify:lastExportJob";
+
+type ApiErrorPayload = {
+  message?: string;
+  error?: string;
+  reason?: string;
+};
+
+type HttpLikeError = {
+  message?: string;
+  response?: {
+    status?: number;
+    data?: ApiErrorPayload;
+  };
+};
 
 function formatDate(iso?: string | null) {
   if (!iso) return "—";
@@ -37,6 +52,35 @@ function safeParseStoredJob(raw: string | null): ExportJobDTO | null {
   } catch {
     return null;
   }
+}
+
+function isHttpLikeError(error: unknown): error is HttpLikeError {
+  return typeof error === "object" && error !== null;
+}
+
+function extractApiMessage(error: unknown, fallback: string) {
+  if (!isHttpLikeError(error)) return fallback;
+
+  const responseData = error.response?.data;
+  if (typeof responseData?.message === "string" && responseData.message.trim()) {
+    return responseData.message;
+  }
+  if (typeof responseData?.error === "string" && responseData.error.trim()) {
+    return responseData.error;
+  }
+  if (typeof responseData?.reason === "string" && responseData.reason.trim()) {
+    return responseData.reason;
+  }
+  if (typeof error.message === "string" && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
+function getErrorStatus(error: unknown) {
+  if (!isHttpLikeError(error)) return undefined;
+  return error.response?.status;
 }
 
 export default function ProfilePage() {
@@ -78,7 +122,7 @@ export default function ProfilePage() {
       displayName: me.displayName ?? "",
       bio: me.bio ?? "",
     });
-  }, [me?.id]);
+  }, [me]);
 
   // persist export job
   useEffect(() => {
@@ -107,8 +151,8 @@ export default function ProfilePage() {
       try {
         const fresh = await UsersApi.getExportJob(stored.jobId);
         setExportJob((prev) => ({ ...(prev ?? stored), ...fresh }));
-      } catch (e: any) {
-        const status = e?.response?.status;
+      } catch (error: unknown) {
+        const status = getErrorStatus(error);
         if (status === 403 || status === 404) {
           localStorage.removeItem(EXPORT_STORAGE_KEY);
           setExportJob(null);
@@ -124,8 +168,8 @@ export default function ProfilePage() {
         bio: (form.bio ?? "").trim() || null,
       });
       toast.success("Profile updated");
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to update profile");
+    } catch (error: unknown) {
+      toast.error(extractApiMessage(error, "Failed to update profile"));
     }
   }
 
@@ -143,8 +187,8 @@ export default function ProfilePage() {
       setExportJob(job);
       lastToastStatus.current = created.status;
       toast.success("Export job started. We'll download the ZIP when it's ready.");
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to start export");
+    } catch (error: unknown) {
+      toast.error(extractApiMessage(error, "Failed to start export"));
     } finally {
       setExportStarting(false);
     }
@@ -155,9 +199,9 @@ export default function ProfilePage() {
       const url = await UsersApi.getExportDownloadUrl(jobId);
       window.location.href = url;
       return true;
-    } catch (e: any) {
-      const status = e?.response?.status;
-      const data = e?.response?.data;
+    } catch (error: unknown) {
+      const status = getErrorStatus(error);
+      const data = isHttpLikeError(error) ? error.response?.data : undefined;
 
       if (status === 409) {
         if (quiet409) return false;
@@ -179,7 +223,7 @@ export default function ProfilePage() {
         return false;
       }
 
-      toast.error(e?.message ?? "Failed to download export");
+      toast.error(extractApiMessage(error, "Failed to download export"));
       return false;
     }
   }
@@ -243,8 +287,8 @@ export default function ProfilePage() {
             await downloadExport(jobId, true); // quiet 409
           }
         }
-      } catch (e: any) {
-        toast.error(e?.message ?? "Failed to check export status");
+      } catch (error: unknown) {
+        toast.error(extractApiMessage(error, "Failed to check export status"));
         if (pollTimer.current) {
           window.clearInterval(pollTimer.current);
           pollTimer.current = null;
@@ -279,8 +323,8 @@ export default function ProfilePage() {
         await auth.removeUser();
         window.location.href = "/";
       }
-    } catch (e: any) {
-      toast.error(e?.message ?? "Deletion failed");
+    } catch (error: unknown) {
+      toast.error(extractApiMessage(error, "Deletion failed"));
     } finally {
       setDeleteModalOpen(false);
     }
@@ -302,8 +346,8 @@ export default function ProfilePage() {
         questsCompleted: Number(active.questsCompleted ?? 0) + Number(archived.questsCompleted ?? 0),
         submissionsTotal: Number(subs.submissionsTotal ?? 0),
       });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load summary");
+    } catch (error: unknown) {
+      toast.error(extractApiMessage(error, "Failed to load summary"));
     } finally {
       setLoadingSummary(false);
     }
@@ -319,7 +363,7 @@ export default function ProfilePage() {
   if (meQ.isError) {
     return (
       <div className="p-6 text-red-600">
-        {(meQ.error as any)?.message || "Failed to load profile"}
+        {extractApiMessage(meQ.error, "Failed to load profile")}
       </div>
     );
   }
@@ -491,6 +535,30 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f1115] p-5 space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">AI Coach</h2>
+            <p className="mt-1 text-sm opacity-80">
+              Open your dedicated coach workspace to manage AI Coach opt-in, set a goal, and generate tailored
+              suggestions.
+            </p>
+          </div>
+
+          <Link
+            to="/coach"
+            className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
+                       bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800"
+          >
+            Open AI Coach
+          </Link>
+        </div>
+
+        <p className="text-xs opacity-70">
+          AI Coach uses only minimal recent quest context and never includes proof media or raw uploads.
+        </p>
       </div>
 
       <div className="rounded-2xl border border-red-200 dark:border-red-900 bg-white dark:bg-[#0f1115] p-5 space-y-3">
