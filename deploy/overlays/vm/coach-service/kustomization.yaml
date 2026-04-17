@@ -7,7 +7,7 @@ resources:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-coach-service
-    newTag: main-fea367f
+    newTag: main-203ac64
 
 patchesJson6902:
   - target:
