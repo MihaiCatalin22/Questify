@@ -63,9 +63,9 @@ spec:
             - name: COACH_MODEL
               value: "smollm2:1.7b"
             - name: COACH_TIMEOUT_MS
-              value: "15000"
+              value: "60000"
             - name: COACH_MAX_OUTPUT_TOKENS
-              value: "400"
+              value: "250"
             - name: COACH_TEMPERATURE
               value: "0.3"
             - name: COACH_RETRY_ENABLED
