@@ -12,7 +12,7 @@ patches:
 configMapGenerator:
   - name: nginx-config
     files:
-      - default.conf
+      - default.conf=nginx/default.conf
 
 generatorOptions:
   disableNameSuffixHash: true
