@@ -48,30 +48,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Trivy CLI
+      - name: Pull Trivy image
         shell: bash
         run: |
           set -euo pipefail
-          version="0.67.2"
-          curl -sfL -o trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${version}/trivy_${version}_Linux-64bit.tar.gz"
-          tar -xzf trivy.tar.gz trivy
-          mkdir -p "$HOME/.local/bin"
-          mv trivy "$HOME/.local/bin/trivy"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/trivy" --version
+          docker pull ghcr.io/aquasecurity/trivy:0.68.2
 
       - name: Trivy filesystem scan (report)
         shell: bash
         run: |
           set -euo pipefail
-          trivy fs \
+          docker run --rm \
+            -v "${PWD}:/workdir" \
+            -w /workdir \
+            ghcr.io/aquasecurity/trivy:0.68.2 \
+            fs \
             --scanners vuln,config \
             --severity CRITICAL,HIGH \
             --ignore-unfixed \
             --format table \
-            --output trivy-fs-report.txt \
+            --output /workdir/trivy-fs-report.txt \
             --exit-code 0 \
-            .
+            /workdir
 
       - name: Upload Trivy report
         if: always()

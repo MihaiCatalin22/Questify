@@ -131,27 +131,27 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.HEAD_SHA }}
 
-      - name: Install Trivy CLI
+      - name: Pull Trivy image
         shell: bash
         run: |
           set -euo pipefail
-          version="0.67.2"
-          curl -sfL -o trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${version}/trivy_${version}_Linux-64bit.tar.gz"
-          tar -xzf trivy.tar.gz trivy
-          mkdir -p "$HOME/.local/bin"
-          mv trivy "$HOME/.local/bin/trivy"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/trivy" --version
+          docker pull ghcr.io/aquasecurity/trivy:0.68.2
 
       - name: Trivy image scan (report)
         shell: bash
         run: |
           set -euo pipefail
-          trivy image \
+          docker run --rm \
+            -e TRIVY_USERNAME="${{ github.actor }}" \
+            -e TRIVY_PASSWORD="${{ secrets.GITHUB_TOKEN }}" \
+            -v "${PWD}:/workdir" \
+            -w /workdir \
+            ghcr.io/aquasecurity/trivy:0.68.2 \
+            image \
             --severity CRITICAL,HIGH \
             --ignore-unfixed \
             --format table \
-            --output trivy-${{ matrix.name }}.txt \
+            --output /workdir/trivy-${{ matrix.name }}.txt \
             --exit-code 0 \
             ghcr.io/${{ env.OWNER_LC }}/${{ matrix.image }}:${{ env.FULL_TAG }}
 
