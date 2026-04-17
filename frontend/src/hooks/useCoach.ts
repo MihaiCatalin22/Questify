@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { QuestsApi } from "../api/quests";
 import {
   UsersApi,
   type CoachSettingsDTO,
@@ -12,6 +13,12 @@ import {
 
 const KEY = {
   settings: ["coach", "settings"] as const,
+  summary: ["coach", "summary"] as const,
+};
+
+export type CoachDashboardSummary = {
+  activeQuests: number;
+  completedQuests: number;
 };
 
 function sanitizeCoachSettings(input: UpdateCoachSettingsInput): UpdateCoachSettingsInput {
@@ -48,5 +55,24 @@ export function useGenerateCoachSuggestions() {
         mode: "DEFAULT",
         includeRecentHistory: input.includeRecentHistory ?? true,
       }),
+  });
+}
+
+export function useCoachDashboardSummary() {
+  return useQuery<CoachDashboardSummary>({
+    queryKey: KEY.summary,
+    queryFn: async () => {
+      const [active, archived] = await Promise.all([
+        QuestsApi.mineOrParticipatingSummary(false),
+        QuestsApi.mineOrParticipatingSummary(true),
+      ]);
+
+      return {
+        activeQuests: Number(active?.questsTotal ?? 0),
+        completedQuests: Number(active?.questsCompleted ?? 0) + Number(archived?.questsCompleted ?? 0),
+      };
+    },
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
   });
 }

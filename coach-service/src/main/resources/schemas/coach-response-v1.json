@@ -13,12 +13,21 @@
       "maxItems": 3,
       "items": {
         "type": "object",
-        "required": ["title", "estimatedMinutes", "difficulty", "reason"],
+        "required": ["title", "description", "category", "estimatedMinutes", "difficulty", "reason"],
         "properties": {
           "title": {
             "type": "string",
             "minLength": 1,
             "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 600
+          },
+          "category": {
+            "type": "string",
+            "enum": ["COMMUNITY", "FITNESS", "HABIT", "HOBBY", "OTHER", "STUDY", "WORK"]
           },
           "estimatedMinutes": {
             "type": "integer",

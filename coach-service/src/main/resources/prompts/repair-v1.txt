@@ -1,4 +1,6 @@
 Your previous output was invalid.
 Return ONLY corrected valid JSON matching the required schema.
 Do not include status, source, model, or generatedAt.
+Each suggestion must include title, description, category, estimatedMinutes, difficulty, and reason.
+Do not include dates or visibility fields.
 Do not add any explanations.

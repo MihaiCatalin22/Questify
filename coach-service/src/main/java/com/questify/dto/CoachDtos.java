@@ -37,6 +37,8 @@ public class CoachDtos {
 
     public record CoachSuggestionRes(
             String title,
+            String description,
+            String category,
             int estimatedMinutes,
             String difficulty,
             String reason

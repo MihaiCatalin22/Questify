@@ -3,6 +3,12 @@ Return JSON that exactly matches this schema:
 
 Do not include status, source, model, or generatedAt.
 The server sets those fields.
+Each suggestion must be quest-ready:
+- title: short quest title
+- description: a clear quest description the app can save directly
+- category: one of COMMUNITY, FITNESS, HABIT, HOBBY, OTHER, STUDY, WORK
+- estimatedMinutes, difficulty, reason
+Do not include startDate, endDate, visibility, or any other fields.
 
 Suggestion mode:
 {{mode}}

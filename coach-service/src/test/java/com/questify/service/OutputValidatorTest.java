@@ -63,12 +63,16 @@ class OutputValidatorTest {
                   "suggestions": [
                     {
                       "title": "Take a walk",
+                      "description": "Take a short walk to keep your routine moving forward this evening.",
+                      "category": "FITNESS",
                       "estimatedMinutes": 15,
                       "difficulty": "easy",
                       "reason": "Good next step"
                     },
                     {
                       "title": "Stretch",
+                      "description": "Do a quick full-body stretch session to stay loose without much effort.",
+                      "category": "FITNESS",
                       "estimatedMinutes": 10,
                       "difficulty": "easy",
                       "reason": "Low friction"
@@ -98,18 +102,24 @@ class OutputValidatorTest {
                   "suggestions": [
                     {
                       "title": "Take a 15-minute walk after dinner",
+                      "description": "Go for a short walk after dinner to keep your movement goal realistic and consistent.",
+                      "category": "FITNESS",
                       "estimatedMinutes": 15,
                       "difficulty": "easy",
                       "reason": "It matches your recent small wins and keeps momentum realistic."
                     },
                     {
                       "title": "Prepare tomorrow's workout clothes tonight",
+                      "description": "Lay out your workout clothes tonight so tomorrow's session has less friction and setup time.",
+                      "category": "HABIT",
                       "estimatedMinutes": 5,
                       "difficulty": "easy",
                       "reason": "This reduces friction and supports your exercise goal."
                     },
                     {
                       "title": "Do a short 10-minute stretching session",
+                      "description": "Spend ten minutes on gentle stretching so you can stay active without overloading yourself.",
+                      "category": "FITNESS",
                       "estimatedMinutes": 10,
                       "difficulty": "easy",
                       "reason": "This is a low-pressure way to stay consistent."
@@ -139,18 +149,24 @@ class OutputValidatorTest {
                   "suggestions": [
                     {
                       "title": "Take a 15-minute walk after dinner",
+                      "description": "Go for a short walk after dinner to keep your movement goal realistic and consistent.",
+                      "category": "FITNESS",
                       "estimatedMinutes": 15,
                       "difficulty": "easy",
                       "reason": "It matches your recent small wins and keeps momentum realistic."
                     },
                     {
                       "title": "Prepare tomorrow's workout clothes tonight",
+                      "description": "Lay out your workout clothes tonight so tomorrow's session has less friction and setup time.",
+                      "category": "HABIT",
                       "estimatedMinutes": 5,
                       "difficulty": "easy",
                       "reason": "This reduces friction and supports your exercise goal."
                     },
                     {
                       "title": "Do a short 10-minute stretching session",
+                      "description": "Spend ten minutes on gentle stretching so you can stay active without overloading yourself.",
+                      "category": "FITNESS",
                       "estimatedMinutes": 10,
                       "difficulty": "easy",
                       "reason": "This is a low-pressure way to stay consistent."
