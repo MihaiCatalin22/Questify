@@ -40,6 +40,15 @@ resource "kubernetes_secret_v1" "proof_service_app_yml" {
   lifecycle { ignore_changes = [data, binary_data] }
 }
 
+resource "kubernetes_secret_v1" "coach_service_app_yml" {
+  metadata {
+    name      = "coach-service-app-yml"
+    namespace = var.kubernetes_namespace
+  }
+  type = "Opaque"
+  lifecycle { ignore_changes = [data, binary_data] }
+}
+
 resource "kubernetes_service_v1" "mysql_external" {
   metadata {
     name      = "mysql"
