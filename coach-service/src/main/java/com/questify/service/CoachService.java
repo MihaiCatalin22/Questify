@@ -99,20 +99,20 @@ public class CoachService {
                     } catch (ModelOutputValidationException repairFailure) {
                         metricsRecorder.recordValidationFailure(repairFailure.category());
                         logValidationFailure("repair", repairFailure);
-                        return fallback(sample, "invalid_after_retry");
+                        return fallback(sample, "invalid_after_retry", context);
                     } catch (ModelTimeoutException timeoutFailure) {
                         metricsRecorder.recordTimeout();
-                        return fallback(sample, "timeout");
+                        return fallback(sample, "timeout", context);
                     } catch (ModelClientException clientFailure) {
-                        return fallback(sample, "runtime_failure");
+                        return fallback(sample, "runtime_failure", context);
                     }
                 }
-                return fallback(sample, "invalid_output");
+                return fallback(sample, "invalid_output", context);
             } catch (ModelTimeoutException timeoutFailure) {
                 metricsRecorder.recordTimeout();
-                return fallback(sample, "timeout");
+                return fallback(sample, "timeout", context);
             } catch (ModelClientException clientFailure) {
-                return fallback(sample, "runtime_failure");
+                return fallback(sample, "runtime_failure", context);
             }
         } catch (AiCoachOptInRequiredException ex) {
             metricsRecorder.recordRejected(sample);
@@ -131,10 +131,10 @@ public class CoachService {
         return rawOutput;
     }
 
-    private CoachSuggestionsRes fallback(Timer.Sample sample, String reason) {
+    private CoachSuggestionsRes fallback(Timer.Sample sample, String reason, CoachPromptContext context) {
         metricsRecorder.recordFallback(sample, reason);
         log.warn("Coach suggestions fallback runtime={} model={} reason={}", properties.normalizedRuntime(), properties.getModel(), reason);
-        return fallbackFactory.create();
+        return fallbackFactory.create(context);
     }
 
     private static String sha256(String value) {

@@ -168,8 +168,8 @@ class CoachControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("FALLBACK"))
                 .andExpect(jsonPath("$.source").value("SYSTEM"))
-                .andExpect(jsonPath("$.suggestions.length()").value(0))
-                .andExpect(jsonPath("$.reflection").value("Suggestions could not be generated at the moment."));
+                .andExpect(jsonPath("$.suggestions.length()").value(3))
+                .andExpect(jsonPath("$.suggestions[0].title").value("Take one step toward Walk daily"));
 
         userServer.takeRequest(1, TimeUnit.SECONDS);
         questServer.takeRequest(1, TimeUnit.SECONDS);
@@ -192,7 +192,8 @@ class CoachControllerIntegrationTest {
                         .content("{\"includeRecentHistory\":true}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("FALLBACK"))
-                .andExpect(jsonPath("$.source").value("SYSTEM"));
+                .andExpect(jsonPath("$.source").value("SYSTEM"))
+                .andExpect(jsonPath("$.suggestions.length()").value(3));
 
         userServer.takeRequest(1, TimeUnit.SECONDS);
         questServer.takeRequest(1, TimeUnit.SECONDS);
