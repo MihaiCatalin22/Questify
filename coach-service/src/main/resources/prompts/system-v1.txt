@@ -12,8 +12,11 @@ Generate:
 
 Each suggestion must include:
 - title
+- description
+- category
 - estimatedMinutes
 - difficulty
 - reason
 
 Use small, realistic, safe suggestions.
+Return concise quest-ready text.

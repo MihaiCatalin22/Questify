@@ -55,7 +55,7 @@ class OutputValidatorTest {
     }
 
     @Test
-    void validateSuccessPayload_rejects_semantic_failures() {
+    void validateSuccessPayload_accepts_between_one_and_three_suggestions() {
         var validator = validator();
         var generatedAt = Instant.parse("2026-03-19T14:30:00Z");
         String payload = """
@@ -76,6 +76,57 @@ class OutputValidatorTest {
                       "estimatedMinutes": 10,
                       "difficulty": "easy",
                       "reason": "Low friction"
+                    }
+                  ],
+                  "reflection": "Keep it small.",
+                  "nudge": "Start with two minutes."
+                }
+                """;
+
+        var response = validator.validateSuccessPayload(payload, generatedAt);
+
+        assertThat(response.suggestions()).hasSize(2);
+        assertThat(response.status()).isEqualTo("SUCCESS");
+    }
+
+    @Test
+    void validateSuccessPayload_rejects_more_than_three_suggestions() {
+        var validator = validator();
+        var generatedAt = Instant.parse("2026-03-19T14:30:00Z");
+        String payload = """
+                {
+                  "suggestions": [
+                    {
+                      "title": "Walk",
+                      "description": "Take a short walk after dinner to keep momentum going this week.",
+                      "category": "FITNESS",
+                      "estimatedMinutes": 15,
+                      "difficulty": "easy",
+                      "reason": "Low friction next step."
+                    },
+                    {
+                      "title": "Stretch",
+                      "description": "Do a short stretch routine to stay loose without a big time commitment.",
+                      "category": "FITNESS",
+                      "estimatedMinutes": 10,
+                      "difficulty": "easy",
+                      "reason": "Supports consistency."
+                    },
+                    {
+                      "title": "Prep gear",
+                      "description": "Lay out tomorrow's gear tonight so starting is easier in the morning.",
+                      "category": "HABIT",
+                      "estimatedMinutes": 5,
+                      "difficulty": "easy",
+                      "reason": "Reduces friction."
+                    },
+                    {
+                      "title": "Log progress",
+                      "description": "Write a short note about today's effort so you can track what is working.",
+                      "category": "HABIT",
+                      "estimatedMinutes": 5,
+                      "difficulty": "easy",
+                      "reason": "Keeps progress visible."
                     }
                   ],
                   "reflection": "Keep it small.",
@@ -134,6 +185,34 @@ class OutputValidatorTest {
 
         assertThat(response.model()).isEqualTo("smollm2:1.7b");
         assertThat(response.generatedAt()).isEqualTo(generatedAt);
+    }
+
+    @Test
+    void validateSuccessPayload_extracts_json_when_model_wraps_it_in_text() {
+        var validator = validator();
+        var generatedAt = Instant.parse("2026-03-19T14:30:00Z");
+        String payload = """
+                Sure thing! Here's the JSON:
+                {
+                  "suggestions": [
+                    {
+                      "title": "Take a 15-minute walk after dinner",
+                      "description": "Go for a short walk after dinner to keep your movement goal realistic and consistent.",
+                      "category": "FITNESS",
+                      "estimatedMinutes": 15,
+                      "difficulty": "easy",
+                      "reason": "It matches your recent small wins and keeps momentum realistic."
+                    }
+                  ],
+                  "reflection": "Short actions are working well for you.",
+                  "nudge": "Start with the easiest win."
+                }
+                """;
+
+        var response = validator.validateSuccessPayload(payload, generatedAt);
+
+        assertThat(response.suggestions()).hasSize(1);
+        assertThat(response.status()).isEqualTo("SUCCESS");
     }
 
     private OutputValidator validator() {

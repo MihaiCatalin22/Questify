@@ -48,8 +48,11 @@ public class OutputValidator {
         }
 
         List<String> semanticErrors = new ArrayList<>();
-        if (payload.suggestions() == null || payload.suggestions().size() != 3) {
-            semanticErrors.add("SUCCESS responses must contain exactly 3 suggestions");
+        if (payload.suggestions() == null || payload.suggestions().isEmpty()) {
+            semanticErrors.add("SUCCESS responses must contain at least 1 suggestion");
+        }
+        if (payload.suggestions() != null && payload.suggestions().size() > 3) {
+            semanticErrors.add("SUCCESS responses must contain at most 3 suggestions");
         }
 
         if (!semanticErrors.isEmpty()) {
@@ -70,8 +73,25 @@ public class OutputValidator {
         try {
             return objectMapper.readTree(trimmed);
         } catch (JsonProcessingException ex) {
+            String extracted = extractJsonObject(trimmed);
+            if (extracted != null) {
+                try {
+                    return objectMapper.readTree(extracted);
+                } catch (JsonProcessingException ignored) {
+                    // Fall through to the original structured error.
+                }
+            }
             throw new ModelOutputValidationException("json_parse", List.of("Output was not valid JSON"), rawOutput);
         }
+    }
+
+    private String extractJsonObject(String rawText) {
+        int start = rawText.indexOf('{');
+        int end = rawText.lastIndexOf('}');
+        if (start < 0 || end <= start) {
+            return null;
+        }
+        return rawText.substring(start, end + 1);
     }
 
     private JsonNode stripServerOwnedFields(JsonNode tree, String rawOutput) {
