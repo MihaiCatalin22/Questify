@@ -90,7 +90,7 @@ class OutputValidatorTest {
     }
 
     @Test
-    void validateSuccessPayload_rejects_more_than_three_suggestions() {
+    void validateSuccessPayload_truncates_more_than_three_suggestions() {
         var validator = validator();
         var generatedAt = Instant.parse("2026-03-19T14:30:00Z");
         String payload = """
@@ -134,10 +134,10 @@ class OutputValidatorTest {
                 }
                 """;
 
-        assertThatThrownBy(() -> validator.validateSuccessPayload(payload, generatedAt))
-                .isInstanceOf(ModelOutputValidationException.class)
-                .extracting(ex -> ((ModelOutputValidationException) ex).category())
-                .isEqualTo("schema");
+        var response = validator.validateSuccessPayload(payload, generatedAt);
+
+        assertThat(response.suggestions()).hasSize(3);
+        assertThat(response.suggestions().get(2).title()).isEqualTo("Prep gear");
     }
 
     @Test

@@ -6,6 +6,7 @@ import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,6 +69,13 @@ class CoachControllerIntegrationTest {
         }
     }
 
+    @AfterEach
+    void drainRecordedRequests() throws InterruptedException {
+        drainServer(userServer);
+        drainServer(questServer);
+        drainServer(runtimeServer);
+    }
+
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
         ensureServersStarted();
@@ -112,7 +120,11 @@ class CoachControllerIntegrationTest {
         assertInternalRequest(questServer.takeRequest(1, TimeUnit.SECONDS));
         RecordedRequest runtimeRequest = runtimeServer.takeRequest(1, TimeUnit.SECONDS);
         assertThat(runtimeRequest).isNotNull();
-        assertThat(runtimeRequest.getBody().readUtf8()).contains("\"stream\":false");
+        assertThat(runtimeRequest.getPath()).isEqualTo("/api/chat");
+        assertThat(runtimeRequest.getBody().readUtf8())
+                .contains("\"stream\":false")
+                .contains("\"messages\":")
+                .contains("\"format\":");
     }
 
     @Test
@@ -136,7 +148,10 @@ class CoachControllerIntegrationTest {
         RecordedRequest secondRuntime = runtimeServer.takeRequest(1, TimeUnit.SECONDS);
         assertThat(firstRuntime).isNotNull();
         assertThat(secondRuntime).isNotNull();
-        assertThat(secondRuntime.getBody().readUtf8()).contains("Your previous output was invalid.");
+        assertThat(secondRuntime.getPath()).isEqualTo("/api/chat");
+        assertThat(secondRuntime.getBody().readUtf8())
+                .contains("\"messages\":")
+                .contains("Your previous output was invalid.");
     }
 
     @Test
@@ -228,7 +243,12 @@ class CoachControllerIntegrationTest {
     }
 
     private static void enqueueRuntimePayload(String payload) throws IOException {
-        runtimeServer.enqueue(jsonResponse(Map.of("response", payload)));
+        runtimeServer.enqueue(jsonResponse(Map.of(
+                "message", Map.of(
+                        "role", "assistant",
+                        "content", payload
+                )
+        )));
     }
 
     private static MockResponse jsonResponse(Object body) throws IOException {
@@ -273,7 +293,18 @@ class CoachControllerIntegrationTest {
     }
 
     private static String ollamaResponse(String payload) throws IOException {
-        return JSON.writeValueAsString(Map.of("response", payload));
+        return JSON.writeValueAsString(Map.of(
+                "message", Map.of(
+                        "role", "assistant",
+                        "content", payload
+                )
+        ));
+    }
+
+    private static void drainServer(MockWebServer server) throws InterruptedException {
+        while (server.takeRequest(10, TimeUnit.MILLISECONDS) != null) {
+            // Drain leftover requests between tests so earlier failures do not pollute later assertions.
+        }
     }
 
     private static void assertInternalRequest(RecordedRequest request) {
