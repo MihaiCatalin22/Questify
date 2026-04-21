@@ -32,10 +32,10 @@ class OllamaAdapterTest {
     }
 
     @Test
-    void generate_posts_expected_ollama_request_shape_and_returns_response_field() throws Exception {
+    void generate_posts_expected_ollama_chat_request_shape_and_returns_message_content() throws Exception {
         server.enqueue(new MockResponse()
                 .addHeader("Content-Type", "application/json")
-                .setBody("{\"response\":\"{\\\"status\\\":\\\"SUCCESS\\\"}\"}"));
+                .setBody("{\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"status\\\":\\\"SUCCESS\\\"}\"}}"));
 
         var properties = new CoachProperties();
         properties.setRuntimeBaseUrl(server.url("/").toString());
@@ -52,11 +52,14 @@ class OllamaAdapterTest {
         var request = server.takeRequest();
         String body = request.getBody().readUtf8();
 
-        assertThat(request.getPath()).isEqualTo("/api/generate");
+        assertThat(request.getPath()).isEqualTo("/api/chat");
         assertThat(body).contains("\"stream\":false");
         assertThat(body).contains("\"model\":\"smollm2:1.7b\"");
-        assertThat(body).contains("\"prompt\":\"user prompt\"");
-        assertThat(body).contains("\"system\":\"system prompt\"");
+        assertThat(body).contains("\"messages\":");
+        assertThat(body).contains("\"role\":\"system\"");
+        assertThat(body).contains("\"content\":\"system prompt\"");
+        assertThat(body).contains("\"role\":\"user\"");
+        assertThat(body).contains("\"content\":\"user prompt\"");
         assertThat(body).contains("\"format\":");
         assertThat(body).contains("\"temperature\":0.3");
         assertThat(body).contains("\"num_predict\":400");

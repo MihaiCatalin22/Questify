@@ -27,18 +27,21 @@ public class OllamaAdapter implements ModelClient {
     public String generate(GenerationPrompt prompt, GenerationOptions options) {
         try {
             var response = http.post()
-                    .uri("/api/generate")
+                    .uri("/api/chat")
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(requestBody(prompt, options))
                     .retrieve()
-                    .bodyToMono(OllamaGenerateResponse.class)
+                    .bodyToMono(OllamaChatResponse.class)
                     .timeout(options.timeout())
                     .block();
 
-            if (response == null || response.response() == null || response.response().isBlank()) {
+            if (response == null
+                    || response.message() == null
+                    || response.message().content() == null
+                    || response.message().content().isBlank()) {
                 throw new ModelClientException("Ollama returned an empty response payload");
             }
-            return response.response();
+            return response.message().content();
         } catch (Exception ex) {
             if (isTimeout(ex)) {
                 throw new ModelTimeoutException("Timed out while calling Ollama", ex);
@@ -56,8 +59,10 @@ public class OllamaAdapter implements ModelClient {
     private static Map<String, Object> requestBody(GenerationPrompt prompt, GenerationOptions options) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", options.model());
-        body.put("prompt", prompt.userPrompt());
-        body.put("system", prompt.systemPrompt());
+        body.put("messages", java.util.List.of(
+                Map.of("role", "system", "content", prompt.systemPrompt()),
+                Map.of("role", "user", "content", prompt.userPrompt())
+        ));
         body.put("stream", false);
         body.put("format", options.jsonSchema());
         body.put("options", Map.of(
@@ -78,5 +83,7 @@ public class OllamaAdapter implements ModelClient {
         return false;
     }
 
-    private record OllamaGenerateResponse(String response) {}
+    private record OllamaChatResponse(OllamaChatMessage message) {}
+
+    private record OllamaChatMessage(String role, String content) {}
 }
