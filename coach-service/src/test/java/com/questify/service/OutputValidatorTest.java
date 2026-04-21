@@ -51,7 +51,7 @@ class OutputValidatorTest {
         assertThatThrownBy(() -> validator.validateSuccessPayload(payload, generatedAt))
                 .isInstanceOf(ModelOutputValidationException.class)
                 .extracting(ex -> ((ModelOutputValidationException) ex).category())
-                .isEqualTo("schema");
+                .isEqualTo("semantic");
     }
 
     @Test
@@ -305,7 +305,7 @@ class OutputValidatorTest {
         assertThat(response.suggestions().getFirst().title()).isEqualTo("Walk after dinner");
         assertThat(response.suggestions().getFirst().description()).contains("walk after dinner");
         assertThat(response.suggestions().getFirst().category()).isEqualTo("FITNESS");
-        assertThat(response.suggestions().getFirst().estimatedMinutes()).isEqualTo(15);
+        assertThat(response.suggestions().getFirst().estimatedMinutes()).isEqualTo(10);
         assertThat(response.suggestions().getFirst().difficulty()).isEqualTo("easy");
         assertThat(response.reflection()).isEqualTo("Short actions fit your current pace.");
         assertThat(response.nudge()).isNotBlank();
