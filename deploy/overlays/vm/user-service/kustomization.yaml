@@ -5,7 +5,7 @@ resources:
 - ../../../base/user-service
 images:
 - name: ghcr.io/mihaicatalin22/questify-user-service
-  newTag: main-194a9e8
+  newTag: main-2da584e
 patchesJson6902:
 - target:
     group: argoproj.io
