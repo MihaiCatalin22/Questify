@@ -34,7 +34,7 @@ class PromptBuilderTest {
         assertThat(prompt.userPrompt()).contains("Do not include status, source, model, or generatedAt.");
         assertThat(prompt.userPrompt()).contains("The server sets those fields.");
         assertThat(prompt.userPrompt()).contains("Keep every field concise and plain.");
-        assertThat(prompt.userPrompt()).contains("description: a clear quest description");
+        assertThat(prompt.userPrompt()).contains("description: one clear sentence the app can save directly");
         assertThat(prompt.userPrompt()).contains("category: one of COMMUNITY, FITNESS, HABIT, HOBBY, OTHER, STUDY, WORK");
         assertThat(prompt.userPrompt()).contains("Do not include startDate, endDate, visibility");
         assertThat(prompt.userPrompt()).contains("Keep nudge to 1 short sentence.");
