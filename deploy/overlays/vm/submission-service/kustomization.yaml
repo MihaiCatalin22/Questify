@@ -5,7 +5,7 @@ resources:
 - ../../../base/submission-service
 images:
 - name: ghcr.io/mihaicatalin22/questify-submission-service
-  newTag: main-d976198
+  newTag: main-194a9e8
 patchesJson6902:
 - target:
     group: argoproj.io
