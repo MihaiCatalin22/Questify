@@ -29,7 +29,7 @@ class FallbackFactoryTest {
         assertThat(response.model()).isNull();
         assertThat(response.generatedAt()).isEqualTo(Instant.parse("2026-03-19T14:31:12Z"));
         assertThat(response.suggestions()).hasSize(3);
-        assertThat(response.suggestions().getFirst().title()).isEqualTo("Take one step toward Walk daily");
+        assertThat(response.suggestions().getFirst().title()).isEqualTo("Take a 15-minute walk");
         assertThat(response.suggestions().getFirst().category()).isEqualTo("FITNESS");
     }
 }

@@ -29,15 +29,15 @@ public class FallbackFactory {
                 Instant.now(clock).truncatedTo(ChronoUnit.SECONDS),
                 List.of(
                         new CoachSuggestionRes(
-                                "Take one step toward " + goalFocus,
-                                "Spend 15 minutes on one concrete action that moves " + goalFocus + " forward without trying to do everything at once.",
+                                primaryActionTitle(context.goal()),
+                                "Spend 15 minutes on one concrete action that supports " + goalFocus + " without trying to do everything at once.",
                                 primaryCategory,
                                 15,
                                 "easy",
-                                "A small action is more reliable than waiting for a perfect plan."
+                                "A short focused session is easier to start than a perfect plan."
                         ),
                         new CoachSuggestionRes(
-                                "Prepare the next session for " + goalFocus,
+                                "Prepare your next session",
                                 "Remove one point of friction for " + goalFocus + " by setting up materials, time, or your environment in advance.",
                                 "HABIT",
                                 10,
@@ -45,9 +45,9 @@ public class FallbackFactory {
                                 "Preparation makes the next quest easier to start."
                         ),
                         new CoachSuggestionRes(
-                                "Review what helped " + goalFocus,
+                                "Write a quick progress note",
                                 "Write a short note on what is working, what is blocking you, and the next realistic move for " + goalFocus + ".",
-                                primaryCategory,
+                                "HABIT",
                                 10,
                                 "easy",
                                 "A quick review turns effort into a clearer next step."
@@ -88,6 +88,32 @@ public class FallbackFactory {
             return "COMMUNITY";
         }
         return "HABIT";
+    }
+
+    private static String primaryActionTitle(String goal) {
+        String normalized = goal == null ? "" : goal.toLowerCase(Locale.ROOT);
+        if (containsAny(normalized, "walk", "walking", "steps", "step")) {
+            return "Take a 15-minute walk";
+        }
+        if (containsAny(normalized, "run", "running", "cardio")) {
+            return "Do a 15-minute cardio session";
+        }
+        if (containsAny(normalized, "stretch", "mobility", "yoga")) {
+            return "Do a 15-minute stretch session";
+        }
+        if (containsAny(normalized, "study", "learn", "learning", "course", "exam", "read", "reading")) {
+            return "Do one focused study block";
+        }
+        if (containsAny(normalized, "work", "career", "project", "job", "productivity", "code", "coding")) {
+            return "Do one focused work block";
+        }
+        if (containsAny(normalized, "draw", "music", "guitar", "art", "write", "writing", "creative", "hobby")) {
+            return "Spend 15 minutes on your hobby";
+        }
+        if (containsAny(normalized, "friend", "family", "community", "social", "volunteer")) {
+            return "Reach out to one person";
+        }
+        return "Do one focused 15-minute session";
     }
 
     private static boolean containsAny(String haystack, String... needles) {

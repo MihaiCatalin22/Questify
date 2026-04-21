@@ -169,7 +169,7 @@ class CoachControllerIntegrationTest {
                 .andExpect(jsonPath("$.status").value("FALLBACK"))
                 .andExpect(jsonPath("$.source").value("SYSTEM"))
                 .andExpect(jsonPath("$.suggestions.length()").value(3))
-                .andExpect(jsonPath("$.suggestions[0].title").value("Take one step toward Walk daily"));
+                .andExpect(jsonPath("$.suggestions[0].title").value("Take a 15-minute walk"));
 
         userServer.takeRequest(1, TimeUnit.SECONDS);
         questServer.takeRequest(1, TimeUnit.SECONDS);
