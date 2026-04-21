@@ -18,12 +18,12 @@
           "title": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 120
+            "maxLength": 80
           },
           "description": {
             "type": "string",
             "minLength": 10,
-            "maxLength": 600
+            "maxLength": 220
           },
           "category": {
             "type": "string",
@@ -41,7 +41,7 @@
           "reason": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 240
+            "maxLength": 120
           }
         },
         "additionalProperties": false
@@ -50,12 +50,12 @@
     "reflection": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 500
+      "maxLength": 180
     },
     "nudge": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 240
+      "maxLength": 120
     }
   },
   "additionalProperties": false

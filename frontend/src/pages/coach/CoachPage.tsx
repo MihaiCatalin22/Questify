@@ -488,129 +488,30 @@ export default function CoachPage() {
         </div>
       )}
 
-      <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6 text-white shadow-[0_20px_60px_-20px_rgba(15,23,42,0.55)] dark:border-slate-800">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(45,212,191,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(251,191,36,0.16),transparent_28%)]" />
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/80 backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 text-cyan-300" />
-              AI Coach
-            </div>
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">Coach</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-              Your AI quest coach helps you decide what to do next, then turn the best suggestion into a quest without
-              leaving this page.
-            </p>
+      <section className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+            <Sparkles className="h-4 w-4 text-cyan-500" />
+            AI Coach
           </div>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">Coach</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+            Turn the next useful suggestion into a quest quickly. Summary and settings stay nearby, but suggestions are
+            the main workspace.
+          </p>
+        </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Status</div>
-              <div className="mt-2 text-sm font-medium text-slate-50">
-                {draftOptIn ? (isGenerating ? "Generating" : "Ready") : "Coach disabled"}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Model</div>
-              <div className="mt-2 text-sm font-medium text-slate-50">{suggestions?.model ?? "smollm2:1.7b"}</div>
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="rounded-full border border-slate-200 px-2.5 py-1 text-slate-600 dark:border-slate-800 dark:text-slate-300">
+            {draftOptIn ? (isGenerating ? "Generating" : "Ready") : "Coach disabled"}
+          </span>
+          {suggestions?.generatedAt && (
+            <span className="rounded-full border border-slate-200 px-2.5 py-1 text-slate-600 dark:border-slate-800 dark:text-slate-300">
+              Last refresh: {formatDate(suggestions.generatedAt)}
+            </span>
+          )}
         </div>
       </section>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_360px]">
-        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#131a25]">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-semibold text-slate-950 dark:text-slate-50">Today&apos;s Summary</h2>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                A quick snapshot of what the coach knows about your current direction.
-              </p>
-            </div>
-            {summaryQ.isFetching && (
-              <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                Refreshing…
-              </span>
-            )}
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            {summaryItems.map((item) => {
-              const Icon = item.icon;
-              const valueClass =
-                item.label === "Goal"
-                  ? "text-sm leading-6 text-slate-900 dark:text-slate-50"
-                  : "text-2xl font-semibold text-slate-950 dark:text-slate-50";
-
-              return (
-                <article
-                  key={item.label}
-                  className="relative overflow-hidden rounded-[24px] border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-[#0d131c]"
-                >
-                  <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${item.accent}`} />
-                  <div className="relative">
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-                      <Icon className="h-4 w-4" />
-                      {item.label}
-                    </div>
-                    <div className={`mt-3 ${valueClass}`}>{item.value}</div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-
-        <aside className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#131a25]">
-          <h2 className="text-2xl font-semibold text-slate-950 dark:text-slate-50">Quick Actions</h2>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Generate a fresh coach pass, refresh the current one, or jump to settings.
-          </p>
-
-          <div className="mt-6 space-y-3">
-            <button
-              onClick={() => void runGeneration()}
-              disabled={quickActionsDisabled || !draftOptIn || !persistedOptIn}
-              className="flex w-full items-center justify-between rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-4 text-left transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-[#0d131c] dark:hover:border-slate-700 dark:hover:bg-[#121925]"
-            >
-              <div>
-                <div className="text-sm font-semibold text-slate-950 dark:text-slate-50">Generate Suggestions</div>
-                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Run the coach with your saved goal and current history settings.
-                </div>
-              </div>
-              <Sparkles className="h-4 w-4 text-cyan-500" />
-            </button>
-
-            <button
-              onClick={() => void runGeneration()}
-              disabled={generationDisabled}
-              className="flex w-full items-center justify-between rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-4 text-left transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-[#0d131c] dark:hover:border-slate-700 dark:hover:bg-[#121925]"
-            >
-              <div>
-                <div className="text-sm font-semibold text-slate-950 dark:text-slate-50">Refresh Coach</div>
-                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {isGenerating ? "Generation is already running." : "Request a fresh set of suggestion cards."}
-                </div>
-              </div>
-              <RefreshCcw className={`h-4 w-4 text-slate-500 ${isGenerating ? "animate-spin" : ""}`} />
-            </button>
-
-            <button
-              onClick={revealSettings}
-              className="flex w-full items-center justify-between rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-4 text-left transition hover:border-slate-300 hover:bg-white dark:border-slate-800 dark:bg-[#0d131c] dark:hover:border-slate-700 dark:hover:bg-[#121925]"
-            >
-              <div>
-                <div className="text-sm font-semibold text-slate-950 dark:text-slate-50">Open Settings</div>
-                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Expand the AI/privacy panel and adjust goal or history usage.
-                </div>
-              </div>
-              <Bot className="h-4 w-4 text-slate-500" />
-            </button>
-          </div>
-        </aside>
-      </div>
 
       <section className="space-y-4">
         <div className="flex items-end justify-between gap-4">
@@ -620,24 +521,11 @@ export default function CoachPage() {
               Review the coach suggestions, then accept one directly as a private quest.
             </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            {suggestions && (
-              <>
-                <span className="rounded-full border border-slate-200 px-2.5 py-1 dark:border-slate-800">
-                  Status: {suggestions.status}
-                </span>
-                <span className="rounded-full border border-slate-200 px-2.5 py-1 dark:border-slate-800">
-                  Source: {suggestions.source}
-                </span>
-                {suggestions.model && (
-                  <span className="rounded-full border border-slate-200 px-2.5 py-1 dark:border-slate-800">
-                    Model: {suggestions.model}
-                  </span>
-                )}
-              </>
-            )}
-          </div>
+          {suggestions?.generatedAt && (
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              Last updated {formatDate(suggestions.generatedAt)}
+            </div>
+          )}
         </div>
 
         {(!draftOptIn || !persistedOptIn) && (
@@ -656,9 +544,14 @@ export default function CoachPage() {
 
         {draftOptIn && viewState === "loading" && (
           <div className="rounded-[24px] border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-[#131a25]">
-            <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-              <RefreshCcw className="h-4 w-4 animate-spin" />
-              Generating personalized quest suggestions…
+            <div className="flex items-start gap-3 text-sm text-slate-600 dark:text-slate-300">
+              <RefreshCcw className="mt-0.5 h-4 w-4 animate-spin" />
+              <div>
+                <div>Generating personalized quest suggestions…</div>
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  The local model can take a while on CPU-only runtime, especially when building quest-ready cards.
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -792,6 +685,100 @@ export default function CoachPage() {
           </>
         )}
       </section>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_340px]">
+        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#131a25]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-50">Today&apos;s Summary</h2>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                Compact context for the coach, without getting in the way of the quest cards.
+              </p>
+            </div>
+            {summaryQ.isFetching && (
+              <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                Refreshing…
+              </span>
+            )}
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {summaryItems.map((item) => {
+              const Icon = item.icon;
+              const valueClass =
+                item.label === "Goal"
+                  ? "text-sm leading-6 text-slate-900 dark:text-slate-50"
+                  : "text-xl font-semibold text-slate-950 dark:text-slate-50";
+
+              return (
+                <article
+                  key={item.label}
+                  className="relative overflow-hidden rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-[#0d131c]"
+                >
+                  <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${item.accent}`} />
+                  <div className="relative">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                      <Icon className="h-4 w-4" />
+                      {item.label}
+                    </div>
+                    <div className={`mt-3 ${valueClass}`}>{item.value}</div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        <aside className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#131a25]">
+          <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-50">Quick Actions</h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            Generate a fresh coach pass, refresh the current one, or jump to settings.
+          </p>
+
+          <div className="mt-5 space-y-3">
+            <button
+              onClick={() => void runGeneration()}
+              disabled={quickActionsDisabled || !draftOptIn || !persistedOptIn}
+              className="flex w-full items-center justify-between rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3.5 text-left transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-[#0d131c] dark:hover:border-slate-700 dark:hover:bg-[#121925]"
+            >
+              <div>
+                <div className="text-sm font-semibold text-slate-950 dark:text-slate-50">Generate Suggestions</div>
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Run the coach with your saved goal and current history settings.
+                </div>
+              </div>
+              <Sparkles className="h-4 w-4 text-cyan-500" />
+            </button>
+
+            <button
+              onClick={() => void runGeneration()}
+              disabled={generationDisabled}
+              className="flex w-full items-center justify-between rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3.5 text-left transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-[#0d131c] dark:hover:border-slate-700 dark:hover:bg-[#121925]"
+            >
+              <div>
+                <div className="text-sm font-semibold text-slate-950 dark:text-slate-50">Refresh Coach</div>
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {isGenerating ? "Generation is already running." : "Request a fresh set of suggestion cards."}
+                </div>
+              </div>
+              <RefreshCcw className={`h-4 w-4 text-slate-500 ${isGenerating ? "animate-spin" : ""}`} />
+            </button>
+
+            <button
+              onClick={revealSettings}
+              className="flex w-full items-center justify-between rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3.5 text-left transition hover:border-slate-300 hover:bg-white dark:border-slate-800 dark:bg-[#0d131c] dark:hover:border-slate-700 dark:hover:bg-[#121925]"
+            >
+              <div>
+                <div className="text-sm font-semibold text-slate-950 dark:text-slate-50">Open Settings</div>
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Expand the AI/privacy panel and adjust goal or history usage.
+                </div>
+              </div>
+              <Bot className="h-4 w-4 text-slate-500" />
+            </button>
+          </div>
+        </aside>
+      </div>
 
       <section
         ref={settingsRef}

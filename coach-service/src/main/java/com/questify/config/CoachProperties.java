@@ -9,8 +9,8 @@ public class CoachProperties {
 
     private String runtime = "ollama";
     private String model = "smollm2:1.7b";
-    private long timeoutMs = 15000;
-    private int maxOutputTokens = 400;
+    private long timeoutMs = 90000;
+    private int maxOutputTokens = 220;
     private double temperature = 0.3d;
     private boolean retryEnabled = true;
     private int maxRetries = 1;
