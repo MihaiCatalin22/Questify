@@ -278,6 +278,62 @@ class OutputValidatorTest {
         assertThat(response.nudge()).isEqualTo("Start with the easiest win.");
     }
 
+    @Test
+    void validateSuccessPayload_salvages_alternative_top_level_keys_and_partial_suggestions() {
+        var validator = validator();
+        var generatedAt = Instant.parse("2026-03-19T14:30:00Z");
+        String payload = """
+                {
+                  "recommendations": [
+                    {
+                      "task": "Walk after dinner",
+                      "why": "Low effort way to keep momentum going."
+                    },
+                    {
+                      "name": "Lay out workout clothes",
+                      "details": "Get your setup ready tonight so tomorrow starts with less friction.",
+                      "category": "routine"
+                    }
+                  ],
+                  "summary": "Short actions fit your current pace."
+                }
+                """;
+
+        var response = validator.validateSuccessPayload(payload, generatedAt);
+
+        assertThat(response.suggestions()).hasSize(2);
+        assertThat(response.suggestions().getFirst().title()).isEqualTo("Walk after dinner");
+        assertThat(response.suggestions().getFirst().description()).contains("walk after dinner");
+        assertThat(response.suggestions().getFirst().category()).isEqualTo("FITNESS");
+        assertThat(response.suggestions().getFirst().estimatedMinutes()).isEqualTo(15);
+        assertThat(response.suggestions().getFirst().difficulty()).isEqualTo("easy");
+        assertThat(response.reflection()).isEqualTo("Short actions fit your current pace.");
+        assertThat(response.nudge()).isNotBlank();
+    }
+
+    @Test
+    void validateSuccessPayload_salvages_string_suggestions() {
+        var validator = validator();
+        var generatedAt = Instant.parse("2026-03-19T14:30:00Z");
+        String payload = """
+                {
+                  "suggestions": [
+                    "Take a 20 minute walk - easy way to stay consistent this week",
+                    "Review your notes: capture one blocker and one next step"
+                  ]
+                }
+                """;
+
+        var response = validator.validateSuccessPayload(payload, generatedAt);
+
+        assertThat(response.suggestions()).hasSize(2);
+        assertThat(response.suggestions().getFirst().title()).isEqualTo("Take a 20 minute walk");
+        assertThat(response.suggestions().getFirst().estimatedMinutes()).isEqualTo(20);
+        assertThat(response.suggestions().getFirst().category()).isEqualTo("FITNESS");
+        assertThat(response.reflection()).isNotBlank();
+        assertThat(response.nudge()).isNotBlank();
+    }
+
     private OutputValidator validator() {
         var properties = new CoachProperties();
         properties.setModel("smollm2:1.7b");

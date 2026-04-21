@@ -1,5 +1,4 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import {
@@ -125,6 +124,54 @@ function difficultyTone(difficulty: CoachSuggestion["difficulty"]) {
 
 function categoryLabel(category: QuestCategory) {
   return category.replaceAll("_", " ");
+}
+
+function systemFallbackPrimaryTitle(category: QuestCategory) {
+  switch (category) {
+    case "FITNESS":
+      return "Take a 15-minute walk";
+    case "STUDY":
+      return "Do one focused study block";
+    case "WORK":
+      return "Do one focused work block";
+    case "HOBBY":
+      return "Spend 15 minutes on your hobby";
+    case "COMMUNITY":
+      return "Reach out to one person";
+    default:
+      return "Do one focused 15-minute session";
+  }
+}
+
+function normalizeSystemFallbackSuggestion(suggestion: CoachSuggestion, index: number): CoachSuggestion {
+  if (index === 0) {
+    return {
+      ...suggestion,
+      title: systemFallbackPrimaryTitle(suggestion.category),
+      description:
+        "Spend 15 minutes on one concrete action that supports your goal without trying to do everything at once.",
+      reason: "A short focused session is easier to start than a perfect plan.",
+    };
+  }
+
+  if (index === 1) {
+    return {
+      ...suggestion,
+      title: "Prepare your next session",
+      description:
+        "Remove one point of friction by setting up materials, time, or your environment in advance.",
+      reason: "Preparation makes the next quest easier to start.",
+    };
+  }
+
+  return {
+    ...suggestion,
+    title: "Write a quick progress note",
+    description:
+      "Write a short note on what is working, what is blocking you, and the next realistic move.",
+    category: "HABIT",
+    reason: "A quick review turns effort into a clearer next step.",
+  };
 }
 
 export default function CoachPage() {
@@ -352,179 +399,13 @@ export default function CoachPage() {
     );
   }
 
-  const reviewModal =
-    reviewDraft && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
-            onClick={() => {
-              if (!createQuestM.isPending) {
-                setReviewDraft(null);
-              }
-            }}
-          >
-            <div
-              className="w-full max-w-3xl overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-[#11161f]"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="border-b border-slate-200 bg-slate-50/90 px-6 py-5 dark:border-slate-800 dark:bg-[#161d29]">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
-                      Review Quest
-                    </div>
-                    <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-                      Review before creating
-                    </h2>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
-                      Adjust the title, description, or category if needed. The quest starts immediately and ends in 7
-                      days.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setReviewDraft(null)}
-                    disabled={createQuestM.isPending}
-                    className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-5 px-6 py-5">
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)]">
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Title
-                      </label>
-                      <input
-                        value={reviewDraft.title}
-                        onChange={(event) =>
-                          setReviewDraft((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  title: event.target.value,
-                                }
-                              : current
-                          )
-                        }
-                        className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-[#0d131c]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Description
-                      </label>
-                      <textarea
-                        rows={6}
-                        value={reviewDraft.description}
-                        onChange={(event) =>
-                          setReviewDraft((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  description: event.target.value,
-                                }
-                              : current
-                          )
-                        }
-                        className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 dark:border-slate-700 dark:bg-[#0d131c]"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Category
-                      </label>
-                      <select
-                        value={reviewDraft.category}
-                        onChange={(event) =>
-                          setReviewDraft((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  category: event.target.value as QuestCategory,
-                                }
-                              : current
-                          )
-                        }
-                        className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-[#0d131c]"
-                      >
-                        {QUEST_CATEGORIES.map((category) => (
-                          <option key={category} value={category}>
-                            {categoryLabel(category)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-[#161d29]">
-                      <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-                        Quest Signals
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <span
-                          className={`rounded-full border px-2.5 py-1 text-xs font-medium capitalize ${difficultyTone(
-                            reviewDraft.difficulty
-                          )}`}
-                        >
-                          {reviewDraft.difficulty}
-                        </span>
-                        <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
-                          {reviewDraft.estimatedMinutes} min
-                        </span>
-                        <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
-                          Private quest
-                        </span>
-                      </div>
-
-                      <div className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                        <div>Starts immediately when you confirm.</div>
-                        <div>Ends exactly 7 days later.</div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[24px] border border-slate-200 bg-white p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-[#0d131c] dark:text-slate-300">
-                      <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-                        Why the coach suggested it
-                      </div>
-                      <p className="mt-2 leading-6">{reviewDraft.reason}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-800">
-                <button
-                  onClick={() => setReviewDraft(null)}
-                  disabled={createQuestM.isPending}
-                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmQuestCreation}
-                  disabled={createQuestM.isPending}
-                  className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-slate-950/20 hover:bg-slate-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
-                >
-                  {createQuestM.isPending ? "Creating quest…" : "Create quest"}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )
-      : null;
+  const displaySuggestions =
+    viewState === "fallback" && suggestions?.source === "SYSTEM"
+      ? suggestions.suggestions.map((suggestion, index) => normalizeSystemFallbackSuggestion(suggestion, index))
+      : suggestions?.suggestions ?? [];
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-2 pb-10 sm:px-4">
-      {reviewModal}
-
       <section className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -602,9 +483,9 @@ export default function CoachPage() {
 
         {draftOptIn && suggestions && (viewState === "success" || viewState === "fallback") && (
           <>
-            {suggestions.suggestions.length > 0 ? (
+            {displaySuggestions.length > 0 ? (
               <div className="space-y-4">
-                {suggestions.suggestions.map((suggestion, index) => {
+                {displaySuggestions.map((suggestion, index) => {
                   const suggestionKey = suggestionKeyFor(suggestions.generatedAt, suggestion, index);
                   const acceptedQuest = acceptedQuests[suggestionKey];
 
@@ -628,11 +509,6 @@ export default function CoachPage() {
                           <span className="rounded-full border border-slate-200 px-2.5 py-1 text-slate-600 dark:border-slate-700 dark:text-slate-300">
                             {categoryLabel(suggestion.category)}
                           </span>
-                          {viewState === "fallback" && (
-                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-                              System backup
-                            </span>
-                          )}
                         </div>
 
                         <div className="min-w-0">
@@ -931,6 +807,171 @@ export default function CoachPage() {
           </div>
         )}
       </section>
+
+      {reviewDraft && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!createQuestM.isPending) {
+              setReviewDraft(null);
+            }
+          }}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[30px] border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-[#11161f]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="border-b border-slate-200 bg-slate-50/90 px-6 py-5 dark:border-slate-800 dark:bg-[#161d29]">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
+                    Review Quest
+                  </div>
+                  <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                    Review before creating
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+                    Adjust the title, description, or category if needed. The quest starts immediately and ends in 7
+                    days.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setReviewDraft(null)}
+                  disabled={createQuestM.isPending}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-5 px-6 py-5">
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)]">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Title
+                    </label>
+                    <input
+                      value={reviewDraft.title}
+                      onChange={(event) =>
+                        setReviewDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                title: event.target.value,
+                              }
+                            : current
+                        )
+                      }
+                      className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-[#0d131c]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Description
+                    </label>
+                    <textarea
+                      rows={6}
+                      value={reviewDraft.description}
+                      onChange={(event) =>
+                        setReviewDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                description: event.target.value,
+                              }
+                            : current
+                        )
+                      }
+                      className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 dark:border-slate-700 dark:bg-[#0d131c]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Category
+                    </label>
+                    <select
+                      value={reviewDraft.category}
+                      onChange={(event) =>
+                        setReviewDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                category: event.target.value as QuestCategory,
+                              }
+                            : current
+                        )
+                      }
+                      className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-[#0d131c]"
+                    >
+                      {QUEST_CATEGORIES.map((category) => (
+                        <option key={category} value={category}>
+                          {categoryLabel(category)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-[#161d29]">
+                    <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                      Quest Signals
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-xs font-medium capitalize ${difficultyTone(
+                          reviewDraft.difficulty
+                        )}`}
+                      >
+                        {reviewDraft.difficulty}
+                      </span>
+                      <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
+                        {reviewDraft.estimatedMinutes} min
+                      </span>
+                      <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
+                        Private quest
+                      </span>
+                    </div>
+
+                    <div className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                      <div>Starts immediately when you confirm.</div>
+                      <div>Ends exactly 7 days later.</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-slate-200 bg-white p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-[#0d131c] dark:text-slate-300">
+                    <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                      Why the coach suggested it
+                    </div>
+                    <p className="mt-2 leading-6">{reviewDraft.reason}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-800">
+              <button
+                onClick={() => setReviewDraft(null)}
+                disabled={createQuestM.isPending}
+                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmQuestCreation}
+                disabled={createQuestM.isPending}
+                className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-slate-950/20 hover:bg-slate-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+              >
+                {createQuestM.isPending ? "Creating quest…" : "Create quest"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
