@@ -137,7 +137,7 @@ class OutputValidatorTest {
         assertThatThrownBy(() -> validator.validateSuccessPayload(payload, generatedAt))
                 .isInstanceOf(ModelOutputValidationException.class)
                 .extracting(ex -> ((ModelOutputValidationException) ex).category())
-                .isEqualTo("semantic");
+                .isEqualTo("schema");
     }
 
     @Test
