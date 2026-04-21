@@ -25,7 +25,11 @@ class PromptBuilderTest {
                 true
         );
 
-        var prompt = builder.buildPrimaryPrompt(context, com.questify.dto.CoachDtos.CoachSuggestionMode.DEFAULT);
+        var prompt = builder.buildPrimaryPrompt(
+                context,
+                com.questify.dto.CoachDtos.CoachSuggestionMode.DEFAULT,
+                List.of("Take a 15-minute walk", "Prepare your next session")
+        );
 
         assertThat(prompt.systemPrompt()).contains("You are Questify Coach.");
         assertThat(prompt.userPrompt()).contains("\"suggestions\": {");
@@ -38,6 +42,9 @@ class PromptBuilderTest {
         assertThat(prompt.userPrompt()).contains("category: one of COMMUNITY, FITNESS, HABIT, HOBBY, OTHER, STUDY, WORK");
         assertThat(prompt.userPrompt()).contains("Do not include startDate, endDate, visibility");
         assertThat(prompt.userPrompt()).contains("Keep nudge to 1 short sentence.");
+        assertThat(prompt.userPrompt()).contains("do not quote, paraphrase, or reuse direct fragments of the user's goal text");
+        assertThat(prompt.userPrompt()).contains("do not reuse any excluded suggestion title exactly");
+        assertThat(prompt.userPrompt()).contains("Take a 15-minute walk");
     }
 
     @Test

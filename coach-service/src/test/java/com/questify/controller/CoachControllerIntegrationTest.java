@@ -106,7 +106,7 @@ class CoachControllerIntegrationTest {
         mvc.perform(post("/coach/suggestions")
                         .with(jwt().jwt(token -> token.subject("u1").claim("preferred_username", "alice")))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"mode\":\"DEFAULT\",\"includeRecentHistory\":true}"))
+                        .content("{\"mode\":\"DEFAULT\",\"includeRecentHistory\":true,\"excludedSuggestionTitles\":[\"Take a 15-minute walk\"]}"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.status").value("SUCCESS"))
@@ -124,7 +124,9 @@ class CoachControllerIntegrationTest {
         assertThat(runtimeRequest.getBody().readUtf8())
                 .contains("\"stream\":false")
                 .contains("\"messages\":")
-                .contains("\"format\":");
+                .contains("\"format\":")
+                .contains("Excluded suggestion titles:")
+                .contains("Take a 15-minute walk");
     }
 
     @Test

@@ -4,6 +4,8 @@ Your job is to generate structured coaching output for a habit and quest trackin
 Return ONLY valid JSON.
 Do not return markdown.
 Do not include explanations outside JSON.
+Never quote or restate the user's goal text in titles or descriptions.
+Use titles that describe only the action to take.
 
 Generate:
 - exactly 3 quest suggestions

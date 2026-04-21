@@ -63,6 +63,7 @@ public class CoachService {
         Timer.Sample sample = metricsRecorder.startRequest();
         try {
             var context = coachContextService.loadContext(userId, request.resolvedIncludeRecentHistory());
+            var excludedSuggestionTitles = request.resolvedExcludedSuggestionTitles();
             Instant generatedAt = Instant.now(clock).truncatedTo(ChronoUnit.SECONDS);
             GenerationOptions options = new GenerationOptions(
                     properties.getModel(),
@@ -73,7 +74,8 @@ public class CoachService {
             );
             GenerationPrompt primaryPrompt = promptBuilder.buildPrimaryPrompt(
                     context,
-                    request.resolvedMode()
+                    request.resolvedMode(),
+                    excludedSuggestionTitles
             );
 
             try {
@@ -99,20 +101,20 @@ public class CoachService {
                     } catch (ModelOutputValidationException repairFailure) {
                         metricsRecorder.recordValidationFailure(repairFailure.category());
                         logValidationFailure("repair", repairFailure);
-                        return fallback(sample, "invalid_after_retry", context);
+                        return fallback(sample, "invalid_after_retry", context, excludedSuggestionTitles);
                     } catch (ModelTimeoutException timeoutFailure) {
                         metricsRecorder.recordTimeout();
-                        return fallback(sample, "timeout", context);
+                        return fallback(sample, "timeout", context, excludedSuggestionTitles);
                     } catch (ModelClientException clientFailure) {
-                        return fallback(sample, "runtime_failure", context);
+                        return fallback(sample, "runtime_failure", context, excludedSuggestionTitles);
                     }
                 }
-                return fallback(sample, "invalid_output", context);
+                return fallback(sample, "invalid_output", context, excludedSuggestionTitles);
             } catch (ModelTimeoutException timeoutFailure) {
                 metricsRecorder.recordTimeout();
-                return fallback(sample, "timeout", context);
+                return fallback(sample, "timeout", context, excludedSuggestionTitles);
             } catch (ModelClientException clientFailure) {
-                return fallback(sample, "runtime_failure", context);
+                return fallback(sample, "runtime_failure", context, excludedSuggestionTitles);
             }
         } catch (AiCoachOptInRequiredException ex) {
             metricsRecorder.recordRejected(sample);
@@ -131,10 +133,13 @@ public class CoachService {
         return rawOutput;
     }
 
-    private CoachSuggestionsRes fallback(Timer.Sample sample, String reason, CoachPromptContext context) {
+    private CoachSuggestionsRes fallback(Timer.Sample sample,
+                                         String reason,
+                                         CoachPromptContext context,
+                                         java.util.List<String> excludedSuggestionTitles) {
         metricsRecorder.recordFallback(sample, reason);
         log.warn("Coach suggestions fallback runtime={} model={} reason={}", properties.normalizedRuntime(), properties.getModel(), reason);
-        return fallbackFactory.create(context);
+        return fallbackFactory.create(context, excludedSuggestionTitles);
     }
 
     private static String sha256(String value) {

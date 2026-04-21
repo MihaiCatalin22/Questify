@@ -9,6 +9,7 @@ export type CoachDifficulty = "easy" | "medium" | "hard";
 export interface CoachSuggestionsRequest {
   mode?: CoachSuggestionMode;
   includeRecentHistory?: boolean;
+  excludedSuggestionTitles?: string[];
 }
 
 export interface CoachSuggestion {

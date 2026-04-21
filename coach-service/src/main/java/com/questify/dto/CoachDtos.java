@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 
 public class CoachDtos {
 
@@ -13,7 +14,8 @@ public class CoachDtos {
 
     public record CoachSuggestionsReq(
             CoachSuggestionMode mode,
-            Boolean includeRecentHistory
+            Boolean includeRecentHistory,
+            List<String> excludedSuggestionTitles
     ) {
         public CoachSuggestionMode resolvedMode() {
             return mode == null ? CoachSuggestionMode.DEFAULT : mode;
@@ -21,6 +23,19 @@ public class CoachDtos {
 
         public boolean resolvedIncludeRecentHistory() {
             return includeRecentHistory == null || includeRecentHistory;
+        }
+
+        public List<String> resolvedExcludedSuggestionTitles() {
+            if (excludedSuggestionTitles == null || excludedSuggestionTitles.isEmpty()) {
+                return List.of();
+            }
+            return excludedSuggestionTitles.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(title -> !title.isBlank())
+                    .distinct()
+                    .limit(12)
+                    .toList();
         }
     }
 

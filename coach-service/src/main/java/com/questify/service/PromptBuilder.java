@@ -10,7 +10,6 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,13 +29,15 @@ public class PromptBuilder {
     }
 
     public GenerationPrompt buildPrimaryPrompt(CoachPromptContext context,
-                                               CoachSuggestionMode mode) {
+                                               CoachSuggestionMode mode,
+                                               List<String> excludedSuggestionTitles) {
         Map<String, String> values = new LinkedHashMap<>();
         values.put("schema", assets.schemaText());
         values.put("mode", mode.name());
         values.put("goal", context.goal());
         values.put("recentQuestHistory", formatRecentHistory(context));
         values.put("recentPattern", formatRecentPattern(context));
+        values.put("excludedSuggestionTitles", formatExcludedSuggestionTitles(excludedSuggestionTitles));
 
         String userPrompt = render(assets.userTemplate(), values);
         debugLog("primary", assets.systemTemplate(), userPrompt);
@@ -100,6 +101,15 @@ public class PromptBuilder {
                 context.totalCompletedCount(),
                 context.includeRecentHistory()
         ).trim();
+    }
+
+    private String formatExcludedSuggestionTitles(List<String> excludedSuggestionTitles) {
+        if (excludedSuggestionTitles == null || excludedSuggestionTitles.isEmpty()) {
+            return "No excluded suggestion titles were provided.";
+        }
+        return excludedSuggestionTitles.stream()
+                .map(title -> "- " + title)
+                .collect(Collectors.joining("\n"));
     }
 
     private String render(String template, Map<String, String> values) {

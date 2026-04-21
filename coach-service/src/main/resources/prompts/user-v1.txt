@@ -13,6 +13,14 @@ Each suggestion must be quest-ready:
 Do not include startDate, endDate, visibility, or any other fields.
 Keep reflection to 1 or 2 short sentences.
 Keep nudge to 1 short sentence.
+Title and description rules:
+- titles must describe only the action itself
+- do not quote, paraphrase, or reuse direct fragments of the user's goal text in the title or description
+- descriptions should explain the concrete action and why it helps, without repeating the goal statement
+Variety rules:
+- do not reuse any excluded suggestion title exactly
+- prefer a different angle or sub-area than recently shown or recently completed suggestions
+- if the goal mentions multiple sub-areas, spread suggestions across them when reasonable
 
 Suggestion mode:
 {{mode}}
@@ -25,3 +33,6 @@ Recent quest history:
 
 Recent pattern:
 {{recentPattern}}
+
+Excluded suggestion titles:
+{{excludedSuggestionTitles}}

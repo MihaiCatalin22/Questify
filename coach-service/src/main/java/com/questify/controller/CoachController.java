@@ -29,7 +29,7 @@ public class CoachController {
     public ResponseEntity<?> suggestions(@Valid @RequestBody(required = false) CoachSuggestionsReq request,
                                          Authentication authentication) {
         CoachSuggestionsReq effectiveRequest = request == null
-                ? new CoachSuggestionsReq(null, null)
+                ? new CoachSuggestionsReq(null, null, null)
                 : request;
         return ResponseEntity.ok()
                 .header("Cache-Control", "no-store")
