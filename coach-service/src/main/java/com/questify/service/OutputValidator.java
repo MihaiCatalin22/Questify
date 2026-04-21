@@ -3,7 +3,9 @@ package com.questify.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SpecVersion;
@@ -15,9 +17,14 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class OutputValidator {
+
+    private static final Pattern FIRST_INTEGER = Pattern.compile("(\\d+)");
 
     private final ObjectMapper objectMapper;
     private final CoachProperties properties;
@@ -37,7 +44,7 @@ public class OutputValidator {
         }
 
         JsonNode tree = parse(trimmed, rawOutput);
-        JsonNode modelPayload = stripServerOwnedFields(tree, rawOutput);
+        JsonNode modelPayload = normalizePayload(stripServerOwnedFields(tree, rawOutput), rawOutput);
         validateSchema(modelPayload, rawOutput);
 
         AiCoachPayload payload;
@@ -98,12 +105,137 @@ public class OutputValidator {
         if (!(tree instanceof ObjectNode objectNode)) {
             throw new ModelOutputValidationException("schema", List.of("Response must be a JSON object"), rawOutput);
         }
-        ObjectNode sanitized = objectNode.deepCopy();
-        sanitized.remove("status");
-        sanitized.remove("source");
-        sanitized.remove("model");
-        sanitized.remove("generatedAt");
+        ObjectNode sanitized = objectMapper.createObjectNode();
+        if (objectNode.has("suggestions")) {
+            sanitized.set("suggestions", objectNode.get("suggestions"));
+        }
+        if (objectNode.has("reflection")) {
+            sanitized.set("reflection", objectNode.get("reflection"));
+        }
+        if (objectNode.has("nudge")) {
+            sanitized.set("nudge", objectNode.get("nudge"));
+        }
         return sanitized;
+    }
+
+    private JsonNode normalizePayload(JsonNode tree, String rawOutput) {
+        if (!(tree instanceof ObjectNode objectNode)) {
+            throw new ModelOutputValidationException("schema", List.of("Response must be a JSON object"), rawOutput);
+        }
+
+        ObjectNode normalized = objectMapper.createObjectNode();
+        normalized.set("suggestions", normalizeSuggestions(objectNode.get("suggestions")));
+        copyNormalizedText(objectNode, normalized, "reflection");
+        copyNormalizedText(objectNode, normalized, "nudge");
+        return normalized;
+    }
+
+    private ArrayNode normalizeSuggestions(JsonNode suggestionsNode) {
+        ArrayNode normalizedSuggestions = objectMapper.createArrayNode();
+        if (suggestionsNode == null || suggestionsNode.isNull() || !suggestionsNode.isArray()) {
+            return normalizedSuggestions;
+        }
+
+        int count = 0;
+        for (JsonNode suggestionNode : suggestionsNode) {
+            if (count == 3) {
+                break;
+            }
+            normalizedSuggestions.add(normalizeSuggestion(suggestionNode));
+            count++;
+        }
+        return normalizedSuggestions;
+    }
+
+    private JsonNode normalizeSuggestion(JsonNode suggestionNode) {
+        if (!(suggestionNode instanceof ObjectNode objectNode)) {
+            return suggestionNode;
+        }
+
+        ObjectNode normalized = objectMapper.createObjectNode();
+        copyNormalizedText(objectNode, normalized, "title");
+        copyNormalizedText(objectNode, normalized, "description");
+        copyNormalizedCategory(objectNode, normalized);
+        copyNormalizedEstimatedMinutes(objectNode, normalized);
+        copyNormalizedDifficulty(objectNode, normalized);
+        copyNormalizedText(objectNode, normalized, "reason");
+        return normalized;
+    }
+
+    private void copyNormalizedText(ObjectNode source, ObjectNode target, String fieldName) {
+        JsonNode value = source.get(fieldName);
+        if (value == null || value.isNull()) {
+            return;
+        }
+        if (value.isTextual()) {
+            target.put(fieldName, value.asText().trim());
+            return;
+        }
+        target.set(fieldName, value);
+    }
+
+    private void copyNormalizedCategory(ObjectNode source, ObjectNode target) {
+        JsonNode value = source.get("category");
+        if (value == null || value.isNull()) {
+            return;
+        }
+        if (!value.isTextual()) {
+            target.set("category", value);
+            return;
+        }
+
+        String normalized = switch (value.asText().trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_')) {
+            case "EXERCISE", "HEALTH", "WELLNESS" -> "FITNESS";
+            case "ROUTINE", "ROUTINES", "CONSISTENCY" -> "HABIT";
+            case "LEARNING", "LEARN" -> "STUDY";
+            case "CAREER", "JOB", "PRODUCTIVITY" -> "WORK";
+            case "CREATIVE", "CREATIVITY", "FUN", "LEISURE" -> "HOBBY";
+            case "SOCIAL", "VOLUNTEER", "VOLUNTEERING" -> "COMMUNITY";
+            case "GENERAL" -> "OTHER";
+            default -> value.asText().trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        };
+        target.put("category", normalized);
+    }
+
+    private void copyNormalizedDifficulty(ObjectNode source, ObjectNode target) {
+        JsonNode value = source.get("difficulty");
+        if (value == null || value.isNull()) {
+            return;
+        }
+        if (!value.isTextual()) {
+            target.set("difficulty", value);
+            return;
+        }
+
+        String normalized = switch (value.asText().trim().toLowerCase(Locale.ROOT)) {
+            case "beginner", "simple", "low" -> "easy";
+            case "moderate", "normal", "intermediate" -> "medium";
+            case "difficult", "challenging", "advanced" -> "hard";
+            default -> value.asText().trim().toLowerCase(Locale.ROOT);
+        };
+        target.put("difficulty", normalized);
+    }
+
+    private void copyNormalizedEstimatedMinutes(ObjectNode source, ObjectNode target) {
+        JsonNode value = source.get("estimatedMinutes");
+        if (value == null || value.isNull()) {
+            return;
+        }
+        if (value.isIntegralNumber()) {
+            target.put("estimatedMinutes", value.asInt());
+            return;
+        }
+        if (!value.isTextual()) {
+            target.set("estimatedMinutes", value);
+            return;
+        }
+
+        Matcher matcher = FIRST_INTEGER.matcher(value.asText());
+        if (matcher.find()) {
+            target.put("estimatedMinutes", Integer.parseInt(matcher.group(1)));
+            return;
+        }
+        target.set("estimatedMinutes", value);
     }
 
     private void validateSchema(JsonNode tree, String rawOutput) {

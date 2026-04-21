@@ -215,6 +215,69 @@ class OutputValidatorTest {
         assertThat(response.status()).isEqualTo("SUCCESS");
     }
 
+    @Test
+    void validateSuccessPayload_normalizes_common_model_drift() {
+        var validator = validator();
+        var generatedAt = Instant.parse("2026-03-19T14:30:00Z");
+        String payload = """
+                {
+                  "status": "SUCCESS",
+                  "source": "AI",
+                  "model": "phi3:mini",
+                  "generatedAt": "2026-03-19T14:29:00Z",
+                  "suggestions": [
+                    {
+                      "title": "Walk",
+                      "description": "Take a short walk after dinner to keep your momentum going this week.",
+                      "category": "health",
+                      "estimatedMinutes": "15 minutes",
+                      "difficulty": "Beginner",
+                      "reason": "Low friction.",
+                      "extraField": "ignore this"
+                    },
+                    {
+                      "title": "Stretch",
+                      "description": "Do a quick stretch session so you stay active without a big time commitment.",
+                      "category": "fitness",
+                      "estimatedMinutes": 10,
+                      "difficulty": "easy",
+                      "reason": "Easy win."
+                    },
+                    {
+                      "title": "Prep clothes",
+                      "description": "Lay out tomorrow's clothes tonight so getting started feels easier tomorrow.",
+                      "category": "routine",
+                      "estimatedMinutes": "5",
+                      "difficulty": "moderate",
+                      "reason": "Reduces friction."
+                    },
+                    {
+                      "title": "Extra quest",
+                      "description": "This extra suggestion should be dropped so the payload still validates cleanly.",
+                      "category": "OTHER",
+                      "estimatedMinutes": 5,
+                      "difficulty": "easy",
+                      "reason": "Too many items."
+                    }
+                  ],
+                  "reflection": "  Keep it small and repeatable.  ",
+                  "nudge": "  Start with the easiest win.  ",
+                  "extraTopLevel": "ignore this"
+                }
+                """;
+
+        var response = validator.validateSuccessPayload(payload, generatedAt);
+
+        assertThat(response.suggestions()).hasSize(3);
+        assertThat(response.suggestions().getFirst().category()).isEqualTo("FITNESS");
+        assertThat(response.suggestions().getFirst().estimatedMinutes()).isEqualTo(15);
+        assertThat(response.suggestions().getFirst().difficulty()).isEqualTo("easy");
+        assertThat(response.suggestions().get(2).category()).isEqualTo("HABIT");
+        assertThat(response.suggestions().get(2).difficulty()).isEqualTo("medium");
+        assertThat(response.reflection()).isEqualTo("Keep it small and repeatable.");
+        assertThat(response.nudge()).isEqualTo("Start with the easiest win.");
+    }
+
     private OutputValidator validator() {
         var properties = new CoachProperties();
         properties.setModel("smollm2:1.7b");

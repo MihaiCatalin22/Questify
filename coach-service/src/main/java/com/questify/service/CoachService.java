@@ -83,6 +83,7 @@ public class CoachService {
                 return validated;
             } catch (ModelOutputValidationException validationFailure) {
                 metricsRecorder.recordValidationFailure(validationFailure.category());
+                logValidationFailure("primary", validationFailure);
                 if (retryHandler.shouldRetry(1, validationFailure)) {
                     metricsRecorder.recordRetry();
                     try {
@@ -97,6 +98,7 @@ public class CoachService {
                         return repaired;
                     } catch (ModelOutputValidationException repairFailure) {
                         metricsRecorder.recordValidationFailure(repairFailure.category());
+                        logValidationFailure("repair", repairFailure);
                         return fallback(sample, "invalid_after_retry");
                     } catch (ModelTimeoutException timeoutFailure) {
                         metricsRecorder.recordTimeout();
@@ -123,8 +125,8 @@ public class CoachService {
 
     private String generate(GenerationPrompt prompt, GenerationOptions options) {
         String rawOutput = modelClient.generate(prompt, options);
-        if (properties.isDebugLogging() && log.isDebugEnabled()) {
-            log.debug("Coach model output hash={} chars={}", sha256(rawOutput), rawOutput.length());
+        if (properties.isDebugLogging()) {
+            log.info("Coach model output hash={} chars={}", sha256(rawOutput), rawOutput.length());
         }
         return rawOutput;
     }
@@ -138,7 +140,7 @@ public class CoachService {
     private static String sha256(String value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            byte[] hash = digest.digest((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
             StringBuilder builder = new StringBuilder(hash.length * 2);
             for (byte b : hash) {
                 builder.append(String.format("%02x", b));
@@ -147,5 +149,32 @@ public class CoachService {
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 is not available", ex);
         }
+    }
+
+    private void logValidationFailure(String stage, ModelOutputValidationException failure) {
+        log.warn(
+                "Coach model output invalid runtime={} model={} stage={} category={} errors={} hash={} chars={}",
+                properties.normalizedRuntime(),
+                properties.getModel(),
+                stage,
+                failure.category(),
+                failure.errors(),
+                sha256(failure.rawOutput()),
+                failure.rawOutput() == null ? 0 : failure.rawOutput().length()
+        );
+        if (properties.isDebugLogging()) {
+            log.warn("Coach model output invalid stage={} raw={}", stage, abbreviate(failure.rawOutput(), 1200));
+        }
+    }
+
+    private static String abbreviate(String value, int maxLength) {
+        if (value == null || value.isBlank()) {
+            return "<empty>";
+        }
+        String normalizedWhitespace = value.replaceAll("\\s+", " ").trim();
+        if (normalizedWhitespace.length() <= maxLength) {
+            return normalizedWhitespace;
+        }
+        return normalizedWhitespace.substring(0, maxLength) + "...";
     }
 }

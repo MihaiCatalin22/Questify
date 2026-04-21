@@ -72,6 +72,8 @@ spec:
               value: "true"
             - name: COACH_MAX_RETRIES
               value: "1"
+            - name: COACH_DEBUG_LOGGING
+              value: "true"
             - name: JAVA_OPTS
               value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine"
           startupProbe:
