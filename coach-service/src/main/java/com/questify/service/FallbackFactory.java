@@ -286,7 +286,7 @@ public class FallbackFactory {
                 score++;
             }
         }
-        scores.computeIfPresent(key, (ignored, current) -> current + score);
+        scores.put(key, scores.getOrDefault(key, 0) + score);
     }
 
     private static String renderTargetLabel(String target, String category) {
