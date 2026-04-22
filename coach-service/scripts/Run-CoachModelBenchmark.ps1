@@ -544,7 +544,7 @@ function Write-BenchmarkReport {
     [void]$report.AppendLine("")
     [void]$report.AppendLine("- Runtime: Ollama")
     [void]$report.AppendLine("- Models: " + (($ComparisonRows | ForEach-Object { $_.model }) -join ", "))
-    [void]$report.AppendLine('- Coach runtime settings: `timeout-ms=45000`, `max-output-tokens=160`, `temperature=0.15`, `retry-enabled=true`, `max-retries=1`')
+    [void]$report.AppendLine('- Coach runtime settings: `timeout-ms=45000`, `max-output-tokens=260`, `temperature=0.10`, `retry-enabled=true`, `max-retries=1`')
     [void]$report.AppendLine("- Benchmark corpus: 10 fixed Questify coach scenarios, 1 warm-up request per model, 5 measured runs per scenario")
     [void]$report.AppendLine("- Minimum AI success gate: $MinimumSuccessRate%")
     [void]$report.AppendLine("")

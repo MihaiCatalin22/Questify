@@ -77,6 +77,7 @@ public class CoachService {
                     request.resolvedMode(),
                     excludedSuggestionTitles
             );
+            logModelAttempt("primary", primaryPrompt, options);
 
             try {
                 var validated = outputValidator.validateSuccessPayload(generate(primaryPrompt, options), generatedAt);
@@ -94,6 +95,7 @@ public class CoachService {
                                 validationFailure.rawOutput(),
                                 validationFailure.errors()
                         );
+                        logModelAttempt("repair", repairPrompt, options);
                         var repaired = outputValidator.validateSuccessPayload(generate(repairPrompt, options), generatedAt);
                         metricsRecorder.recordSuccess(sample);
                         log.info("Coach suggestions generated runtime={} model={} outcome=repaired", properties.normalizedRuntime(), properties.getModel());
@@ -123,6 +125,21 @@ public class CoachService {
             metricsRecorder.recordError(sample);
             throw ex;
         }
+    }
+
+    private void logModelAttempt(String stage, GenerationPrompt prompt, GenerationOptions options) {
+        log.info(
+                "Coach model request runtime={} model={} stage={} timeoutMs={} maxOutputTokens={} temperature={} systemHash={} userHash={} userChars={}",
+                properties.normalizedRuntime(),
+                options.model(),
+                stage,
+                options.timeout().toMillis(),
+                options.maxOutputTokens(),
+                options.temperature(),
+                sha256(prompt.systemPrompt()),
+                sha256(prompt.userPrompt()),
+                prompt.userPrompt() == null ? 0 : prompt.userPrompt().length()
+        );
     }
 
     private String generate(GenerationPrompt prompt, GenerationOptions options) {

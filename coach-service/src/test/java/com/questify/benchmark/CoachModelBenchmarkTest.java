@@ -53,8 +53,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "SECURITY_INTERNAL_TOKEN=test-internal-token",
         "coach.runtime=ollama",
         "coach.timeout-ms=45000",
-        "coach.max-output-tokens=160",
-        "coach.temperature=0.15",
+        "coach.max-output-tokens=260",
+        "coach.temperature=0.10",
         "coach.retry-enabled=true",
         "coach.max-retries=1",
         "coach.schema-version=v1"

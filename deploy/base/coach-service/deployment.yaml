@@ -61,13 +61,13 @@ spec:
             - name: COACH_RUNTIME
               value: "ollama"
             - name: COACH_MODEL
-              value: "phi3:mini"
+              value: "qwen2.5:3b"
             - name: COACH_TIMEOUT_MS
               value: "45000"
             - name: COACH_MAX_OUTPUT_TOKENS
-              value: "160"
+              value: "260"
             - name: COACH_TEMPERATURE
-              value: "0.15"
+              value: "0.10"
             - name: COACH_RETRY_ENABLED
               value: "true"
             - name: COACH_MAX_RETRIES
