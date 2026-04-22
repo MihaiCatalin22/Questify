@@ -31,6 +31,7 @@ public class CoachRuntimeHealthIndicator implements HealthIndicator {
             return Health.up()
                     .withDetail("runtime", properties.normalizedRuntime())
                     .withDetail("configuredModel", properties.getModel())
+                    .withDetail("runtimeBaseUrl", properties.getRuntimeBaseUrl())
                     .withDetail("reachable", false)
                     .withDetail("note", "Runtime-specific health probe is only implemented for Ollama")
                     .build();
@@ -51,15 +52,18 @@ public class CoachRuntimeHealthIndicator implements HealthIndicator {
             return Health.up()
                     .withDetail("runtime", properties.normalizedRuntime())
                     .withDetail("configuredModel", properties.getModel())
+                    .withDetail("runtimeBaseUrl", properties.getRuntimeBaseUrl())
                     .withDetail("reachable", true)
                     .withDetail("availableModelCount", modelCount)
                     .build();
         } catch (Exception ex) {
-            return Health.up()
+            return Health.down()
                     .withDetail("runtime", properties.normalizedRuntime())
                     .withDetail("configuredModel", properties.getModel())
+                    .withDetail("runtimeBaseUrl", properties.getRuntimeBaseUrl())
                     .withDetail("reachable", false)
                     .withDetail("error", ex.getClass().getSimpleName())
+                    .withDetail("message", ex.getMessage())
                     .build();
         }
     }

@@ -106,16 +106,20 @@ public class CoachService {
                         return fallback(sample, "invalid_after_retry", context, excludedSuggestionTitles);
                     } catch (ModelTimeoutException timeoutFailure) {
                         metricsRecorder.recordTimeout();
+                        logModelTimeout("repair", options, timeoutFailure);
                         return fallback(sample, "timeout", context, excludedSuggestionTitles);
                     } catch (ModelClientException clientFailure) {
+                        logModelClientFailure("repair", options, clientFailure);
                         return fallback(sample, "runtime_failure", context, excludedSuggestionTitles);
                     }
                 }
                 return fallback(sample, "invalid_output", context, excludedSuggestionTitles);
             } catch (ModelTimeoutException timeoutFailure) {
                 metricsRecorder.recordTimeout();
+                logModelTimeout("primary", options, timeoutFailure);
                 return fallback(sample, "timeout", context, excludedSuggestionTitles);
             } catch (ModelClientException clientFailure) {
+                logModelClientFailure("primary", options, clientFailure);
                 return fallback(sample, "runtime_failure", context, excludedSuggestionTitles);
             }
         } catch (AiCoachOptInRequiredException ex) {
@@ -187,6 +191,32 @@ public class CoachService {
         if (properties.isDebugLogging()) {
             log.warn("Coach model output invalid stage={} raw={}", stage, abbreviate(failure.rawOutput(), 1200));
         }
+    }
+
+    private void logModelTimeout(String stage, GenerationOptions options, ModelTimeoutException failure) {
+        log.error(
+                "Coach model timeout runtime={} model={} stage={} timeoutMs={} baseUrl={} message={}",
+                properties.normalizedRuntime(),
+                options.model(),
+                stage,
+                options.timeout().toMillis(),
+                properties.getRuntimeBaseUrl(),
+                failure.getMessage(),
+                failure
+        );
+    }
+
+    private void logModelClientFailure(String stage, GenerationOptions options, ModelClientException failure) {
+        log.error(
+                "Coach model runtime failure runtime={} model={} stage={} timeoutMs={} baseUrl={} message={}",
+                properties.normalizedRuntime(),
+                options.model(),
+                stage,
+                options.timeout().toMillis(),
+                properties.getRuntimeBaseUrl(),
+                failure.getMessage(),
+                failure
+        );
     }
 
     private static String abbreviate(String value, int maxLength) {
