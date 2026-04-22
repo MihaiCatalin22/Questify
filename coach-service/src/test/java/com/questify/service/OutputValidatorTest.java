@@ -387,6 +387,50 @@ class OutputValidatorTest {
         assertThat(response.nudge()).isEqualTo("Start with the easiest segment first.");
     }
 
+    @Test
+    void validateSuccessPayload_salvages_truncated_json_when_suggestions_array_is_complete() {
+        var validator = validator();
+        var generatedAt = Instant.parse("2026-03-19T14:30:00Z");
+        String payload = """
+                {
+                  "suggestions": [
+                    {
+                      "title": "Review key math formulas",
+                      "description": "Quickly review and memorize key math formulas for faster recall during study sessions.",
+                      "category": "STUDY",
+                      "estimatedMinutes": 15,
+                      "difficulty": "easy",
+                      "reason": "Memorizing core formulas makes later problem-solving easier."
+                    },
+                    {
+                      "title": "History flashcard session",
+                      "description": "Create and review history flashcards for important dates and events.",
+                      "category": "STUDY",
+                      "estimatedMinutes": 20,
+                      "difficulty": "easy",
+                      "reason": "Flashcards are a fast way to reinforce recall."
+                    },
+                    {
+                      "title": "Math practice problems",
+                      "description": "Solve a few targeted math problems from one weak area.",
+                      "category": "STUDY",
+                      "estimatedMinutes": 30,
+                      "difficulty": "medium",
+                      "reason": "Focused practice improves confidence in one topic at a time."
+                    }
+                  ],
+                  "reflection": "It's important to
+                """;
+
+        var response = validator.validateSuccessPayload(payload, generatedAt);
+
+        assertThat(response.status()).isEqualTo("SUCCESS");
+        assertThat(response.suggestions()).hasSize(3);
+        assertThat(response.suggestions().getFirst().title()).isEqualTo("Review key math formulas");
+        assertThat(response.reflection()).isNotBlank();
+        assertThat(response.nudge()).isNotBlank();
+    }
+
     private OutputValidator validator() {
         var properties = new CoachProperties();
         properties.setModel("smollm2:1.7b");

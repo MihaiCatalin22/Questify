@@ -89,6 +89,10 @@ public class OutputValidator {
                     // Fall through to the original structured error.
                 }
             }
+            JsonNode truncatedJsonPayload = buildObjectFromTruncatedJson(trimmed);
+            if (truncatedJsonPayload != null) {
+                return truncatedJsonPayload;
+            }
             JsonNode salvaged = buildObjectFromPlainText(trimmed);
             if (salvaged != null) {
                 return salvaged;
@@ -172,6 +176,37 @@ public class OutputValidator {
             payload.put("nudge", nudge);
         }
         return payload;
+    }
+
+    private JsonNode buildObjectFromTruncatedJson(String rawText) {
+        int suggestionsKeyIndex = rawText.indexOf("\"suggestions\"");
+        if (suggestionsKeyIndex < 0) {
+            return null;
+        }
+
+        int arrayStart = rawText.indexOf('[', suggestionsKeyIndex);
+        if (arrayStart < 0) {
+            return null;
+        }
+
+        int arrayEnd = findMatchingBracket(rawText, arrayStart, '[', ']');
+        if (arrayEnd < 0) {
+            return null;
+        }
+
+        String arrayText = rawText.substring(arrayStart, arrayEnd + 1);
+        try {
+            JsonNode suggestions = objectMapper.readTree(arrayText);
+            if (!suggestions.isArray() || suggestions.isEmpty()) {
+                return null;
+            }
+
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.set("suggestions", suggestions);
+            return payload;
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
     }
 
     private String stripListMarker(String line) {
@@ -506,6 +541,41 @@ public class OutputValidator {
                 .filter(index -> index > 0)
                 .min(Integer::compareTo)
                 .orElse(-1);
+    }
+
+    private static int findMatchingBracket(String value, int openIndex, char openBracket, char closeBracket) {
+        boolean inString = false;
+        boolean escaping = false;
+        int depth = 0;
+
+        for (int i = openIndex; i < value.length(); i++) {
+            char current = value.charAt(i);
+
+            if (escaping) {
+                escaping = false;
+                continue;
+            }
+            if (current == '\\') {
+                escaping = true;
+                continue;
+            }
+            if (current == '"') {
+                inString = !inString;
+                continue;
+            }
+            if (inString) {
+                continue;
+            }
+            if (current == openBracket) {
+                depth++;
+            } else if (current == closeBracket) {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     private static String synthesizeReflection(ArrayNode suggestions) {
