@@ -7,7 +7,7 @@ resources:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-proof-service
-    newTag: main-6e91dd2
+    newTag: main-f245ec7
 
 patchesJson6902:
   - target:
