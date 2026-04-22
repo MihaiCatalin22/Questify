@@ -8,13 +8,22 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Component
 public class FallbackFactory {
+
+    private record GoalFacets(
+            List<String> targets,
+            String category
+    ) {}
 
     private record SuggestionTemplate(
             String title,
@@ -25,6 +34,26 @@ public class FallbackFactory {
             String reason
     ) {}
 
+    private static final Pattern NON_ALPHANUMERIC = Pattern.compile("[^a-z0-9 ]");
+    private static final Pattern MULTISPACE = Pattern.compile("\\s+");
+    private static final Set<String> STOPWORDS = Set.of(
+            "i", "me", "my", "mine", "you", "your", "yours", "we", "our", "ours",
+            "want", "need", "help", "please", "goal", "goals", "achieve", "achieving",
+            "improve", "improving", "better", "become", "create", "creating", "quest", "quests",
+            "some", "more", "less", "with", "without", "during", "through", "into", "from",
+            "that", "this", "these", "those", "they", "them", "their", "for", "and", "or",
+            "the", "a", "an", "to", "of", "in", "on", "at", "by", "after", "before", "over",
+            "under", "still", "just", "really", "kind", "sort", "bullshit"
+    );
+    private static final Map<String, Integer> CATEGORY_HINTS = Map.ofEntries(
+            Map.entry("FITNESS", 0),
+            Map.entry("STUDY", 0),
+            Map.entry("WORK", 0),
+            Map.entry("COMMUNITY", 0),
+            Map.entry("HOBBY", 0),
+            Map.entry("OTHER", 0)
+    );
+
     private final Clock clock;
 
     public FallbackFactory(Clock clock) {
@@ -32,21 +61,20 @@ public class FallbackFactory {
     }
 
     public CoachSuggestionsRes create(CoachPromptContext context, List<String> excludedSuggestionTitles) {
-        String primaryCategory = primaryCategory(context.goal());
+        GoalFacets facets = deriveGoalFacets(context);
         return new CoachSuggestionsRes(
                 "FALLBACK",
                 "SYSTEM",
                 null,
                 Instant.now(clock).truncatedTo(ChronoUnit.SECONDS),
-                buildSuggestions(primaryCategory, excludedSuggestionTitles),
+                buildSuggestions(facets, excludedSuggestionTitles),
                 reflection(context),
                 nudge(context)
         );
     }
 
-    private static List<CoachSuggestionRes> buildSuggestions(String primaryCategory, List<String> excludedSuggestionTitles) {
-        List<SuggestionTemplate> candidates = new ArrayList<>(categoryTemplates(primaryCategory));
-        candidates.addAll(sharedTemplates());
+    private static List<CoachSuggestionRes> buildSuggestions(GoalFacets facets, List<String> excludedSuggestionTitles) {
+        List<SuggestionTemplate> candidates = new ArrayList<>(goalDerivedTemplates(facets));
 
         Set<String> excluded = new LinkedHashSet<>();
         if (excludedSuggestionTitles != null) {
@@ -71,27 +99,6 @@ public class FallbackFactory {
             }
         }
 
-        for (SuggestionTemplate candidate : sharedTemplates()) {
-            String normalizedTitle = candidate.title().toLowerCase(Locale.ROOT);
-            if (usedTitles.add(normalizedTitle)) {
-                suggestions.add(toResponse(candidate));
-            }
-            if (suggestions.size() == 3) {
-                break;
-            }
-        }
-
-        if (suggestions.size() < 3) {
-            for (SuggestionTemplate candidate : candidates) {
-                String normalizedTitle = candidate.title().toLowerCase(Locale.ROOT);
-                if (usedTitles.add(normalizedTitle)) {
-                    suggestions.add(toResponse(candidate));
-                }
-                if (suggestions.size() == 3) {
-                    break;
-                }
-            }
-        }
         return List.copyOf(suggestions);
     }
 
@@ -106,252 +113,202 @@ public class FallbackFactory {
         );
     }
 
-    private static List<SuggestionTemplate> categoryTemplates(String primaryCategory) {
-        return switch (primaryCategory) {
-            case "GAME_PRACTICE" -> List.of(
-                    new SuggestionTemplate(
-                            "Practice one short route segment",
-                            "Repeat one specific route segment or setup for 15 minutes instead of doing a full run.",
-                            "HOBBY",
-                            15,
-                            "easy",
-                            "Short segment drills build consistency faster than scattered full attempts."
-                    ),
-                    new SuggestionTemplate(
-                            "Review one failed attempt",
-                            "Watch or replay one recent mistake and write one adjustment to try on the next run.",
-                            "HOBBY",
-                            15,
-                            "medium",
-                            "One focused review turns a failed attempt into a specific correction."
-                    ),
-                    new SuggestionTemplate(
-                            "Set up one clean restart routine",
-                            "Prepare your timer, splits, notes, and controls so the next practice block starts immediately.",
-                            "HABIT",
-                            10,
-                            "easy",
-                            "A clean setup reduces wasted energy between attempts."
-                    )
-            );
-            case "FITNESS" -> List.of(
-                    new SuggestionTemplate(
-                            "Take a 15-minute walk",
-                            "Walk at an easy pace for 15 minutes and stop when the timer ends.",
-                            "FITNESS",
-                            15,
-                            "easy",
-                            "A short walk is easy to start and still counts as real progress."
-                    ),
-                    new SuggestionTemplate(
-                            "Do a short stretch routine",
-                            "Spend 10 minutes on gentle stretching or mobility to lower the barrier to moving today.",
-                            "FITNESS",
-                            10,
-                            "easy",
-                            "Low-friction movement helps keep consistency intact."
-                    ),
-                    new SuggestionTemplate(
-                            "Set up your workout space",
-                            "Prepare clothes, shoes, or equipment now so the next session starts with less setup.",
-                            "HABIT",
-                            10,
-                            "easy",
-                            "Reducing setup friction makes the next workout easier to begin."
-                    )
-            );
-            case "STUDY" -> List.of(
-                    new SuggestionTemplate(
-                            "Do one focused study block",
-                            "Study one topic for 15 minutes with a timer and stop before the session expands.",
-                            "STUDY",
-                            15,
-                            "easy",
-                            "A short study block is easier to repeat than an open-ended session."
-                    ),
-                    new SuggestionTemplate(
-                            "Summarize one topic from memory",
-                            "Write a short summary of one topic without notes, then check what you missed.",
-                            "STUDY",
-                            15,
-                            "medium",
-                            "Recall practice makes weak spots visible fast."
-                    ),
-                    new SuggestionTemplate(
-                            "Prepare tomorrow's study setup",
-                            "Lay out one book, one notebook, and the first task so the next session starts cleanly.",
-                            "HABIT",
-                            10,
-                            "easy",
-                            "Preparation removes friction from the next study block."
-                    )
-            );
-            case "WORK" -> List.of(
-                    new SuggestionTemplate(
-                            "Do one focused work block",
-                            "Work on one concrete task for 15 minutes without switching contexts.",
-                            "WORK",
-                            15,
-                            "easy",
-                            "A short block turns intention into visible progress."
-                    ),
-                    new SuggestionTemplate(
-                            "Clear one blocker",
-                            "Remove one small blocker that would slow down your next work session.",
-                            "WORK",
-                            10,
-                            "easy",
-                            "Small unblockers make later work easier to start."
-                    ),
-                    new SuggestionTemplate(
-                            "Write tomorrow's first task",
-                            "Choose the first task for tomorrow and write the exact starting step.",
-                            "HABIT",
-                            10,
-                            "easy",
-                            "A defined starting step reduces hesitation later."
-                    )
-            );
-            case "HOBBY" -> List.of(
-                    new SuggestionTemplate(
-                            "Spend 15 minutes on your hobby",
-                            "Do one short session and stop when the timer ends, even if it feels unfinished.",
-                            "HOBBY",
-                            15,
-                            "easy",
-                            "Short sessions keep the hobby active without pressure."
-                    ),
-                    new SuggestionTemplate(
-                            "Set up your materials",
-                            "Prepare the tools or materials you need so the next hobby session starts immediately.",
-                            "HABIT",
-                            10,
-                            "easy",
-                            "Preparation protects momentum when time is limited."
-                    ),
-                    new SuggestionTemplate(
-                            "Capture one quick takeaway",
-                            "Write one note about what worked, what felt hard, and what to try next time.",
-                            "HABIT",
-                            10,
-                            "easy",
-                            "A small note helps the next session start with direction."
-                    )
-            );
-            case "COMMUNITY" -> List.of(
-                    new SuggestionTemplate(
-                            "Reach out to one person",
-                            "Send one short message to start or maintain a connection without overthinking it.",
-                            "COMMUNITY",
-                            10,
-                            "easy",
-                            "One clear message is easier to follow through on than a vague social plan."
-                    ),
-                    new SuggestionTemplate(
-                            "Plan one small check-in",
-                            "Choose a person and a time for a short check-in later this week.",
-                            "COMMUNITY",
-                            10,
-                            "easy",
-                            "Scheduling removes the need to decide again later."
-                    ),
-                    new SuggestionTemplate(
-                            "Write a quick thank-you note",
-                            "Send a short thank-you or appreciation message to someone important to you.",
-                            "COMMUNITY",
-                            10,
-                            "easy",
-                            "A small positive action strengthens connection without heavy effort."
-                    )
-            );
-            default -> List.of(
-                    new SuggestionTemplate(
-                            "Do one focused 15-minute session",
-                            "Pick one useful action, work on it for 15 minutes, and stop when the timer ends.",
-                            "HABIT",
-                            15,
-                            "easy",
-                            "A short session is easier to begin than a perfect plan."
-                    ),
-                    new SuggestionTemplate(
-                            "Prepare your next session",
-                            "Set up the materials, timing, or environment for your next attempt so it starts more smoothly.",
-                            "HABIT",
-                            10,
-                            "easy",
-                            "Preparation makes the next step easier to begin."
-                    ),
-                    new SuggestionTemplate(
-                            "Write a quick progress note",
-                            "Write one short note on what worked, what blocked you, and what to try next.",
-                            "HABIT",
-                            10,
-                            "easy",
-                            "A quick review turns effort into a clearer next step."
-                    )
-            );
-        };
-    }
+    private static List<SuggestionTemplate> goalDerivedTemplates(GoalFacets facets) {
+        String primaryTarget = facets.targets().isEmpty() ? "your current goal" : facets.targets().getFirst();
+        String secondaryTarget = facets.targets().size() > 1 ? facets.targets().get(1) : primaryTarget;
+        String category = facets.category();
+        String primaryTargetLabel = renderTargetLabel(primaryTarget, category);
+        String secondaryTargetLabel = renderTargetLabel(secondaryTarget, category);
 
-    private static List<SuggestionTemplate> sharedTemplates() {
         return List.of(
                 new SuggestionTemplate(
-                        "Prepare your next session",
-                        "Set up the materials, timing, or environment for your next attempt so it starts more smoothly.",
-                        "HABIT",
-                        10,
+                        "Do one focused practice drill",
+                        "Spend 15 minutes on one small, clearly defined step related to %s, then stop when the timer ends.".formatted(primaryTargetLabel),
+                        category,
+                        15,
                         "easy",
-                        "Preparation makes the next step easier to begin."
+                        "A short, sharply scoped drill is easier to finish and repeat than an open-ended session."
                 ),
                 new SuggestionTemplate(
-                        "Write a quick progress note",
-                        "Write one short note on what worked, what blocked you, and what to try next.",
-                        "HABIT",
-                        10,
-                        "easy",
-                        "A quick review turns effort into a clearer next step."
+                        "Review one recent attempt",
+                        "Look at one recent attempt related to %s, note what felt weak or unclear, and write one adjustment to try next.".formatted(secondaryTargetLabel),
+                        category,
+                        15,
+                        "medium",
+                        "A short review turns vague effort into one concrete improvement for the next attempt."
                 ),
                 new SuggestionTemplate(
-                        "Clear one small obstacle",
-                        "Remove one small source of friction that would make the next session harder to start.",
-                        "HABIT",
+                        "Prepare the next session",
+                        "Set up the first step, materials, or environment you need so the next step related to %s is easier to start.".formatted(primaryTargetLabel),
+                        category,
                         10,
                         "easy",
-                        "Removing friction now protects future follow-through."
+                        "Reducing setup friction makes follow-through much more likely when motivation is low."
+                ),
+                new SuggestionTemplate(
+                        "Test one small skill",
+                        "Run one short self-check related to %s so you can see what needs attention next without dragging the session out.".formatted(secondaryTargetLabel),
+                        category,
+                        15,
+                        "medium",
+                        "A small self-check makes weak spots visible quickly and keeps the next step specific."
+                ),
+                new SuggestionTemplate(
+                        "Write one targeted note",
+                        "Write one short note about what is working and what still gets in the way of %s.".formatted(primaryTargetLabel),
+                        category,
+                        10,
+                        "easy",
+                        "A quick note keeps progress visible and gives the next session a cleaner starting point."
+                ),
+                new SuggestionTemplate(
+                        "Clear one starting blocker",
+                        "Remove one small obstacle that would make the next step related to %s harder to begin.".formatted(primaryTargetLabel),
+                        category,
+                        10,
+                        "easy",
+                        "Clearing one blocker now protects momentum when you come back to it."
+                ),
+                new SuggestionTemplate(
+                        "Repeat one short round",
+                        "Do one short repeat of a single step related to %s so the motion feels more automatic next time.".formatted(secondaryTargetLabel),
+                        category,
+                        10,
+                        "easy",
+                        "A short repeat is enough to reinforce the next useful move without creating overload."
                 )
         );
     }
 
-    private static String primaryCategory(String goal) {
-        String normalized = goal == null ? "" : goal.toLowerCase(Locale.ROOT);
-        if (containsAny(normalized, "speedrun", "speedrunning", "grand theft auto", "gta", "gaming", "video game", "controller", "splits", "route segment", "pb")) {
-            return "GAME_PRACTICE";
+    private static GoalFacets deriveGoalFacets(CoachPromptContext context) {
+        List<String> targets = extractTargets(context.goal());
+        if (targets.isEmpty()) {
+            targets = deriveTargetsFromContext(context);
         }
-        if (containsAny(normalized, "health", "healthy", "fitness", "exercise", "workout", "walk", "run", "gym")) {
-            return "FITNESS";
+        if (targets.isEmpty()) {
+            targets = List.of("your current goal");
         }
-        if (containsAny(normalized, "study", "learn", "learning", "course", "exam", "read", "reading")) {
-            return "STUDY";
-        }
-        if (containsAny(normalized, "work", "career", "project", "job", "productivity", "code", "coding")) {
-            return "WORK";
-        }
-        if (containsAny(normalized, "draw", "music", "guitar", "art", "write", "writing", "creative", "hobby")) {
-            return "HOBBY";
-        }
-        if (containsAny(normalized, "friend", "family", "community", "social", "volunteer")) {
-            return "COMMUNITY";
-        }
-        return "HABIT";
+
+        return new GoalFacets(
+                targets,
+                inferCategory(context.goal(), targets)
+        );
     }
 
-    private static boolean containsAny(String haystack, String... needles) {
-        for (String needle : needles) {
-            if (haystack.contains(needle)) {
-                return true;
+    private static List<String> extractTargets(String goal) {
+        if (goal == null || goal.isBlank()) {
+            return List.of();
+        }
+
+        String normalizedGoal = goal
+                .replace('\n', ' ')
+                .replaceAll("[!?;,]", ".")
+                .replaceAll("\\s+", " ")
+                .trim();
+
+        Set<String> collected = new LinkedHashSet<>();
+        for (String fragment : normalizedGoal.split("\\.")) {
+            String cleaned = normalizeFragment(fragment);
+            if (cleaned.isBlank()) {
+                continue;
+            }
+
+            for (String part : cleaned.split("\\band\\b|\\bor\\b")) {
+                String candidate = normalizeTarget(part);
+                if (!candidate.isBlank() && candidate.length() >= 3) {
+                    collected.add(candidate);
+                }
+                if (collected.size() == 3) {
+                    return List.copyOf(collected);
+                }
             }
         }
-        return false;
+        return List.copyOf(collected);
+    }
+
+    private static List<String> deriveTargetsFromContext(CoachPromptContext context) {
+        return context.activeQuestTitles().stream()
+                .filter(Objects::nonNull)
+                .map(FallbackFactory::normalizeTarget)
+                .filter(target -> !target.isBlank())
+                .distinct()
+                .limit(2)
+                .toList();
+    }
+
+    private static String normalizeFragment(String fragment) {
+        return fragment
+                .replaceAll("(?i)\\b(i want to|i need to|i would like to|my goal is to|help me|please|can you|by creating .*|with .* quests.*)\\b", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private static String normalizeTarget(String raw) {
+        String lowered = raw.toLowerCase(Locale.ROOT)
+                .replaceAll("(?i)\\b(practice|improve|improving|study|learn|learning|focus on|work on|build|develop|train|exercise|reduce|keep up with|stay consistent with|get better at|become better at|do more|spend more time on|spend less time on)\\b", " ")
+                .replaceAll("(?i)\\b(my|your|the|a|an|some|more|less|current|easy|medium|hard|difficulty|quests?)\\b", " ");
+
+        String normalized = MULTISPACE.matcher(NON_ALPHANUMERIC.matcher(lowered).replaceAll(" ")).replaceAll(" ").trim();
+        List<String> meaningfulTokens = List.of(normalized.split(" ")).stream()
+                .filter(token -> !token.isBlank())
+                .filter(token -> !STOPWORDS.contains(token))
+                .limit(6)
+                .toList();
+
+        if (meaningfulTokens.isEmpty()) {
+            return "";
+        }
+        return String.join(" ", meaningfulTokens);
+    }
+
+    private static String inferCategory(String goal, List<String> targets) {
+        String haystack = (goal == null ? "" : goal) + " " + String.join(" ", targets);
+        String normalized = normalizeTarget(haystack);
+        Map<String, Integer> scores = new java.util.LinkedHashMap<>(CATEGORY_HINTS);
+
+        addScore(scores, "FITNESS", normalized, "health", "healthy", "fitness", "exercise", "workout", "walk", "run", "gym", "mobility", "stretch");
+        addScore(scores, "STUDY", normalized, "study", "learn", "course", "exam", "math", "history", "spanish", "geography", "lecture", "flashcard", "reading", "revise");
+        addScore(scores, "WORK", normalized, "work", "career", "project", "job", "productivity", "coding", "code", "email", "meeting");
+        addScore(scores, "COMMUNITY", normalized, "friend", "family", "community", "social", "volunteer", "relationship");
+        addScore(scores, "HOBBY", normalized, "hobby", "speedrun", "speedrunning", "game", "gaming", "gta", "music", "guitar", "art", "drawing", "creative", "writing", "chess", "photography");
+
+        return scores.entrySet().stream()
+                .max(Comparator.comparingInt(Map.Entry::getValue))
+                .filter(entry -> entry.getValue() > 0)
+                .map(Map.Entry::getKey)
+                .orElse("OTHER");
+    }
+
+    private static void addScore(Map<String, Integer> scores, String key, String haystack, String... needles) {
+        int score = 0;
+        for (String needle : needles) {
+            if (haystack.contains(needle)) {
+                score++;
+            }
+        }
+        scores.computeIfPresent(key, (ignored, current) -> current + score);
+    }
+
+    private static String renderTargetLabel(String target, String category) {
+        if (target == null || target.isBlank()) {
+            return abstractLabel(category);
+        }
+        int tokenCount = target.split(" ").length;
+        if (tokenCount > 2 || target.length() > 20) {
+            return abstractLabel(category);
+        }
+        return target;
+    }
+
+    private static String abstractLabel(String category) {
+        return switch (category) {
+            case "FITNESS" -> "your movement focus";
+            case "STUDY" -> "your study focus";
+            case "WORK" -> "your current work focus";
+            case "COMMUNITY" -> "your connection goal";
+            case "HOBBY" -> "your practice focus";
+            default -> "your current goal";
+        };
     }
 
     private static String reflection(CoachPromptContext context) {

@@ -216,6 +216,38 @@ class OutputValidatorTest {
     }
 
     @Test
+    void validateSuccessPayload_accepts_top_level_array_payloads() {
+        var validator = validator();
+        var generatedAt = Instant.parse("2026-03-19T14:30:00Z");
+        String payload = """
+                [
+                  {
+                    "title": "Practice one restart segment",
+                    "description": "Repeat one opener for a short drill and stop after the timer ends.",
+                    "category": "HOBBY",
+                    "estimatedMinutes": 15,
+                    "difficulty": "easy",
+                    "reason": "A short drill is easier to repeat than a full run."
+                  },
+                  {
+                    "title": "Review one failed attempt",
+                    "description": "Look at one recent mistake and write down the adjustment to test next.",
+                    "category": "HOBBY",
+                    "estimatedMinutes": 10,
+                    "difficulty": "easy",
+                    "reason": "A focused review makes the next attempt more specific."
+                  }
+                ]
+                """;
+
+        var response = validator.validateSuccessPayload(payload, generatedAt);
+
+        assertThat(response.status()).isEqualTo("SUCCESS");
+        assertThat(response.suggestions()).hasSize(2);
+        assertThat(response.suggestions().getFirst().title()).isEqualTo("Practice one restart segment");
+    }
+
+    @Test
     void validateSuccessPayload_normalizes_common_model_drift() {
         var validator = validator();
         var generatedAt = Instant.parse("2026-03-19T14:30:00Z");

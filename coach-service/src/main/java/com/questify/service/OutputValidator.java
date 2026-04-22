@@ -81,7 +81,7 @@ public class OutputValidator {
         try {
             return objectMapper.readTree(trimmed);
         } catch (JsonProcessingException ex) {
-            String extracted = extractJsonObject(trimmed);
+            String extracted = extractJsonPayload(trimmed);
             if (extracted != null) {
                 try {
                     return objectMapper.readTree(extracted);
@@ -97,9 +97,24 @@ public class OutputValidator {
         }
     }
 
-    private String extractJsonObject(String rawText) {
-        int start = rawText.indexOf('{');
-        int end = rawText.lastIndexOf('}');
+    private String extractJsonPayload(String rawText) {
+        int objectStart = rawText.indexOf('{');
+        int arrayStart = rawText.indexOf('[');
+        int start;
+        char closingChar;
+
+        if (objectStart < 0 && arrayStart < 0) {
+            return null;
+        }
+        if (arrayStart >= 0 && (objectStart < 0 || arrayStart < objectStart)) {
+            start = arrayStart;
+            closingChar = ']';
+        } else {
+            start = objectStart;
+            closingChar = '}';
+        }
+
+        int end = rawText.lastIndexOf(closingChar);
         if (start < 0 || end <= start) {
             return null;
         }
@@ -171,6 +186,11 @@ public class OutputValidator {
     }
 
     private JsonNode stripServerOwnedFields(JsonNode tree, String rawOutput) {
+        if (tree instanceof ArrayNode arrayNode) {
+            ObjectNode wrapped = objectMapper.createObjectNode();
+            wrapped.set("suggestions", arrayNode);
+            return wrapped;
+        }
         if (!(tree instanceof ObjectNode objectNode)) {
             throw new ModelOutputValidationException("schema", List.of("Response must be a JSON object"), rawOutput);
         }

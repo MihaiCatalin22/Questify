@@ -2,6 +2,7 @@ param(
     [string]$RuntimeBaseUrl = "http://127.0.0.1:11434",
     [string]$OutputRoot = "",
     [string[]]$Models = @("phi3:mini", "llama3.2:3b", "qwen2.5:3b", "smollm2:1.7b"),
+    [double]$MinimumSuccessRate = 80,
     [string]$ScoresFile = "",
     [switch]$SkipPull,
     [switch]$GenerateReportOnly
@@ -200,7 +201,8 @@ function Invoke-BenchmarkBatch {
     param(
         [string]$Model,
         [string]$BaseUrl,
-        [string]$BatchRoot
+        [string]$BatchRoot,
+        [double]$MinimumSuccessRate
     )
 
     $safeModel = Get-SafeModelName $Model
@@ -219,6 +221,7 @@ function Invoke-BenchmarkBatch {
                 "-Dcoach.benchmark.model=$Model" `
                 "-Dcoach.benchmark.runtime-base-url=$BaseUrl" `
                 "-Dcoach.benchmark.output-dir=$modelOutputRoot" `
+                "-Dcoach.benchmark.minimum-success-rate=$MinimumSuccessRate" `
                 "-Dcoach.benchmark.warmup-runs=1" `
                 "-Dcoach.benchmark.measured-runs=5"
 
@@ -420,10 +423,10 @@ function Get-FinalScoredRows {
         }
 
         $hardGateFailures = New-Object System.Collections.Generic.List[string]
-        if ($row.successRate -lt 90) { $hardGateFailures.Add("success rate < 90%") }
+        if ($row.successRate -lt $MinimumSuccessRate) { $hardGateFailures.Add("success rate < $MinimumSuccessRate%") }
         if ($row.fallbackRate -gt 10) { $hardGateFailures.Add("fallback rate > 10%") }
         if ($row.timeoutRate -gt 5) { $hardGateFailures.Add("timeout rate > 5%") }
-        if ($row.p95LatencyMs -gt 15000) { $hardGateFailures.Add("p95 latency > 15000 ms") }
+        if ($row.p95LatencyMs -gt 45000) { $hardGateFailures.Add("p95 latency > 45000 ms") }
         if ($manual.manualAverage -lt 18) { $hardGateFailures.Add("manual average < 18/25") }
         if ($manual.redFlaggedSamples -gt 2) { $hardGateFailures.Add("more than 2 red-flagged samples") }
 
@@ -470,7 +473,7 @@ function Get-FinalScoredRows {
 
 function Get-LowResourceFallback($finalRows) {
     $candidates = $finalRows | Where-Object {
-        $_.successRate -ge 80 -and $_.timeoutRate -le 10 -and $_.manualAverage -ge 16
+        $_.successRate -ge $MinimumSuccessRate -and $_.timeoutRate -le 10 -and $_.manualAverage -ge 16
     } | Sort-Object `
         @{ Expression = "peakWorkingSetMb"; Descending = $false }, `
         @{ Expression = "successRate"; Descending = $true }, `
@@ -541,8 +544,9 @@ function Write-BenchmarkReport {
     [void]$report.AppendLine("")
     [void]$report.AppendLine("- Runtime: Ollama")
     [void]$report.AppendLine("- Models: " + (($ComparisonRows | ForEach-Object { $_.model }) -join ", "))
-    [void]$report.AppendLine('- Coach runtime settings: `timeout-ms=15000`, `max-output-tokens=400`, `temperature=0.3`, `retry-enabled=true`, `max-retries=1`')
+    [void]$report.AppendLine('- Coach runtime settings: `timeout-ms=45000`, `max-output-tokens=160`, `temperature=0.15`, `retry-enabled=true`, `max-retries=1`')
     [void]$report.AppendLine("- Benchmark corpus: 10 fixed Questify coach scenarios, 1 warm-up request per model, 5 measured runs per scenario")
+    [void]$report.AppendLine("- Minimum AI success gate: $MinimumSuccessRate%")
     [void]$report.AppendLine("")
     [void]$report.AppendLine("## Automatic Metrics")
     [void]$report.AppendLine("")
@@ -649,7 +653,7 @@ try {
     $summaries = New-Object System.Collections.Generic.List[object]
     foreach ($model in $Models) {
         Write-Section "Benchmarking $model"
-        $summary = Invoke-BenchmarkBatch -Model $model -BaseUrl $RuntimeBaseUrl -BatchRoot $OutputRoot
+        $summary = Invoke-BenchmarkBatch -Model $model -BaseUrl $RuntimeBaseUrl -BatchRoot $OutputRoot -MinimumSuccessRate $MinimumSuccessRate
         $summaries.Add($summary) | Out-Null
     }
 

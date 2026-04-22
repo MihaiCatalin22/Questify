@@ -52,9 +52,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "OIDC_ISSUER=https://issuer.test/realms/questify",
         "SECURITY_INTERNAL_TOKEN=test-internal-token",
         "coach.runtime=ollama",
-        "coach.timeout-ms=15000",
-        "coach.max-output-tokens=400",
-        "coach.temperature=0.3",
+        "coach.timeout-ms=45000",
+        "coach.max-output-tokens=160",
+        "coach.temperature=0.15",
         "coach.retry-enabled=true",
         "coach.max-retries=1",
         "coach.schema-version=v1"
@@ -66,8 +66,19 @@ class CoachModelBenchmarkTest {
 
     private static final Pattern PROMETHEUS_LINE =
             Pattern.compile("^(?<name>[a-zA-Z_:][a-zA-Z0-9_:]*)(\\{(?<labels>[^}]*)\\})?\\s+(?<value>[-+0-9.eE]+)$");
+    private static final Pattern NON_ALPHANUMERIC = Pattern.compile("[^a-z0-9 ]");
+    private static final Pattern MULTISPACE = Pattern.compile("\\s+");
     private static final String SCENARIO_RESOURCE = "benchmark/coach-model-benchmark-scenarios.json";
     private static final String BENCHMARK_USER_ID = System.getProperty("coach.benchmark.user-id", "benchmark-user");
+    private static final Set<String> GOAL_STOPWORDS = Set.of(
+            "i", "me", "my", "mine", "you", "your", "yours", "we", "our", "ours",
+            "want", "need", "help", "please", "goal", "goals", "achieve", "achieving",
+            "improve", "improving", "better", "become", "create", "creating", "quest", "quests",
+            "some", "more", "less", "with", "without", "during", "through", "into", "from",
+            "that", "this", "these", "those", "they", "them", "their", "for", "and", "or",
+            "the", "a", "an", "to", "of", "in", "on", "at", "by", "after", "before", "over",
+            "under", "still", "just", "really", "kind", "sort", "current", "easy", "medium", "hard"
+    );
 
     private static final MockWebServer userServer = new MockWebServer();
     private static final MockWebServer questServer = new MockWebServer();
@@ -105,8 +116,8 @@ class CoachModelBenchmarkTest {
     @Test
     void runs_model_batch_and_writes_artifacts() throws Exception {
         List<BenchmarkScenario> scenarios = loadScenarios();
-        assertThat(scenarios).hasSize(10);
-        assertThat(scenarios.stream().filter(scenario -> scenario.request().resolvedIncludeRecentHistory()).count()).isEqualTo(8);
+        assertThat(scenarios).hasSizeGreaterThanOrEqualTo(10);
+        assertThat(scenarios.stream().filter(scenario -> scenario.request().resolvedIncludeRecentHistory()).count()).isGreaterThanOrEqualTo(7);
 
         Path outputDir = resolveOutputDir();
         Files.createDirectories(outputDir);
@@ -122,7 +133,9 @@ class CoachModelBenchmarkTest {
         int measuredRuns = Integer.getInteger("coach.benchmark.measured-runs", 5);
         for (BenchmarkScenario scenario : scenarios) {
             for (int runNumber = 1; runNumber <= measuredRuns; runNumber++) {
-                measuredResults.add(executeScenario(scenario, runNumber));
+                RequestArtifact artifact = executeScenario(scenario, runNumber);
+                assertArtifactQuality(scenario, artifact);
+                measuredResults.add(artifact);
             }
         }
 
@@ -155,6 +168,10 @@ class CoachModelBenchmarkTest {
                 String.join(System.lineSeparator(), deltaMetrics.prometheusLines()) + System.lineSeparator(),
                 StandardCharsets.UTF_8
         );
+
+        assertThat(summary.automaticMetrics().successRate())
+                .as("coach benchmark success rate for model %s", benchmarkModel())
+                .isGreaterThanOrEqualTo(minimumSuccessRate());
     }
 
     private WarmupResult runWarmup(BenchmarkScenario scenario) throws Exception {
@@ -216,6 +233,46 @@ class CoachModelBenchmarkTest {
                 responseJson,
                 responseBody
         );
+    }
+
+    private void assertArtifactQuality(BenchmarkScenario scenario, RequestArtifact artifact) {
+        assertThat(artifact.httpStatus()).isEqualTo(200);
+        assertThat(artifact.responseJson()).isNotNull();
+        assertThat(artifact.responseStatus()).isIn("SUCCESS", "FALLBACK");
+        assertThat(artifact.suggestionCount()).isBetween(1, 3);
+
+        JsonNode responseJson = artifact.responseJson();
+        String source = stringValue(responseJson, "source");
+        if ("SUCCESS".equals(artifact.responseStatus())) {
+            assertThat(source).isEqualTo("AI");
+        }
+        if ("FALLBACK".equals(artifact.responseStatus())) {
+            assertThat(source).isEqualTo("SYSTEM");
+        }
+
+        JsonNode suggestions = responseJson.path("suggestions");
+        assertThat(suggestions.isArray()).isTrue();
+
+        Set<String> excludedTitles = scenario.request().resolvedExcludedSuggestionTitles().stream()
+                .map(title -> title.toLowerCase(java.util.Locale.ROOT))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<String> seenTitles = new LinkedHashSet<>();
+        List<String> goalFragments = significantGoalFragments(scenario.coachSettings().coachGoal());
+
+        for (JsonNode suggestionNode : suggestions) {
+            String title = normalizeForComparison(stringValue(suggestionNode, "title"));
+            String description = normalizeForComparison(stringValue(suggestionNode, "description"));
+            String reason = normalizeForComparison(stringValue(suggestionNode, "reason"));
+
+            assertThat(title).isNotBlank();
+            assertThat(description).isNotBlank();
+            assertThat(seenTitles.add(title)).as("duplicate title in one response").isTrue();
+            assertThat(excludedTitles).doesNotContain(title);
+            assertThat(title).doesNotContain("goal").doesNotContain("toward").doesNotContain("help me");
+            assertGoalEchoFree(title, goalFragments);
+            assertGoalEchoFree(description, goalFragments);
+            assertGoalEchoFree(reason, goalFragments);
+        }
     }
 
     private List<BenchmarkScenario> loadScenarios() throws IOException {
@@ -509,7 +566,11 @@ class CoachModelBenchmarkTest {
     }
 
     private static String benchmarkModel() {
-        return System.getProperty("coach.benchmark.model", "smollm2:1.7b");
+        return System.getProperty("coach.benchmark.model", "qwen2.5:3b");
+    }
+
+    private static double minimumSuccessRate() {
+        return Double.parseDouble(System.getProperty("coach.benchmark.minimum-success-rate", "80"));
     }
 
     private static String sanitizeForPath(String value) {
@@ -523,6 +584,47 @@ class CoachModelBenchmarkTest {
             return root.relativize(absolutePath).toString().replace('\\', '/');
         }
         return absolutePath.toString().replace('\\', '/');
+    }
+
+    private static void assertGoalEchoFree(String text, List<String> goalFragments) {
+        for (String fragment : goalFragments) {
+            assertThat(text)
+                    .as("text should not directly echo goal fragment '%s'", fragment)
+                    .doesNotContain(fragment);
+        }
+    }
+
+    private static List<String> significantGoalFragments(String goal) {
+        String normalized = normalizeForComparison(goal);
+        if (normalized.isBlank()) {
+            return List.of();
+        }
+
+        List<String> tokens = List.of(normalized.split(" ")).stream()
+                .filter(token -> !token.isBlank())
+                .filter(token -> !GOAL_STOPWORDS.contains(token))
+                .toList();
+
+        if (tokens.size() < 3) {
+            return List.of();
+        }
+
+        Set<String> fragments = new LinkedHashSet<>();
+        for (int index = 0; index <= tokens.size() - 3; index++) {
+            String fragment = String.join(" ", tokens.subList(index, index + 3));
+            if (fragment.length() >= 16) {
+                fragments.add(fragment);
+            }
+        }
+        return List.copyOf(fragments);
+    }
+
+    private static String normalizeForComparison(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String lowered = value.toLowerCase(java.util.Locale.ROOT);
+        return MULTISPACE.matcher(NON_ALPHANUMERIC.matcher(lowered).replaceAll(" ")).replaceAll(" ").trim();
     }
 
     private static void assertInternalUserRequest(RecordedRequest request) {

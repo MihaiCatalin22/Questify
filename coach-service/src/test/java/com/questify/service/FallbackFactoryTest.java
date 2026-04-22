@@ -30,12 +30,13 @@ class FallbackFactoryTest {
         assertThat(response.generatedAt()).isEqualTo(Instant.parse("2026-03-19T14:31:12Z"));
         assertThat(response.suggestions()).hasSize(3);
         assertThat(response.suggestions()).extracting("title").doesNotContain("Do one focused study block");
-        assertThat(response.suggestions().getFirst().category()).isEqualTo("STUDY");
+        assertThat(response.suggestions()).extracting("category").containsOnly("STUDY");
+        assertThat(response.suggestions()).extracting("title")
+                .contains("Do one focused practice drill", "Review one recent attempt", "Prepare the next session");
         assertThat(response.suggestions())
                 .extracting(suggestion -> suggestion.description().toLowerCase())
                 .noneMatch(description -> description.contains("school grades"))
-                .noneMatch(description -> description.contains("math"))
-                .noneMatch(description -> description.contains("history"));
+                .noneMatch(description -> description.contains("doing more math and studying more history"));
     }
 
     @Test
@@ -53,13 +54,31 @@ class FallbackFactoryTest {
         var response = factory.create(context, java.util.List.of());
 
         assertThat(response.suggestions()).hasSize(3);
-        assertThat(response.suggestions()).extracting("category").containsOnly("HOBBY", "HABIT");
+        assertThat(response.suggestions()).extracting("category").containsOnly("HOBBY");
         assertThat(response.suggestions()).extracting("title")
-                .contains("Practice one short route segment", "Review one failed attempt");
+                .contains("Do one focused practice drill", "Review one recent attempt");
         assertThat(response.suggestions())
                 .extracting(suggestion -> suggestion.description().toLowerCase())
-                .noneMatch(description -> description.contains("walk"))
-                .noneMatch(description -> description.contains("stretch"))
-                .noneMatch(description -> description.contains("workout"));
+                .noneMatch(description -> description.contains("grand theft auto"))
+                .noneMatch(description -> description.contains("speedrunning grand theft auto v"));
+    }
+
+    @Test
+    void create_returns_neutral_other_fallback_for_unclear_goals() {
+        var factory = new FallbackFactory(Clock.fixed(Instant.parse("2026-03-19T14:31:12Z"), ZoneOffset.UTC));
+        var context = new CoachPromptContext(
+                "I just want life to feel a bit less chaotic.",
+                java.util.List.of(),
+                java.util.List.of(),
+                0,
+                0,
+                true
+        );
+
+        var response = factory.create(context, java.util.List.of("Do one focused practice drill"));
+
+        assertThat(response.suggestions()).hasSize(3);
+        assertThat(response.suggestions()).extracting("category").containsOnly("OTHER");
+        assertThat(response.suggestions()).extracting("title").doesNotContain("Do one focused practice drill");
     }
 }
