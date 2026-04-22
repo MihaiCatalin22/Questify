@@ -37,4 +37,29 @@ class FallbackFactoryTest {
                 .noneMatch(description -> description.contains("math"))
                 .noneMatch(description -> description.contains("history"));
     }
+
+    @Test
+    void create_returns_game_practice_fallback_for_speedrunning_goals() {
+        var factory = new FallbackFactory(Clock.fixed(Instant.parse("2026-03-19T14:31:12Z"), ZoneOffset.UTC));
+        var context = new CoachPromptContext(
+                "I want to practice speedrunning Grand Theft Auto V and improve my execution.",
+                java.util.List.of(),
+                java.util.List.of(),
+                0,
+                2,
+                true
+        );
+
+        var response = factory.create(context, java.util.List.of());
+
+        assertThat(response.suggestions()).hasSize(3);
+        assertThat(response.suggestions()).extracting("category").containsOnly("HOBBY", "HABIT");
+        assertThat(response.suggestions()).extracting("title")
+                .contains("Practice one short route segment", "Review one failed attempt");
+        assertThat(response.suggestions())
+                .extracting(suggestion -> suggestion.description().toLowerCase())
+                .noneMatch(description -> description.contains("walk"))
+                .noneMatch(description -> description.contains("stretch"))
+                .noneMatch(description -> description.contains("workout"));
+    }
 }

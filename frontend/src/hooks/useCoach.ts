@@ -54,6 +54,7 @@ export function useGenerateCoachSuggestions() {
       CoachApi.generateSuggestions({
         mode: "DEFAULT",
         includeRecentHistory: input.includeRecentHistory ?? true,
+        excludedSuggestionTitles: input.excludedSuggestionTitles ?? [],
       }),
   });
 }

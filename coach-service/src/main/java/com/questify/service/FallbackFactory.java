@@ -108,6 +108,32 @@ public class FallbackFactory {
 
     private static List<SuggestionTemplate> categoryTemplates(String primaryCategory) {
         return switch (primaryCategory) {
+            case "GAME_PRACTICE" -> List.of(
+                    new SuggestionTemplate(
+                            "Practice one short route segment",
+                            "Repeat one specific route segment or setup for 15 minutes instead of doing a full run.",
+                            "HOBBY",
+                            15,
+                            "easy",
+                            "Short segment drills build consistency faster than scattered full attempts."
+                    ),
+                    new SuggestionTemplate(
+                            "Review one failed attempt",
+                            "Watch or replay one recent mistake and write one adjustment to try on the next run.",
+                            "HOBBY",
+                            15,
+                            "medium",
+                            "One focused review turns a failed attempt into a specific correction."
+                    ),
+                    new SuggestionTemplate(
+                            "Set up one clean restart routine",
+                            "Prepare your timer, splits, notes, and controls so the next practice block starts immediately.",
+                            "HABIT",
+                            10,
+                            "easy",
+                            "A clean setup reduces wasted energy between attempts."
+                    )
+            );
             case "FITNESS" -> List.of(
                     new SuggestionTemplate(
                             "Take a 15-minute walk",
@@ -298,6 +324,9 @@ public class FallbackFactory {
 
     private static String primaryCategory(String goal) {
         String normalized = goal == null ? "" : goal.toLowerCase(Locale.ROOT);
+        if (containsAny(normalized, "speedrun", "speedrunning", "grand theft auto", "gta", "gaming", "video game", "controller", "splits", "route segment", "pb")) {
+            return "GAME_PRACTICE";
+        }
         if (containsAny(normalized, "health", "healthy", "fitness", "exercise", "workout", "walk", "run", "gym")) {
             return "FITNESS";
         }

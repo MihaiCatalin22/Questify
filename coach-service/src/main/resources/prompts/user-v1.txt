@@ -22,6 +22,31 @@ Variety rules:
 - prefer a different angle or sub-area than recently shown or recently completed suggestions
 - if the goal mentions multiple sub-areas, spread suggestions across them when reasonable
 
+Few-shot examples:
+Study goal example:
+Goal: Improve school grades with more math and history.
+Valid suggestion example:
+{
+  "title": "Solve four algebra problems",
+  "description": "Work through four algebra problems in one timed session, then stop and mark what slowed you down.",
+  "category": "STUDY",
+  "estimatedMinutes": 20,
+  "difficulty": "medium",
+  "reason": "A short focused drill builds recall without turning into an open-ended study block."
+}
+
+Hobby practice example:
+Goal: Improve a game speedrun with better execution.
+Valid suggestion example:
+{
+  "title": "Practice one restart segment",
+  "description": "Repeat one early-run segment for a short drill and focus on one clean execution cue each attempt.",
+  "category": "HOBBY",
+  "estimatedMinutes": 15,
+  "difficulty": "easy",
+  "reason": "A small segment drill improves consistency faster than unfocused full attempts."
+}
+
 Suggestion mode:
 {{mode}}
 

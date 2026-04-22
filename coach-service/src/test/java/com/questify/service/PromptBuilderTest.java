@@ -44,6 +44,8 @@ class PromptBuilderTest {
         assertThat(prompt.userPrompt()).contains("Keep nudge to 1 short sentence.");
         assertThat(prompt.userPrompt()).contains("do not quote, paraphrase, or reuse direct fragments of the user's goal text");
         assertThat(prompt.userPrompt()).contains("do not reuse any excluded suggestion title exactly");
+        assertThat(prompt.userPrompt()).contains("Solve four algebra problems");
+        assertThat(prompt.userPrompt()).contains("Practice one restart segment");
         assertThat(prompt.userPrompt()).contains("Take a 15-minute walk");
     }
 
@@ -57,6 +59,7 @@ class PromptBuilderTest {
         var prompt = builder.buildRepairPrompt(original, "{\"bad\":true}", List.of("status must be SUCCESS"));
 
         assertThat(prompt.systemPrompt()).contains("Your previous output was invalid.");
+        assertThat(prompt.systemPrompt()).contains("Do not reuse any excluded suggestion title exactly.");
         assertThat(prompt.userPrompt()).contains("status must be SUCCESS");
         assertThat(prompt.userPrompt()).contains("original prompt");
         assertThat(prompt.userPrompt()).contains("{\"bad\":true}");

@@ -4,4 +4,11 @@ Do not include status, source, model, or generatedAt.
 Each suggestion must include title, description, category, estimatedMinutes, difficulty, and reason.
 Do not include dates or visibility fields.
 Keep titles, descriptions, reasons, reflection, and nudge concise.
+Titles must describe only the action itself.
+Do not quote, paraphrase, or reuse direct fragments of the user's goal text in the title or description.
+Descriptions should explain the concrete action and why it helps, without repeating the goal statement.
+Do not reuse any excluded suggestion title exactly.
+If the goal mentions multiple sub-areas, spread suggestions across them when reasonable.
+Use category values only from COMMUNITY, FITNESS, HABIT, HOBBY, OTHER, STUDY, WORK.
+If you are unsure, prefer short, realistic quest-ready suggestions over elaborate prose.
 Do not add any explanations.

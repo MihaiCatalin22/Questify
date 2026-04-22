@@ -334,6 +334,27 @@ class OutputValidatorTest {
         assertThat(response.nudge()).isNotBlank();
     }
 
+    @Test
+    void validateSuccessPayload_salvages_plain_text_bullet_lists() {
+        var validator = validator();
+        var generatedAt = Instant.parse("2026-03-19T14:30:00Z");
+        String payload = """
+                1. Practice one restart segment - repeat one clean opener for 15 minutes.
+                2. Review one failed attempt - note one mistake and one correction.
+                3. Set up one clean restart routine - get your timer and notes ready.
+                Reflection: Short focused drills build consistency faster than full runs.
+                Nudge: Start with the easiest segment first.
+                """;
+
+        var response = validator.validateSuccessPayload(payload, generatedAt);
+
+        assertThat(response.status()).isEqualTo("SUCCESS");
+        assertThat(response.suggestions()).hasSize(3);
+        assertThat(response.suggestions().getFirst().title()).isEqualTo("Practice one restart segment");
+        assertThat(response.reflection()).isEqualTo("Short focused drills build consistency faster than full runs.");
+        assertThat(response.nudge()).isEqualTo("Start with the easiest segment first.");
+    }
+
     private OutputValidator validator() {
         var properties = new CoachProperties();
         properties.setModel("smollm2:1.7b");

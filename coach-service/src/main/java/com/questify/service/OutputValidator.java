@@ -89,6 +89,10 @@ public class OutputValidator {
                     // Fall through to the original structured error.
                 }
             }
+            JsonNode salvaged = buildObjectFromPlainText(trimmed);
+            if (salvaged != null) {
+                return salvaged;
+            }
             throw new ModelOutputValidationException("json_parse", List.of("Output was not valid JSON"), rawOutput);
         }
     }
@@ -100,6 +104,63 @@ public class OutputValidator {
             return null;
         }
         return rawText.substring(start, end + 1);
+    }
+
+    private JsonNode buildObjectFromPlainText(String rawText) {
+        String[] lines = rawText.split("\\R");
+        ArrayNode suggestions = objectMapper.createArrayNode();
+        String reflection = "";
+        String nudge = "";
+
+        for (String rawLine : lines) {
+            String line = normalizeWhitespace(rawLine);
+            if (line.isBlank()) {
+                continue;
+            }
+
+            String lower = line.toLowerCase(Locale.ROOT);
+            if (lower.startsWith("reflection:")) {
+                reflection = line.substring("reflection:".length()).trim();
+                continue;
+            }
+            if (lower.startsWith("nudge:")) {
+                nudge = line.substring("nudge:".length()).trim();
+                continue;
+            }
+            if (lower.startsWith("next step:")) {
+                nudge = line.substring("next step:".length()).trim();
+                continue;
+            }
+
+            String bulletText = stripListMarker(line);
+            if (!bulletText.isBlank()) {
+                suggestions.add(TextNode.valueOf(bulletText));
+            }
+            if (suggestions.size() == MAX_SUGGESTIONS) {
+                break;
+            }
+        }
+
+        if (suggestions.isEmpty()) {
+            return null;
+        }
+
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.set("suggestions", suggestions);
+        if (!reflection.isBlank()) {
+            payload.put("reflection", reflection);
+        }
+        if (!nudge.isBlank()) {
+            payload.put("nudge", nudge);
+        }
+        return payload;
+    }
+
+    private String stripListMarker(String line) {
+        return line
+                .replaceFirst("^(?:[-*]|\\d+[.)])\\s*", "")
+                .replaceFirst("^suggestion\\s*\\d+\\s*:\\s*", "")
+                .trim();
     }
 
     private JsonNode stripServerOwnedFields(JsonNode tree, String rawOutput) {

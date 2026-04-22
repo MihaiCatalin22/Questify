@@ -14,6 +14,8 @@ import UsersList from "./pages/users/UsersList";
 import UserDetail from "./pages/users/UserDetail";
 
 import CoachPage from "./pages/coach/CoachPage";
+import CoachSuggestionDetailPage from "./pages/coach/CoachSuggestionDetailPage";
+import CoachSuggestionReviewPage from "./pages/coach/CoachSuggestionReviewPage";
 import ProfilePage from "./pages/profile/ProfilePage";
 
 import QuestsList from "./pages/quests/QuestsList";
@@ -135,6 +137,8 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<Shell />}>
             <Route path="/coach" element={<CoachPage />} />
+            <Route path="/coach/suggestions/:suggestionKey" element={<CoachSuggestionDetailPage />} />
+            <Route path="/coach/suggestions/:suggestionKey/review" element={<CoachSuggestionReviewPage />} />
             <Route path="/profile" element={<ProfilePage />} />
 
             <Route path="/users" element={<UsersList />} />
