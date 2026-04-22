@@ -111,6 +111,7 @@ public class OutputValidator {
         ArrayNode suggestions = objectMapper.createArrayNode();
         String reflection = "";
         String nudge = "";
+        boolean sawStructuredSuggestion = false;
 
         for (String rawLine : lines) {
             String line = normalizeWhitespace(rawLine);
@@ -132,16 +133,18 @@ public class OutputValidator {
                 continue;
             }
 
-            String bulletText = stripListMarker(line);
-            if (!bulletText.isBlank()) {
-                suggestions.add(TextNode.valueOf(bulletText));
+            if (!looksLikeStructuredSuggestionLine(line)) {
+                continue;
             }
-            if (suggestions.size() == MAX_SUGGESTIONS) {
-                break;
+
+            sawStructuredSuggestion = true;
+            String bulletText = stripListMarker(line);
+            if (!bulletText.isBlank() && suggestions.size() < MAX_SUGGESTIONS) {
+                suggestions.add(TextNode.valueOf(bulletText));
             }
         }
 
-        if (suggestions.isEmpty()) {
+        if (!sawStructuredSuggestion || suggestions.isEmpty()) {
             return null;
         }
 
@@ -161,6 +164,10 @@ public class OutputValidator {
                 .replaceFirst("^(?:[-*]|\\d+[.)])\\s*", "")
                 .replaceFirst("^suggestion\\s*\\d+\\s*:\\s*", "")
                 .trim();
+    }
+
+    private boolean looksLikeStructuredSuggestionLine(String line) {
+        return line.matches("^(?:[-*]|\\d+[.)]|suggestion\\s*\\d+\\s*:).+");
     }
 
     private JsonNode stripServerOwnedFields(JsonNode tree, String rawOutput) {
