@@ -83,16 +83,10 @@ spec:
       maxUnavailable: 0
       steps:
         - setWeight: 20
-        - analysis:
-            templates:
-              - templateName: submission-service-5xx-rate
         - pause:
             duration: 60s
 
         - setWeight: 50
-        - analysis:
-            templates:
-              - templateName: submission-service-5xx-rate
         - pause:
             duration: 120s
 
