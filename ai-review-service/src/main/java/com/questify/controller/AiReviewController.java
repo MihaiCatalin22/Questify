@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 
 @RestController
 @RequestMapping("/ai-reviews")
@@ -30,23 +32,37 @@ public class AiReviewController {
 
     public record AiReviewRes(
             Long submissionId,
+            Long questId,
+            String userId,
             String recommendation,
             double confidence,
-            String reasons,
-            String model,
+            List<String> reasons,
+            String modelName,
             boolean mediaSupported,
             Instant reviewedAt
     ) {
         static AiReviewRes from(AiReviewResult result) {
             return new AiReviewRes(
                     result.getSubmissionId(),
+                    result.getQuestId(),
+                    result.getUserId(),
                     result.getRecommendation().name(),
                     result.getConfidence(),
-                    result.getReasons(),
+                    splitReasons(result.getReasons()),
                     result.getModel(),
                     result.isMediaSupported(),
                     result.getReviewedAt()
             );
+        }
+
+        private static List<String> splitReasons(String reasons) {
+            if (reasons == null || reasons.isBlank()) {
+                return List.of();
+            }
+            return Arrays.stream(reasons.split("\\r?\\n"))
+                    .map(String::trim)
+                    .filter(reason -> !reason.isBlank())
+                    .toList();
         }
     }
 }
