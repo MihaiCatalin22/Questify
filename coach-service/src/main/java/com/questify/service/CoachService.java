@@ -91,7 +91,9 @@ public class CoachService {
                     metricsRecorder.recordRetry();
                     try {
                         GenerationPrompt repairPrompt = promptBuilder.buildRepairPrompt(
-                                primaryPrompt,
+                                context,
+                                request.resolvedMode(),
+                                excludedSuggestionTitles,
                                 validationFailure.rawOutput(),
                                 validationFailure.errors()
                         );

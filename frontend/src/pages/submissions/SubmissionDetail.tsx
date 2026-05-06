@@ -1,27 +1,35 @@
 import { useParams, Link } from 'react-router-dom';
 import { useSubmission, useReviewSubmission } from '../../hooks/useSubmissions';
 import { useState, useEffect, useRef } from 'react';
-import { useAuthContext } from '../../contexts/AuthContext';
+import { useAuthContext } from '../../contexts/useAuthContext';
 import { toast } from 'react-hot-toast';
 import http from '../../api/https';
+import type { SubmissionDTO, SubmissionStatus } from '../../types/submission';
+import { getErrorMessage, getResponseStatus } from '../../utils/errors';
+import {
+  Badge,
+  Button,
+  ErrorState,
+  FieldLabel,
+  LoadingState,
+  PageHeader,
+  PageShell,
+  Panel,
+  StatusBadge,
+  TextArea,
+} from '../../components/ui';
 
-function getBearer(auth: ReturnType<typeof useAuthContext> | any): string | null {
-  try {
-    const fromFn = auth?.getAuthToken?.();
-    const fromField = auth?.jwt;
-    return fromFn || fromField || null;
-  } catch {
-    return auth?.jwt ?? null;
-  }
+type SubmissionReviewView = SubmissionDTO & {
+  reviewStatus?: SubmissionStatus;
+  reviewNote?: string;
+};
+
+function getBearer(auth: ReturnType<typeof useAuthContext>): string | null {
+  return auth.getAuthToken() || auth.jwt || null;
 }
 
-function hasReviewerRole(user?: any): boolean {
-  const gather = [
-    ...(user?.roles ?? []),
-    ...(user?.realmRoles ?? []),
-    ...((user?.resourceRoles?.['questify-frontend'] ?? [])),
-    ...((user?.resourceRoles?.account ?? [])),
-  ].filter(Boolean).map((r: any) => String(r).toUpperCase());
+function hasReviewerRole(user?: { roles?: string[] } | null): boolean {
+  const gather = (user?.roles ?? []).map((role) => role.toUpperCase());
 
   const set = new Set(gather);
   return (
@@ -65,20 +73,24 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
   const imageish = /^image\//i.test(ct) || (await looksLikeImage(blob));
   if (!imageish) {
     let excerpt = '';
-    try { excerpt = (await blob.text()).slice(0, 300); } catch {}
+    try {
+      excerpt = (await blob.text()).slice(0, 300);
+    } catch {
+      excerpt = '';
+    }
     throw new Error(excerpt ? `Non-image response:\n${excerpt}` : 'Non-image response (no preview)');
   }
 
   try {
-    const bmp = await createImageBitmap(blob as any);
+    const bmp = await createImageBitmap(blob);
     const canvas = document.createElement('canvas');
-    canvas.width = (bmp as any).width || 1;
-    canvas.height = (bmp as any).height || 1;
+    canvas.width = bmp.width || 1;
+    canvas.height = bmp.height || 1;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('No 2D context');
-    ctx.drawImage(bmp as any, 0, 0);
+    ctx.drawImage(bmp, 0, 0);
     const dataUrl = canvas.toDataURL('image/png');
-    if ((bmp as any).close) try { (bmp as any).close(); } catch {}
+    bmp.close();
     return { src: dataUrl };
   } catch {
     const obj = URL.createObjectURL(blob);
@@ -143,8 +155,8 @@ function ProofImage({
       revokeRef.current = revoke ?? null;
       setSrc(safeSrc);
       setDebug(null);
-    } catch (e: any) {
-      setDebug(String(e?.message || e) || 'Failed to fetch image.');
+    } catch (e: unknown) {
+      setDebug(getErrorMessage(e, 'Failed to fetch image.'));
     }
   };
 
@@ -185,6 +197,8 @@ function ProofImage({
 export default function SubmissionDetail() {
   const { id } = useParams();
   const { data: s, isLoading, isError, error } = useSubmission(id ?? '');
+  const submission = s as SubmissionReviewView | undefined;
+  const loadedSubmissionId = submission?.id;
   const review = useReviewSubmission(id ?? '');
   const auth = useAuthContext();
   const token = getBearer(auth);
@@ -205,16 +219,16 @@ export default function SubmissionDetail() {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined
         });
         if (alive) setMayReview(true);
-      } catch (e: any) {
-        if (alive && e?.response?.status === 403) setMayReview(false);
+      } catch (e: unknown) {
+        if (alive && getResponseStatus(e) === 403) setMayReview(false);
       }
     })();
     return () => { alive = false; };
   }, [token]);
   const canReview = (mayReview ?? hasReviewerRole(user));
 
-  const status = (s as any)?.reviewStatus ?? (s as any)?.status ?? 'PENDING';
-  const existingNote = (s as any)?.reviewNote as string | undefined;
+  const status = submission?.reviewStatus ?? submission?.status ?? 'PENDING';
+  const existingNote = submission?.reviewNote;
 
   useEffect(() => {
     let alive = true;
@@ -260,9 +274,9 @@ export default function SubmissionDetail() {
         if (!alive) return;
         revokeRef.current = revoke;
         setDisplayUrls([src]);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (!alive) return;
-        setFail(String(e?.message || e) || 'Failed to fetch proof');
+        setFail(getErrorMessage(e, 'Failed to fetch proof'));
       }
     })();
 
@@ -270,10 +284,10 @@ export default function SubmissionDetail() {
       alive = false;
       if (revokeRef.current) { revokeRef.current(); revokeRef.current = null; }
     };
-  }, [id, (s as any)?.id, token]);
+  }, [id, loadedSubmissionId, token]);
 
-  if (isLoading) return <div className="p-6">Loading submission…</div>;
-  if (isError || !s) return <div className="p-6 text-red-600">{(error as any)?.message || 'Failed to load submission'}</div>;
+  if (isLoading) return <LoadingState label="Loading submission..." />;
+  if (isError || !submission) return <ErrorState message={getErrorMessage(error, 'Failed to load submission')} />;
 
   const onApprove = async () => {
     if (!id) return;
@@ -281,8 +295,8 @@ export default function SubmissionDetail() {
       await review.mutateAsync({ reviewStatus: 'APPROVED' as const });
       toast.success('Submission approved successfully');
       setNote('');
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Failed to approve submission');
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, 'Failed to approve submission'));
     }
   };
 
@@ -296,26 +310,27 @@ export default function SubmissionDetail() {
       await review.mutateAsync({ reviewStatus: 'REJECTED' as const, reviewNote: note.trim() });
       toast.success('Submission rejected');
       setNote('');
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Failed to reject submission');
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, 'Failed to reject submission'));
     }
   };
 
   return (
-    <div className="p-6 space-y-5 max-w-3xl">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Submission</h1>
-        <Link to={`/quests/${(s as any).questId}`} className="underline text-sm">View Quest</Link>
-      </div>
+    <PageShell className="max-w-4xl">
+      <PageHeader
+        title="Submission"
+        description="Review the submitted proof, status, and related quest."
+        actions={<Link to={`/quests/${submission.questId}`} className="btn btn-secondary">View Quest</Link>}
+      />
 
-      <div className="card">
+      <Panel>
         <div className="card-body space-y-2">
-          <div className="text-sm opacity-70">Quest ID: {(s as any).questId}</div>
-          <div className="text-sm opacity-70">User ID: {(s as any).userId ?? '—'}</div>
+          <div className="text-sm text-[rgb(var(--muted))]">Quest ID: {submission.questId}</div>
+          <div className="text-sm text-[rgb(var(--muted))]">User ID: {submission.userId ?? '-'}</div>
 
-          <div className="mt-1">
-            <span className="font-medium">Status: </span>
-            <span className="pill" style={{ marginLeft: 6 }}>{status}</span>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="font-medium">Status</span>
+            <StatusBadge status={status} />
           </div>
 
           {existingNote && (
@@ -325,27 +340,27 @@ export default function SubmissionDetail() {
             </div>
           )}
 
-          <div className="text-xs muted">
-            Created: {new Date((s as any).createdAt).toLocaleString()}
+          <div className="text-xs text-[rgb(var(--faint))]">
+            Created: {new Date(submission.createdAt).toLocaleString()}
           </div>
 
-          {(s as any).comment && <p className="mt-2">{(s as any).comment}</p>}
+          {submission.comment && <p className="mt-2 text-sm leading-6 text-[rgb(var(--muted))]">{submission.comment}</p>}
         </div>
-      </div>
+      </Panel>
 
-      <section className="card">
+      <Panel>
         <div className="card-body space-y-3">
           <h2 className="section-title">Proof</h2>
 
-          {fail && <div className="text-sm text-red-600">{fail}</div>}
-          {!fail && displayUrls.length === 0 && <div className="text-sm text-gray-500">Generating secure link…</div>}
+          {fail && <div className="text-sm text-red-300">{fail}</div>}
+          {!fail && displayUrls.length === 0 && <div className="text-sm text-[rgb(var(--muted))]">Generating secure link...</div>}
 
           {displayUrls.length > 0 && (
             <div className="space-y-4">
               {displayUrls.map((u, idx) => (
                 <div key={`${u}-${idx}`}>
                   {displayUrls.length > 1 ? (
-                    <div className="text-xs opacity-70 mb-2">Proof {idx + 1} of {displayUrls.length}</div>
+                    <Badge className="mb-2">Proof {idx + 1} of {displayUrls.length}</Badge>
                   ) : null}
                   <ProofImage url={u} eager={idx === 0} height={520} />
                 </div>
@@ -353,18 +368,17 @@ export default function SubmissionDetail() {
             </div>
           )}
         </div>
-      </section>
+      </Panel>
 
       {canReview && status === 'PENDING' && (
-        <section className="card">
+        <Panel>
           <div className="card-body space-y-3">
             <h2 className="section-title">Review</h2>
 
             <div>
-              <label className="label">Review note (required for rejection)</label>
-              <textarea
-                className="field"
-                placeholder="Add feedback for the submitter…"
+              <FieldLabel>Review note (required for rejection)</FieldLabel>
+              <TextArea
+                placeholder="Add feedback for the submitter..."
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 maxLength={500}
@@ -372,26 +386,25 @@ export default function SubmissionDetail() {
             </div>
 
             <div className="flex gap-2">
-              <button
-                className="btn-primary"
+              <Button
+                variant="primary"
                 onClick={onApprove}
                 disabled={review.isPending}
               >
-                {review.isPending ? 'Approving…' : 'Approve'}
-              </button>
+                {review.isPending ? 'Approving...' : 'Approve'}
+              </Button>
 
-              <button
-                className="rounded-2xl border px-3 py-2"
+              <Button
                 onClick={onReject}
                 disabled={review.isPending}
                 title="Requires a note"
               >
-                {review.isPending ? 'Rejecting…' : 'Reject'}
-              </button>
+                {review.isPending ? 'Rejecting...' : 'Reject'}
+              </Button>
             </div>
           </div>
-        </section>
+        </Panel>
       )}
-    </div>
+    </PageShell>
   );
 }

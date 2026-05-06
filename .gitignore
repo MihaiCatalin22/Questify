@@ -178,3 +178,14 @@ COACH_MODEL_VIABILITY_REPORT.md
 COACH_MODEL_SELECTION_FINDINGS.md
 COACH_MODEL_BENCHMARK_IMPLEMENTATION.md
 AI_COACH_FRONTEND_IMPLEMENTATION.md
+sa-patch.json
+rollout-restart.json
+/portfolio-docs
+!/portfolio-docs/
+!/portfolio-docs/questify-assessment-pack/
+!/portfolio-docs/questify-assessment-pack/**
+argocd.zip
+/.gradle-local
+/.gradle-test
+/portfolio-docs
+/frontend/output

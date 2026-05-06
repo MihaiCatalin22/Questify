@@ -4,6 +4,14 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import {
+  Button,
+  FieldLabel,
+  PageHeader,
+  PageShell,
+  Panel,
+  TextInput,
+} from '../../components/ui';
 
 const createSchema = z.object({
   username: z.string().min(3),
@@ -44,34 +52,36 @@ function CreateUserForm() {
   const { register, handleSubmit, formState } = form;
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Create User</h1>
+    <PageShell className="mx-auto max-w-2xl">
+      <PageHeader title="Create User" description="This form is retained for compatibility; Keycloak handles user creation." />
+      <Panel className="p-5">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div>
-          <label className="block text-sm mb-1">Username</label>
-          <input {...register('username')} className="w-full border rounded-xl px-3 py-2" />
+          <FieldLabel>Username</FieldLabel>
+          <TextInput {...register('username')} />
           <FormError msg={formState.errors.username?.message} />
         </div>
         <div>
-          <label className="block text-sm mb-1">Email</label>
-          <input {...register('email')} className="w-full border rounded-xl px-3 py-2" />
+          <FieldLabel>Email</FieldLabel>
+          <TextInput {...register('email')} />
           <FormError msg={formState.errors.email?.message} />
         </div>
         <div>
-          <label className="block text-sm mb-1">Password</label>
-          <input type="password" {...register('password')} className="w-full border rounded-xl px-3 py-2" />
+          <FieldLabel>Password</FieldLabel>
+          <TextInput type="password" {...register('password')} />
           <FormError msg={formState.errors.password?.message} />
         </div>
         <div>
-          <label className="block text-sm mb-1">Display name</label>
-          <input {...register('displayName')} className="w-full border rounded-xl px-3 py-2" />
+          <FieldLabel>Display name</FieldLabel>
+          <TextInput {...register('displayName')} />
           <FormError msg={formState.errors.displayName?.message} />
         </div>
         <div className="flex gap-2">
-          <button className="rounded-2xl border px-4 py-2">Save</button>
+          <Button variant="primary">Save</Button>
         </div>
       </form>
-    </div>
+      </Panel>
+    </PageShell>
   );
 }
 
@@ -99,36 +109,38 @@ function EditUserForm({ id }: { id: string }) {
   const { register, handleSubmit, formState } = form;
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Edit User</h1>
+    <PageShell className="mx-auto max-w-2xl">
+      <PageHeader title="Edit User" description="This form is retained for compatibility; Keycloak is the source of truth." />
+      <Panel className="p-5">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div>
-          <label className="block text-sm mb-1">Email</label>
-          <input {...register('email')} className="w-full border rounded-xl px-3 py-2" />
+          <FieldLabel>Email</FieldLabel>
+          <TextInput {...register('email')} />
           <FormError msg={formState.errors.email?.message} />
         </div>
         <div>
-          <label className="block text-sm mb-1">
-            Password <span className="text-xs text-gray-500">(leave blank to keep)</span>
-          </label>
-          <input type="password" {...register('password')} className="w-full border rounded-xl px-3 py-2" />
+          <FieldLabel>
+            Password <span className="text-xs text-[rgb(var(--faint))]">(leave blank to keep)</span>
+          </FieldLabel>
+          <TextInput type="password" {...register('password')} />
           <FormError msg={formState.errors.password?.message} />
         </div>
         <div>
-          <label className="block text-sm mb-1">Display name</label>
-          <input {...register('displayName')} className="w-full border rounded-xl px-3 py-2" />
+          <FieldLabel>Display name</FieldLabel>
+          <TextInput {...register('displayName')} />
           <FormError msg={formState.errors.displayName?.message} />
         </div>
         <div className="flex gap-2">
-          <button className="rounded-2xl border px-4 py-2">Save</button>
-          <button type="button" onClick={() => navigate(-1)} className="rounded-2xl border px-4 py-2">Cancel</button>
+          <Button variant="primary">Save</Button>
+          <Button type="button" onClick={() => navigate(-1)}>Cancel</Button>
         </div>
       </form>
-    </div>
+      </Panel>
+    </PageShell>
   );
 }
 
 function FormError({ msg }: { msg?: string }) {
   if (!msg) return null;
-  return <p className="text-xs text-red-600 mt-1">{msg}</p>;
+  return <p className="text-xs text-red-300 mt-1">{msg}</p>;
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAuthContext } from '../contexts/AuthContext';
+import { useAuthContext } from '../contexts/useAuthContext';
 import type { Role } from '../api/auth';
 
 type Props = {

@@ -53,7 +53,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "SECURITY_INTERNAL_TOKEN=test-internal-token",
         "coach.runtime=ollama",
         "coach.timeout-ms=45000",
-        "coach.max-output-tokens=260",
+        "coach.max-output-tokens=500",
         "coach.temperature=0.10",
         "coach.retry-enabled=true",
         "coach.max-retries=1",
@@ -131,11 +131,20 @@ class CoachModelBenchmarkTest {
 
         List<RequestArtifact> measuredResults = new ArrayList<>();
         int measuredRuns = Integer.getInteger("coach.benchmark.measured-runs", 5);
+        Map<String, List<String>> exclusionsByScenario = new LinkedHashMap<>();
         for (BenchmarkScenario scenario : scenarios) {
             for (int runNumber = 1; runNumber <= measuredRuns; runNumber++) {
-                RequestArtifact artifact = executeScenario(scenario, runNumber);
-                assertArtifactQuality(scenario, artifact);
+                List<String> effectiveExcludedTitles = exclusionsByScenario.getOrDefault(
+                        scenario.id(),
+                        scenario.request().resolvedExcludedSuggestionTitles()
+                );
+                RequestArtifact artifact = executeScenario(scenario, runNumber, effectiveExcludedTitles);
+                assertArtifactQuality(scenario, artifact, effectiveExcludedTitles);
                 measuredResults.add(artifact);
+                exclusionsByScenario.put(
+                        scenario.id(),
+                        mergeUniqueTitles(effectiveExcludedTitles, extractSuggestionTitles(artifact.responseJson()))
+                );
             }
         }
 
@@ -178,7 +187,7 @@ class CoachModelBenchmarkTest {
         int warmupRuns = Integer.getInteger("coach.benchmark.warmup-runs", 1);
         WarmupResult latest = null;
         for (int run = 1; run <= warmupRuns; run++) {
-            RequestArtifact artifact = executeScenario(scenario, run);
+            RequestArtifact artifact = executeScenario(scenario, run, scenario.request().resolvedExcludedSuggestionTitles());
             latest = new WarmupResult(
                     benchmarkModel(),
                     scenario.id(),
@@ -197,22 +206,30 @@ class CoachModelBenchmarkTest {
         return latest;
     }
 
-    private RequestArtifact executeScenario(BenchmarkScenario scenario, int runNumber) throws Exception {
+    private RequestArtifact executeScenario(BenchmarkScenario scenario,
+                                           int runNumber,
+                                           List<String> excludedSuggestionTitles) throws Exception {
         enqueueCoachSettings(scenario.coachSettings());
         enqueueQuestContext(scenario.questContext());
+
+        CoachSuggestionsReq request = new CoachSuggestionsReq(
+                scenario.request().mode(),
+                scenario.request().includeRecentHistory(),
+                excludedSuggestionTitles
+        );
 
         long startedNanos = System.nanoTime();
         var result = mvc.perform(post("/coach/suggestions")
                         .with(jwt().jwt(token -> token.subject(BENCHMARK_USER_ID).claim("preferred_username", "benchmark-runner")))
                         .contentType(APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsBytes(scenario.request())))
+                        .content(objectMapper.writeValueAsBytes(request)))
                 .andReturn();
         long latencyMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
 
         RecordedRequest userRequest = userServer.takeRequest(2, TimeUnit.SECONDS);
         RecordedRequest questRequest = questServer.takeRequest(2, TimeUnit.SECONDS);
         assertInternalUserRequest(userRequest);
-        assertInternalQuestRequest(questRequest, scenario.request().resolvedIncludeRecentHistory());
+        assertInternalQuestRequest(questRequest, request.resolvedIncludeRecentHistory());
 
         String responseBody = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
         JsonNode responseJson = parseJson(responseBody);
@@ -235,7 +252,9 @@ class CoachModelBenchmarkTest {
         );
     }
 
-    private void assertArtifactQuality(BenchmarkScenario scenario, RequestArtifact artifact) {
+    private void assertArtifactQuality(BenchmarkScenario scenario,
+                                       RequestArtifact artifact,
+                                       List<String> excludedSuggestionTitles) {
         assertThat(artifact.httpStatus()).isEqualTo(200);
         assertThat(artifact.responseJson()).isNotNull();
         assertThat(artifact.responseStatus()).isIn("SUCCESS", "FALLBACK");
@@ -253,7 +272,7 @@ class CoachModelBenchmarkTest {
         JsonNode suggestions = responseJson.path("suggestions");
         assertThat(suggestions.isArray()).isTrue();
 
-        Set<String> excludedTitles = scenario.request().resolvedExcludedSuggestionTitles().stream()
+        Set<String> excludedTitles = excludedSuggestionTitles.stream()
                 .map(title -> title.toLowerCase(java.util.Locale.ROOT))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         Set<String> seenTitles = new LinkedHashSet<>();
@@ -570,7 +589,7 @@ class CoachModelBenchmarkTest {
     }
 
     private static double minimumSuccessRate() {
-        return Double.parseDouble(System.getProperty("coach.benchmark.minimum-success-rate", "80"));
+        return Double.parseDouble(System.getProperty("coach.benchmark.minimum-success-rate", "85"));
     }
 
     private static String sanitizeForPath(String value) {
@@ -625,6 +644,35 @@ class CoachModelBenchmarkTest {
         }
         String lowered = value.toLowerCase(java.util.Locale.ROOT);
         return MULTISPACE.matcher(NON_ALPHANUMERIC.matcher(lowered).replaceAll(" ")).replaceAll(" ").trim();
+    }
+
+    private static List<String> extractSuggestionTitles(JsonNode responseJson) {
+        if (responseJson == null || !responseJson.has("suggestions") || !responseJson.get("suggestions").isArray()) {
+            return List.of();
+        }
+        List<String> titles = new ArrayList<>();
+        for (JsonNode suggestionNode : responseJson.get("suggestions")) {
+            String title = stringValue(suggestionNode, "title");
+            if (title != null && !title.isBlank()) {
+                titles.add(title.trim());
+            }
+        }
+        return titles;
+    }
+
+    private static List<String> mergeUniqueTitles(List<String> current, List<String> next) {
+        LinkedHashSet<String> merged = new LinkedHashSet<>();
+        for (String title : current) {
+            if (title != null && !title.isBlank()) {
+                merged.add(title.trim());
+            }
+        }
+        for (String title : next) {
+            if (title != null && !title.isBlank()) {
+                merged.add(title.trim());
+            }
+        }
+        return List.copyOf(merged);
     }
 
     private static void assertInternalUserRequest(RecordedRequest request) {

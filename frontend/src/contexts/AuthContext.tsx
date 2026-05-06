@@ -1,54 +1,42 @@
 import React, {
-  createContext,
-  useContext,
-  useEffect,
+  useCallback,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import { useAuth } from "react-oidc-context";
 import http from "../api/https";
+import { AuthContext, type AuthContextValue, type UserDTO } from "./authContextCore";
 
-export type UserDTO = {
-  id?: string | number;
-  username?: string;
-  email?: string;
-  displayName?: string;
-  roles?: string[];
-};
-
-interface AuthContextValue {
-  isAuthenticated: boolean;
-  user: UserDTO | null;
-  loading: boolean;
-  notifications: string[];
-  setNotifications: (items: string[]) => void;
-  hasRole: (roles: string | string[]) => boolean;
-  getAuthToken: () => string | null;
-
-  jwt: string | null;
-  login: (opts?: { register?: boolean }) => Promise<void>;
-  register: () => Promise<void>;
-  logout: () => Promise<void>;
-
-  setUser: (u: UserDTO | null) => void;
-  updateUserDetails: (u: UserDTO & { token?: string }) => Promise<void>;
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
 
-function claimsToUser(profile: Record<string, any> | undefined): UserDTO | null {
+function readRoles(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function claimsToUser(profile: Record<string, unknown> | undefined): UserDTO | null {
   if (!profile) return null;
-  const roles: string[] =
-    profile?.roles ??
-    profile?.realm_access?.roles ??
-    profile?.resource_access?.account?.roles ??
-    [];
+  const realmAccess = asRecord(profile.realm_access);
+  const resourceAccess = asRecord(profile.resource_access);
+  const accountAccess = asRecord(resourceAccess?.account);
+  const roles =
+    readRoles(profile.roles).length > 0
+      ? readRoles(profile.roles)
+      : readRoles(realmAccess?.roles).length > 0
+        ? readRoles(realmAccess?.roles)
+        : readRoles(accountAccess?.roles);
+
   return {
-    id: profile.sub,
-    username: profile.preferred_username ?? profile.username ?? profile.email,
-    email: profile.email,
-    displayName: profile.name ?? profile.given_name ?? profile.preferred_username,
+    id: readString(profile.sub),
+    username: readString(profile.preferred_username) ?? readString(profile.username) ?? readString(profile.email),
+    email: readString(profile.email),
+    displayName: readString(profile.name) ?? readString(profile.given_name) ?? readString(profile.preferred_username),
     roles,
   };
 }
@@ -58,44 +46,43 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const [notifications, setNotifications] = useState<string[]>([]);
 
-  useEffect(() => {
-  }, [auth.user, auth.isAuthenticated]);
-
-  const login = async (opts?: { register?: boolean }) => {
+  const login = useCallback(async (opts?: { register?: boolean }) => {
     const extraQueryParams = opts?.register ? { kc_action: "register" } : undefined;
     await auth.signinRedirect({ extraQueryParams });
-  };
+  }, [auth]);
 
-  const register = async () => login({ register: true });
+  const register = useCallback(async () => login({ register: true }), [login]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await auth.signoutRedirect();
     } catch {
       await auth.removeUser();
     }
-  };
+  }, [auth]);
 
-  const setUser = (u: UserDTO | null) => {
-
+  const setUser = useCallback((u: UserDTO | null) => {
     console.debug("setUser called, ignoring (OIDC is source of truth).", u);
-  };
+  }, []);
 
-  const updateUserDetails = async (u: UserDTO & { token?: string }) => {
+  const updateUserDetails = useCallback(async (u: UserDTO & { token?: string }) => {
     if (!u?.id) return;
     const { data } = await http.put<UserDTO>(`/users/${u.id}`, u);
     console.debug("Updated user details:", data);
-  };
+  }, []);
 
-  const me = useMemo(() => claimsToUser(auth.user?.profile), [auth.user]);
+  const me = useMemo(
+    () => claimsToUser(auth.user?.profile as Record<string, unknown> | undefined),
+    [auth.user]
+  );
 
-  const hasRole = (roles: string | string[]) => {
+  const hasRole = useCallback((roles: string | string[]) => {
     const required = Array.isArray(roles) ? roles : [roles];
     const userRoles = me?.roles ?? [];
     return required.some((r) => userRoles.includes(r));
-  };
+  }, [me?.roles]);
 
-  const getAuthToken = () => auth.user?.access_token ?? null;
+  const getAuthToken = useCallback(() => auth.user?.access_token ?? null, [auth.user?.access_token]);
 
   const value: AuthContextValue = useMemo(
     () => ({
@@ -115,14 +102,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser,
       updateUserDetails,
     }),
-    [auth.isAuthenticated, auth.isLoading, auth.user, me, notifications]
+    [
+      auth.isAuthenticated,
+      auth.isLoading,
+      auth.user?.access_token,
+      getAuthToken,
+      hasRole,
+      login,
+      logout,
+      me,
+      notifications,
+      register,
+      setUser,
+      updateUserDetails,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const useAuthContext = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuthContext must be used within AuthProvider");
-  return ctx;
-};
+export type { AuthContextValue, UserDTO };

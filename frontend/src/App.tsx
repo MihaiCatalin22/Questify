@@ -1,8 +1,7 @@
-import { Link, Outlet, Route, Routes, Navigate } from "react-router-dom";
+import { Route, Routes, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import ProtectedRoute from "./components/ProtectedRoute";
-import { useState } from "react";
-import { useAuth } from "react-oidc-context";
+import AppShell from "./components/AppShell";
 
 import HomePage from "./pages/HomePage";
 import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
@@ -14,6 +13,7 @@ import UsersList from "./pages/users/UsersList";
 import UserDetail from "./pages/users/UserDetail";
 
 import CoachPage from "./pages/coach/CoachPage";
+import CoachSettingsPage from "./pages/coach/CoachSettingsPage";
 import CoachSuggestionDetailPage from "./pages/coach/CoachSuggestionDetailPage";
 import CoachSuggestionReviewPage from "./pages/coach/CoachSuggestionReviewPage";
 import ProfilePage from "./pages/profile/ProfilePage";
@@ -26,105 +26,19 @@ import DiscoverQuests from "./pages/quests/DiscoverQuests";
 import SubmissionsList from "./pages/submissions/SubmissionsList";
 import SubmissionDetail from "./pages/submissions/SubmissionDetail";
 
-import logo from "./assets/questify_logo_mark_compass.png";
-import { ThemeToggle } from "./components/ThemeToggle";
-
-function readProfileClaim(
-  profile: Record<string, unknown> | undefined,
-  key: "name" | "preferred_username" | "email"
-) {
-  const value = profile?.[key];
-  return typeof value === "string" && value.trim() ? value : null;
-}
-
-function Shell() {
-  const auth = useAuth();
-  const [logoOk, setLogoOk] = useState(true);
-  const profile = auth.user?.profile as Record<string, unknown> | undefined;
-
-  const displayName =
-    readProfileClaim(profile, "name") ||
-    readProfileClaim(profile, "preferred_username") ||
-    readProfileClaim(profile, "email") ||
-    "Account";
-
-  return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur dark:bg-[#0f1115]/80 dark:border-slate-800">
-        <div className="px-6 py-3 flex items-center gap-4 justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="inline-flex items-center gap-2">
-              {logoOk ? (
-                <img
-                  src={logo}
-                  alt="Questify"
-                  className="h-6 w-6"
-                  width={24}
-                  height={24}
-                  onError={() => setLogoOk(false)}
-                />
-              ) : (
-                <span className="text-sm font-semibold">Questify</span>
-              )}
-              <span className="sr-only">Questify</span>
-            </Link>
-
-            <nav className="flex gap-4 text-sm">
-              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/quests">
-                Quests
-              </Link>
-              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/quests/discover">
-                Discover
-              </Link>
-              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/submissions">
-                Submissions
-              </Link>
-              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/coach">
-                Coach
-              </Link>
-              <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/profile">
-                Profile
-              </Link>
-            </nav>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-
-            <span className="hidden sm:inline text-sm text-slate-600 dark:text-slate-300">
-              {displayName}
-            </span>
-
-            {auth.isAuthenticated ? (
-              <button
-                className="text-sm px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"
-                onClick={() => auth.signoutRedirect()}
-              >
-                Logout
-              </button>
-            ) : (
-              <Link
-                className="text-sm px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"
-                to="/login"
-              >
-                Login
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="px-6 py-6">
-        <Outlet />
-      </main>
-    </div>
-  );
-}
-
 export default function App() {
   return (
     <>
-      <Toaster position="top-right" />
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: "rgb(18 24 31)",
+            color: "rgb(232 237 232)",
+            border: "1px solid rgb(50 61 76)",
+          },
+        }}
+      />
 
       <Routes>
         <Route index element={<HomePage />} />
@@ -135,8 +49,9 @@ export default function App() {
         <Route path="/oidc/callback" element={<OidcCallback />} />
 
         <Route element={<ProtectedRoute />}>
-          <Route element={<Shell />}>
+          <Route element={<AppShell />}>
             <Route path="/coach" element={<CoachPage />} />
+            <Route path="/coach/settings" element={<CoachSettingsPage />} />
             <Route path="/coach/suggestions/:suggestionKey" element={<CoachSuggestionDetailPage />} />
             <Route path="/coach/suggestions/:suggestionKey/review" element={<CoachSuggestionReviewPage />} />
             <Route path="/profile" element={<ProfilePage />} />

@@ -22,21 +22,62 @@ const ALLOWED = new Set<string>([
 
 const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 
-function normalizeList<T>(payload: any): T[] {
+type ApiErrorLike = {
+  response?: {
+    status?: number;
+    data?: {
+      message?: string;
+      error?: string;
+    };
+  };
+  message?: string;
+};
+
+type SubmissionCreateBody = {
+  questId: string;
+  note?: string;
+  proofKey?: string;
+  proofKeys?: string[];
+  proofUrl?: string;
+  proofUrls?: string[];
+};
+
+type LegacyReviewInput = { reviewStatus?: "APPROVED" | "REJECTED"; reviewNote?: string };
+type ReviewInput = LegacyReviewInput | { status?: "APPROVED" | "REJECTED"; note?: string };
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function normalizeList<T>(payload: unknown): T[] {
   if (Array.isArray(payload)) return payload;
-  if (!payload || typeof payload !== "object") return [];
-  const c = [payload.content, payload.items, payload.data, payload.results, payload.list];
+  const record = asRecord(payload);
+  if (!record) return [];
+  const c = [record.content, record.items, record.data, record.results, record.list];
   const found = c.find(Array.isArray);
   return found ?? [];
 }
 
-function extractError(e: any): string {
+function toApiError(e: unknown): ApiErrorLike {
+  return typeof e === "object" && e !== null ? (e as ApiErrorLike) : {};
+}
+
+function getStatus(e: unknown): number | undefined {
+  return toApiError(e).response?.status;
+}
+
+function extractError(e: unknown): string {
+  const apiError = toApiError(e);
   return (
-    e?.response?.data?.message ||
-    e?.response?.data?.error ||
-    e?.message ||
+    apiError.response?.data?.message ||
+    apiError.response?.data?.error ||
+    apiError.message ||
     "Request failed."
   );
+}
+
+function isDirectReviewInput(input: ReviewInput): input is { status?: "APPROVED" | "REJECTED"; note?: string } {
+  return "status" in input || "note" in input;
 }
 
 function validateFile(f: File) {
@@ -89,14 +130,11 @@ export const SubmissionsApi = {
 
   async review(
     id: string | number,
-    input:
-      | { reviewStatus?: "APPROVED" | "REJECTED"; reviewNote?: string }
-      | { status?: "APPROVED" | "REJECTED"; note?: string }
+    input: ReviewInput
   ): Promise<SubmissionDTO> {
-    const body =
-      "status" in (input as any) || "note" in (input as any)
-        ? input
-        : { status: (input as any).reviewStatus, note: (input as any).reviewNote };
+    const body = isDirectReviewInput(input)
+      ? input
+      : { status: input.reviewStatus, note: input.reviewNote };
 
     const { data } = await http.post<SubmissionDTO>(`/submissions/${id}/review`, body);
     return data;
@@ -124,15 +162,14 @@ export const SubmissionsApi = {
           headers: { /* let browser set multipart boundary */ },
         });
         return data;
-      } catch (e: any) {
-        const status = e?.response?.status as number | undefined;
+      } catch (e: unknown) {
+        const status = getStatus(e);
 
         // Fallback: upload each file to proof-service, then create JSON submission with proofKeys[]
         if (status === 415 || status === 404) {
           try {
             const uploads: { key: string; url?: string }[] = [];
             for (const f of many) {
-              // eslint-disable-next-line no-await-in-loop
               uploads.push(await uploadViaProofService(f));
             }
             const proofKeys = uploads.map(u => u.key);
@@ -144,7 +181,7 @@ export const SubmissionsApi = {
             });
 
             return data;
-          } catch (e2: any) {
+          } catch (e2: unknown) {
             throw new Error(extractError(e2));
           }
         }
@@ -169,8 +206,8 @@ export const SubmissionsApi = {
           headers: { /* let browser set multipart boundary */ },
         });
         return data;
-      } catch (e: any) {
-        const status = e?.response?.status as number | undefined;
+      } catch (e: unknown) {
+        const status = getStatus(e);
 
         if (status === 415 || status === 404) {
           try {
@@ -181,7 +218,7 @@ export const SubmissionsApi = {
               proofKey: up.key,
             });
             return data;
-          } catch (e2: any) {
+          } catch (e2: unknown) {
             throw new Error(extractError(e2));
           }
         }
@@ -192,7 +229,7 @@ export const SubmissionsApi = {
     }
 
     // ---- JSON (keys/urls) ------------------------------------------------
-    const body: any = {
+    const body: SubmissionCreateBody = {
       questId: input.questId,
       note: input.comment,
     };
@@ -206,7 +243,7 @@ export const SubmissionsApi = {
     try {
       const { data } = await http.post<SubmissionDTO>("/submissions", body);
       return data;
-    } catch (e: any) {
+    } catch (e: unknown) {
       throw new Error(extractError(e));
     }
   },
@@ -237,15 +274,16 @@ export const SubmissionsApi = {
   },
 };
 
-function normalizePage<T>(payload: any): PageResp<T> {
+function normalizePage<T>(payload: unknown): PageResp<T> {
   const content = normalizeList<T>(payload);
+  const record = asRecord(payload) ?? {};
   return {
     content,
-    totalElements: Number(payload?.totalElements ?? content.length ?? 0),
-    totalPages: Number(payload?.totalPages ?? 1),
-    number: Number(payload?.number ?? 0),
-    size: Number(payload?.size ?? content.length ?? 0),
-    first: Boolean(payload?.first ?? true),
-    last: Boolean(payload?.last ?? true),
+    totalElements: Number(record.totalElements ?? content.length ?? 0),
+    totalPages: Number(record.totalPages ?? 1),
+    number: Number(record.number ?? 0),
+    size: Number(record.size ?? content.length ?? 0),
+    first: Boolean(record.first ?? true),
+    last: Boolean(record.last ?? true),
   };
 }

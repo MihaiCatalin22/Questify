@@ -1,18 +1,20 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { useAuthContext } from '../../contexts/AuthContext';
+import { useAuthContext } from '../../contexts/useAuthContext';
 import { QuestsApi } from '../../api/quests';
-
-type CreateQuestInput = {
-  title: string;
-  description: string;
-  category: string;
-  startDate: string;   // ISO instant
-  endDate: string;     // ISO instant
-  createdByUserId: string;
-  visibility: 'PUBLIC' | 'PRIVATE';
-};
+import type { CreateQuestInput, QuestCategory, QuestVisibility } from '../../types/quest';
+import { getErrorMessage } from '../../utils/errors';
+import {
+  Button,
+  FieldLabel,
+  PageHeader,
+  PageShell,
+  Panel,
+  SelectInput,
+  TextArea,
+  TextInput,
+} from '../../components/ui';
 
 const CATEGORIES = [
   'COMMUNITY','FITNESS','HABIT','HOBBY','OTHER','STUDY','WORK',
@@ -41,8 +43,8 @@ export default function QuestForm() {
 
   const [title, setTitle] = React.useState('');
   const [description, setDescription] = React.useState('');
-  const [category, setCategory] = React.useState<(typeof CATEGORIES)[number]>('OTHER');
-  const [visibility, setVisibility] = React.useState<'PUBLIC'|'PRIVATE'>('PRIVATE'); // NEW
+  const [category, setCategory] = React.useState<QuestCategory>('OTHER');
+  const [visibility, setVisibility] = React.useState<QuestVisibility>('PRIVATE');
   const [startDate, setStartDate] = React.useState(''); // yyyy-MM-dd
   const [endDate, setEndDate] = React.useState('');     // yyyy-MM-dd
   const [saving, setSaving] = React.useState(false);
@@ -92,16 +94,11 @@ export default function QuestForm() {
 
     try {
       setSaving(true);
-      await QuestsApi.create(payload as any);
+      await QuestsApi.create(payload);
       toast.success('Quest created!');
       navigate('/quests');
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        err?.message ||
-        'Failed to create quest';
-      toast.error(String(msg));
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to create quest'));
     } finally {
       setSaving(false);
     }
@@ -111,15 +108,18 @@ export default function QuestForm() {
   const minEnd = startDate || undefined;
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-semibold mb-4">Create Quest</h1>
+    <PageShell className="mx-auto max-w-3xl">
+      <PageHeader
+        title="Create Quest"
+        description="Define the goal, timing, category, and visibility before people start submitting proof."
+      />
 
-      <form onSubmit={onSubmit} className="card">
+      <form onSubmit={onSubmit}>
+        <Panel className="p-5">
         <div className="card-body space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Title</label>
-            <input
-              className="field"
+            <FieldLabel>Title</FieldLabel>
+            <TextInput
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               minLength={3}
@@ -128,14 +128,13 @@ export default function QuestForm() {
               aria-invalid={!!errors.title}
               aria-describedby={errors.title ? 'title-err' : undefined}
             />
-            <p className="text-xs text-gray-500 mt-1">3–140 chars</p>
-            {errors.title && <p id="title-err" className="text-xs text-red-600 mt-1">{errors.title}</p>}
+            <p className="mt-1 text-xs text-[rgb(var(--faint))]">3-140 characters</p>
+            {errors.title && <p id="title-err" className="mt-1 text-xs text-red-300">{errors.title}</p>}
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Description</label>
-            <textarea
-              className="field h-28 resize-y"
+            <FieldLabel>Description</FieldLabel>
+            <TextArea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               minLength={10}
@@ -144,17 +143,16 @@ export default function QuestForm() {
               aria-invalid={!!errors.description}
               aria-describedby={errors.description ? 'desc-err' : undefined}
             />
-            <p className="text-xs text-gray-500 mt-1">10–2000 chars</p>
-            {errors.description && <p id="desc-err" className="text-xs text-red-600 mt-1">{errors.description}</p>}
+            <p className="mt-1 text-xs text-[rgb(var(--faint))]">10-2000 characters</p>
+            {errors.description && <p id="desc-err" className="mt-1 text-xs text-red-300">{errors.description}</p>}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm font-medium mb-1">Category</label>
-              <select
-                className="field"
+              <FieldLabel>Category</FieldLabel>
+              <SelectInput
                 value={category}
-                onChange={(e) => setCategory(e.target.value as (typeof CATEGORIES)[number])}
+                onChange={(e) => setCategory(e.target.value as QuestCategory)}
                 required
                 aria-invalid={!!errors.category}
                 aria-describedby={errors.category ? 'cat-err' : undefined}
@@ -162,16 +160,15 @@ export default function QuestForm() {
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
-              </select>
-              {errors.category && <p id="cat-err" className="text-xs text-red-600 mt-1">{errors.category}</p>}
+              </SelectInput>
+              {errors.category && <p id="cat-err" className="mt-1 text-xs text-red-300">{errors.category}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-3 md:col-span-2">
               <div>
-                <label className="block text-sm font-medium mb-1">Start date</label>
-                <input
+                <FieldLabel>Start date</FieldLabel>
+                <TextInput
                   type="date"
-                  className="field"
                   value={startDate}
                   min={minStart}
                   onChange={(e) => setStartDate(e.target.value)}
@@ -179,13 +176,12 @@ export default function QuestForm() {
                   aria-invalid={!!errors.startDate}
                   aria-describedby={errors.startDate ? 'start-err' : undefined}
                 />
-                {errors.startDate && <p id="start-err" className="text-xs text-red-600 mt-1">{errors.startDate}</p>}
+                {errors.startDate && <p id="start-err" className="mt-1 text-xs text-red-300">{errors.startDate}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">End date</label>
-                <input
+                <FieldLabel>End date</FieldLabel>
+                <TextInput
                   type="date"
-                  className="field"
                   value={endDate}
                   min={minEnd}
                   onChange={(e) => setEndDate(e.target.value)}
@@ -193,33 +189,33 @@ export default function QuestForm() {
                   aria-invalid={!!errors.endDate}
                   aria-describedby={errors.endDate ? 'end-err' : undefined}
                 />
-                {errors.endDate && <p id="end-err" className="text-xs text-red-600 mt-1">{errors.endDate}</p>}
+                {errors.endDate && <p id="end-err" className="mt-1 text-xs text-red-300">{errors.endDate}</p>}
               </div>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Visibility</label>
-            <select
-              className="field"
+            <FieldLabel>Visibility</FieldLabel>
+            <SelectInput
               value={visibility}
-              onChange={(e) => setVisibility(e.target.value as 'PUBLIC'|'PRIVATE')}
+              onChange={(e) => setVisibility(e.target.value as QuestVisibility)}
             >
               <option value="PRIVATE">Private (only you)</option>
               <option value="PUBLIC">Public (others can discover & join)</option>
-            </select>
+            </SelectInput>
           </div>
 
           <div className="flex justify-end gap-3">
-            <button type="button" onClick={() => navigate(-1)} className="rounded-2xl border px-4 py-2">
+            <Button type="button" onClick={() => navigate(-1)}>
               Cancel
-            </button>
-            <button disabled={saving} className="btn-primary disabled:opacity-60">
-              {saving ? 'Creating…' : 'Create'}
-            </button>
+            </Button>
+            <Button disabled={saving} variant="primary">
+              {saving ? 'Creating...' : 'Create'}
+            </Button>
           </div>
         </div>
+        </Panel>
       </form>
-    </div>
+    </PageShell>
   );
 }

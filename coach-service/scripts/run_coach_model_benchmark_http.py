@@ -23,12 +23,21 @@ USER_PROMPT_FILE = SERVICE_ROOT / "src" / "main" / "resources" / "prompts" / "us
 REPAIR_PROMPT_FILE = SERVICE_ROOT / "src" / "main" / "resources" / "prompts" / "repair-v1.txt"
 SCHEMA_FILE = SERVICE_ROOT / "src" / "main" / "resources" / "schemas" / "coach-response-v1.json"
 REPORT_FILE = ROOT / "COACH_MODEL_VIABILITY_REPORT.md"
-DEFAULT_MODELS = ["phi3:mini", "llama3.2:3b", "qwen2.5:3b", "smollm2:1.7b"]
+DEFAULT_MODELS = ["qwen2.5:3b", "llama3.2:3b", "phi3:mini"]
 
 TIMEOUT_MS = 15000
-MAX_OUTPUT_TOKENS = 400
-TEMPERATURE = 0.3
+MAX_OUTPUT_TOKENS = 500
+TEMPERATURE = 0.10
 MAX_RETRIES = 1
+GOAL_STOPWORDS = {
+    "i", "me", "my", "mine", "you", "your", "yours", "we", "our", "ours",
+    "want", "need", "help", "please", "goal", "goals", "achieve", "achieving",
+    "improve", "improving", "better", "become", "create", "creating", "quest", "quests",
+    "some", "more", "less", "with", "without", "during", "through", "into", "from",
+    "that", "this", "these", "those", "they", "them", "their", "for", "and", "or",
+    "the", "a", "an", "to", "of", "in", "on", "at", "by", "after", "before", "over",
+    "under", "still", "just", "really", "kind", "sort", "current", "easy", "medium", "hard",
+}
 
 
 def ensure_dir(path: Path) -> None:
@@ -146,6 +155,84 @@ def resolve_goal(explicit_goal: str | None, active_titles):
     if active_titles:
         return "Stay consistent with: " + ", ".join(active_titles)
     return "No explicit goal provided."
+
+
+def normalize_target(raw: str) -> str:
+    text = (raw or "").lower()
+    for phrase in (
+        "practice", "improve", "improving", "study", "learn", "learning", "focus on",
+        "work on", "build", "develop", "train", "exercise", "reduce", "keep up with",
+        "stay consistent with", "get better at", "become better at", "do more",
+        "spend more time on", "spend less time on",
+    ):
+        text = text.replace(phrase, " ")
+    for phrase in ("my", "your", "the", "a", "an", "some", "more", "less", "current", "quests", "quest"):
+        text = text.replace(phrase, " ")
+    normalized = "".join(ch if ch.isalnum() or ch == " " else " " for ch in text)
+    tokens = [token for token in normalized.split() if token and token not in GOAL_STOPWORDS]
+    return " ".join(tokens[:6])
+
+
+def extract_goal_facets(goal: str, active_titles):
+    source = sanitize(goal, 500)
+    if not source:
+        return [normalize_target(title) for title in active_titles if normalize_target(title)][:2]
+
+    cleaned = (
+        source.replace("\n", " ")
+        .replace("!", ".")
+        .replace("?", ".")
+        .replace(";", ".")
+        .replace(",", ".")
+    )
+    collected = []
+    seen = set()
+    for fragment in cleaned.split("."):
+        fragment = fragment.strip()
+        if not fragment:
+            continue
+        for prefix in ("i want to", "i need to", "i would like to", "my goal is to", "help me", "please", "can you"):
+            fragment = fragment.replace(prefix, " ")
+        for part in fragment.split(" and "):
+            candidate = normalize_target(part)
+            if candidate and candidate not in seen:
+                seen.add(candidate)
+                collected.append(candidate)
+            if len(collected) == 3:
+                return collected
+    return collected
+
+
+def infer_category(goal: str, targets):
+    haystack = normalize_target((goal or "") + " " + " ".join(targets))
+    scores = {
+        "FITNESS": sum(1 for token in ("health", "fitness", "exercise", "workout", "walk", "run", "gym", "mobility", "stretch") if token in haystack),
+        "STUDY": sum(1 for token in ("study", "learn", "course", "exam", "math", "history", "spanish", "geography", "lecture", "flashcard", "reading", "revise") if token in haystack),
+        "WORK": sum(1 for token in ("work", "career", "project", "job", "productivity", "coding", "code", "email", "meeting") if token in haystack),
+        "COMMUNITY": sum(1 for token in ("friend", "family", "community", "social", "volunteer", "relationship") if token in haystack),
+        "HOBBY": sum(1 for token in ("hobby", "speedrun", "speedrunning", "game", "gaming", "gta", "music", "guitar", "art", "drawing", "creative", "writing", "chess", "photography") if token in haystack),
+    }
+    best = max(scores.items(), key=lambda item: item[1])
+    return best[0] if best[1] > 0 else "OTHER"
+
+
+def build_goal_facet_summary(goal: str, active_titles):
+    facets = extract_goal_facets(goal, active_titles)
+    category = infer_category(goal, facets)
+    if not facets:
+        return "- No explicit sub-areas were extracted.\n- Keep suggestions broad, realistic, and varied."
+    lines = [f"- {facet}" for facet in facets]
+    lines.append(f"- Category hint: {category}")
+    return "\n".join(lines)
+
+
+def build_goal_coverage_guidance(goal: str, active_titles):
+    facets = extract_goal_facets(goal, active_titles)
+    if len(facets) >= 2:
+        return "Spread the 3 suggestions across these sub-areas when reasonable: " + ", ".join(facets) + "."
+    if facets:
+        return f"Vary the angle around {facets[0]} instead of rephrasing the same action."
+    return "Vary the angle of the suggestions instead of repeating the same idea."
 
 
 def build_context(raw_scenario):
@@ -350,8 +437,11 @@ def execute_generation(runtime_base_url: str, model: str, scenario, system_promp
         "schema": schema_text,
         "mode": scenario["request"].get("mode", "DEFAULT"),
         "goal": context["goal"],
+        "goalFacetSummary": build_goal_facet_summary(context["goal"], context["activeQuestTitles"]),
+        "goalCoverageGuidance": build_goal_coverage_guidance(context["goal"], context["activeQuestTitles"]),
         "recentQuestHistory": format_recent_history(context),
         "recentPattern": format_recent_pattern(context),
+        "excludedSuggestionTitles": "No excluded suggestion titles were provided.",
     })
 
     retry_count = 0

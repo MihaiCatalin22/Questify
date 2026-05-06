@@ -2,11 +2,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import { useAuth } from "react-oidc-context";
 import { Link } from "react-router-dom";
+import { Bot, Download, ShieldAlert, UserRound } from "lucide-react";
 
 import { useDeleteMe, useMe, useUpdateMe } from "../../hooks/useUsers";
 import { QuestsApi } from "../../api/quests";
 import { SubmissionsApi } from "../../api/submissions";
 import { UsersApi, type ExportJobDTO, type ExportJobStatus, type UpdateMeInput } from "../../api/users";
+import {
+  Badge,
+  Button,
+  ErrorState,
+  FieldLabel,
+  LoadingState,
+  PageHeader,
+  PageShell,
+  Panel,
+  StatusBadge,
+  TextArea,
+  TextInput,
+} from "../../components/ui";
 
 const EXPORT_STORAGE_KEY = "questify:lastExportJob";
 
@@ -186,7 +200,7 @@ export default function ProfilePage() {
 
       setExportJob(job);
       lastToastStatus.current = created.status;
-      toast.success("Export job started. We'll download the ZIP when it's ready.");
+      toast.success("Export job started. We'll download the ZIP when it is ready.");
     } catch (error: unknown) {
       toast.error(extractApiMessage(error, "Failed to start export"));
     } finally {
@@ -274,12 +288,12 @@ export default function ProfilePage() {
             window.clearInterval(pollTimer.current);
             pollTimer.current = null;
           }
-          toast.success("Export ready! Downloading…");
+          toast.success("Export ready. Downloading...");
           await downloadExport(jobId);
           return;
         }
 
-        // ✅ soft attempt: if parts are done but status hasn't flipped yet
+        // soft attempt: if parts are done but status hasn't flipped yet
         if (next.status === "RUNNING" && (next.missingParts?.length ?? 0) === 0) {
           const now = Date.now();
           if (now - lastSoftDownloadAttemptAt.current > 8000) {
@@ -315,7 +329,7 @@ export default function ProfilePage() {
   async function confirmDelete() {
     try {
       await del.mutateAsync();
-      toast.success("Account deleted. Signing you out…");
+      toast.success("Account deleted. Signing you out...");
 
       try {
         await auth.signoutRedirect();
@@ -359,145 +373,135 @@ export default function ProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me?.id]);
 
-  if (meQ.isLoading) return <div className="p-6 opacity-70">Loading…</div>;
+  if (meQ.isLoading) return <LoadingState label="Loading profile..." />;
   if (meQ.isError) {
     return (
-      <div className="p-6 text-red-600">
-        {extractApiMessage(meQ.error, "Failed to load profile")}
-      </div>
+      <ErrorState message={extractApiMessage(meQ.error, "Failed to load profile")} />
     );
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
+    <PageShell className="max-w-5xl">
       {deleteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f1115] p-5 space-y-4">
-            <div className="text-lg font-semibold text-red-700 dark:text-red-300">
+          <Panel className="w-full max-w-lg p-5 space-y-4">
+            <div className="flex items-center gap-2 text-lg font-semibold text-red-200">
+              <ShieldAlert className="h-5 w-5" />
               Confirm account deletion
             </div>
 
-            <div className="text-sm opacity-80 space-y-2">
+            <div className="space-y-2 text-sm leading-6 text-[rgb(var(--muted))]">
               <p>You are about to permanently delete your account.</p>
               <ul className="list-disc pl-5 space-y-1">
                 <li>You will be signed out immediately.</li>
-                <li>You won’t be able to log in again with this account.</li>
+                <li>You will not be able to log in again with this account.</li>
                 <li>If you want to use Questify again, you will need a new account.</li>
               </ul>
-              <p className="text-xs opacity-70">This action is irreversible.</p>
+              <p className="text-xs text-[rgb(var(--faint))]">This action is irreversible.</p>
             </div>
 
             <div className="flex items-center justify-end gap-2">
-              <button
+              <Button
                 onClick={() => setDeleteModalOpen(false)}
-                className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
-                           bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={confirmDelete}
                 disabled={del.isPending}
-                className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
-                           border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 disabled:opacity-60"
+                variant="danger"
               >
-                {del.isPending ? "Deleting…" : "Yes, delete my account"}
-              </button>
+                {del.isPending ? "Deleting..." : "Yes, delete my account"}
+              </Button>
             </div>
-          </div>
+          </Panel>
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Profile</h1>
-        {isDeleted && (
-          <span className="text-xs px-2 py-1 rounded-full border border-red-300 text-red-700 dark:border-red-800 dark:text-red-300">
-            Deleted
-          </span>
-        )}
-      </div>
+      <PageHeader
+        title="Profile"
+        description="Manage your profile details, data export, AI Coach access, and account deletion."
+        actions={isDeleted ? <Badge tone="danger">Deleted</Badge> : null}
+      />
 
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f1115] p-5 space-y-4">
+      <Panel className="p-5 space-y-5">
         <div className="flex items-start justify-between gap-4">
-          <div>
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-[rgb(var(--border-soft))] bg-[rgba(var(--accent),0.12)] text-[rgb(var(--accent))]">
+              <UserRound className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
             <div className="text-lg font-semibold">{me?.username || "—"}</div>
-            <div className="text-sm opacity-70">{me?.email || "—"}</div>
+              <div className="truncate text-sm text-[rgb(var(--muted))]">{me?.email || "—"}</div>
+            </div>
           </div>
 
-          <div className="text-right text-sm opacity-70">
-            <div className="text-xs opacity-70">Account age</div>
+          <div className="text-right text-sm text-[rgb(var(--muted))]">
+            <div className="text-xs text-[rgb(var(--faint))]">Account age</div>
             <div>{accountAge == null ? "—" : `${accountAge} day(s)`}</div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs opacity-70">Display name</label>
-            <input
+            <FieldLabel>Display name</FieldLabel>
+            <TextInput
               value={form.displayName ?? ""}
               onChange={(e) => setForm((s) => ({ ...s, displayName: e.target.value }))}
               disabled={isDeleted}
-              className="mt-1 w-full rounded-2xl border px-3 py-2 text-sm bg-white dark:bg-[#0b0d12]
-                         border-slate-200 dark:border-slate-800 disabled:opacity-60"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs opacity-70">Bio</label>
-          <textarea
+          <FieldLabel>Bio</FieldLabel>
+          <TextArea
             value={form.bio ?? ""}
             onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))}
             disabled={isDeleted}
             rows={4}
-            className="mt-1 w-full rounded-2xl border px-3 py-2 text-sm bg-white dark:bg-[#0b0d12]
-                       border-slate-200 dark:border-slate-800 disabled:opacity-60"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
+          <Button
             onClick={onSave}
             disabled={upd.isPending || isDeleted}
-            className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
-                       bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800 disabled:opacity-60"
+            variant="primary"
           >
-            {upd.isPending ? "Saving…" : "Save changes"}
-          </button>
+            {upd.isPending ? "Saving..." : "Save changes"}
+          </Button>
 
-          <button
+          <Button
             onClick={startExport}
             disabled={exportStarting || isDeleted || exportJob?.status === "RUNNING" || exportJob?.status === "PENDING"}
-            className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
-                       bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800 disabled:opacity-60"
           >
+            <Download className="h-4 w-4" />
             {exportStarting
-              ? "Starting export…"
+              ? "Starting export..."
               : exportJob?.status === "RUNNING" || exportJob?.status === "PENDING"
-                ? "Export in progress…"
+                ? "Export in progress..."
                 : "Request data export (ZIP)"}
-          </button>
+          </Button>
 
           {exportJob?.jobId && (
-            <button
+            <Button
               onClick={() => downloadExport(exportJob.jobId)}
               disabled={isDeleted}
-              className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
-                         bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800 disabled:opacity-60"
             >
               Download export (if ready)
-            </button>
+            </Button>
           )}
         </div>
 
-        <div className="text-xs opacity-70 space-y-1">
+        <div className="space-y-1 text-xs text-[rgb(var(--faint))]">
           <div>Created: {formatDate(me?.createdAt)}</div>
           <div>Updated: {formatDate(me?.updatedAt)}</div>
 
           {exportJob && (
             <div className="pt-1 space-y-1">
               <div>
-                Export status: <span className="font-medium">{exportJob.status}</span>
+                Export status: <StatusBadge status={exportJob.status} />
               </div>
               <div>
                 Export jobId: <span className="font-mono">{exportJob.jobId}</span>
@@ -508,96 +512,96 @@ export default function ProfilePage() {
               {!!exportJob.missingParts?.length && <div>Missing parts: {exportJob.missingParts.join(", ")}</div>}
 
               {exportJob.status === "FAILED" && exportJob.failureReason && (
-                <div className="text-xs text-red-700 dark:text-red-300">Reason: {exportJob.failureReason}</div>
+                <div className="text-xs text-red-300">Reason: {exportJob.failureReason}</div>
               )}
             </div>
           )}
         </div>
 
-        {loadingSummary && <div className="text-xs opacity-70">Loading summary…</div>}
+        {loadingSummary && <div className="text-xs text-[rgb(var(--faint))]">Loading summary...</div>}
 
         {summary && (
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
+          <div className="rounded-lg border border-[rgb(var(--border-soft))] bg-[rgba(var(--surface-2),0.45)] p-4">
             <div className="text-sm font-semibold mb-2">Summary</div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
               <div>
-                <div className="text-xs opacity-70">Quests participated</div>
+                <div className="text-xs text-[rgb(var(--faint))]">Quests participated</div>
                 <div className="text-lg">{summary.questsTotal}</div>
               </div>
               <div>
-                <div className="text-xs opacity-70">Quests completed</div>
+                <div className="text-xs text-[rgb(var(--faint))]">Quests completed</div>
                 <div className="text-lg">{summary.questsCompleted}</div>
               </div>
               <div>
-                <div className="text-xs opacity-70">Submissions</div>
+                <div className="text-xs text-[rgb(var(--faint))]">Submissions</div>
                 <div className="text-lg">{summary.submissionsTotal}</div>
               </div>
             </div>
           </div>
         )}
-      </div>
+      </Panel>
 
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f1115] p-5 space-y-3">
+      <Panel className="p-5 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">AI Coach</h2>
-            <p className="mt-1 text-sm opacity-80">
+          <div className="flex gap-3">
+            <Bot className="mt-1 h-5 w-5 text-[rgb(var(--accent))]" />
+            <div>
+              <h2 className="text-lg font-semibold">AI Coach</h2>
+              <p className="mt-1 text-sm leading-6 text-[rgb(var(--muted))]">
               Open your dedicated coach workspace to manage AI Coach opt-in, set a goal, and generate tailored
               suggestions.
             </p>
+            </div>
           </div>
 
           <Link
             to="/coach"
-            className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
-                       bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800"
+            className="btn btn-secondary"
           >
             Open AI Coach
           </Link>
         </div>
 
-        <p className="text-xs opacity-70">
+        <p className="text-xs text-[rgb(var(--faint))]">
           AI Coach uses only minimal recent quest context and never includes proof media or raw uploads.
         </p>
-      </div>
+      </Panel>
 
-      <div className="rounded-2xl border border-red-200 dark:border-red-900 bg-white dark:bg-[#0f1115] p-5 space-y-3">
-        <h2 className="text-lg font-semibold text-red-700 dark:text-red-300">Danger zone</h2>
+      <Panel className="border-[rgba(var(--coral),0.45)] p-5 space-y-3">
+        <h2 className="text-lg font-semibold text-red-200">Danger zone</h2>
 
-        <p className="text-sm opacity-80">
+        <p className="text-sm leading-6 text-[rgb(var(--muted))]">
           Deleting your account will permanently disable your login and remove/anonymize your data (submissions,
           participation/completion records, and uploaded proofs).
         </p>
 
-        <p className="text-xs opacity-70">
+        <p className="text-xs text-[rgb(var(--faint))]">
           This action is irreversible. If you want to use Questify again, you will need to create a new account.
         </p>
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <input
+          <TextInput
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}
             placeholder='Type "DELETE" to confirm'
             disabled={isDeleted}
-            className="w-full sm:w-72 rounded-2xl border px-3 py-2 text-sm bg-white dark:bg-[#0b0d12]
-                       border-red-200 dark:border-red-900 disabled:opacity-60"
+            className="sm:w-72"
           />
-          <button
+          <Button
             onClick={onDeleteClick}
             disabled={del.isPending || isDeleted}
-            className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
-                       border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 disabled:opacity-60"
+            variant="danger"
           >
             Delete my account
-          </button>
+          </Button>
         </div>
 
         {isDeleted && (
-          <div className="text-xs text-red-700 dark:text-red-300">
+          <div className="text-xs text-red-300">
             Deleted at: {formatDate(me?.deletedAt)}
           </div>
         )}
-      </div>
-    </div>
+      </Panel>
+    </PageShell>
   );
 }

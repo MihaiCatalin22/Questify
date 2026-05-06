@@ -8,10 +8,10 @@ import java.util.Locale;
 public class CoachProperties {
 
     private String runtime = "ollama";
-    private String model = "smollm2:1.7b";
+    private String model = "qwen2.5:3b";
     private long timeoutMs = 90000;
-    private int maxOutputTokens = 220;
-    private double temperature = 0.3d;
+    private int maxOutputTokens = 500;
+    private double temperature = 0.10d;
     private boolean retryEnabled = true;
     private int maxRetries = 1;
     private boolean debugLogging = false;

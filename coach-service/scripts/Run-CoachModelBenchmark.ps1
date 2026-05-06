@@ -1,8 +1,8 @@
 param(
     [string]$RuntimeBaseUrl = "http://127.0.0.1:11434",
     [string]$OutputRoot = "",
-    [string[]]$Models = @("phi3:mini", "llama3.2:3b", "qwen2.5:3b", "smollm2:1.7b"),
-    [double]$MinimumSuccessRate = 80,
+    [string[]]$Models = @("qwen2.5:3b", "llama3.2:3b", "phi3:mini"),
+    [double]$MinimumSuccessRate = 85,
     [string]$ScoresFile = "",
     [switch]$SkipPull,
     [switch]$GenerateReportOnly
@@ -544,7 +544,7 @@ function Write-BenchmarkReport {
     [void]$report.AppendLine("")
     [void]$report.AppendLine("- Runtime: Ollama")
     [void]$report.AppendLine("- Models: " + (($ComparisonRows | ForEach-Object { $_.model }) -join ", "))
-    [void]$report.AppendLine('- Coach runtime settings: `timeout-ms=45000`, `max-output-tokens=260`, `temperature=0.10`, `retry-enabled=true`, `max-retries=1`')
+    [void]$report.AppendLine('- Coach runtime settings: `timeout-ms=45000`, `max-output-tokens=500`, `temperature=0.10`, `retry-enabled=true`, `max-retries=1`')
     [void]$report.AppendLine("- Benchmark corpus: 10 fixed Questify coach scenarios, 1 warm-up request per model, 5 measured runs per scenario")
     [void]$report.AppendLine("- Minimum AI success gate: $MinimumSuccessRate%")
     [void]$report.AppendLine("")

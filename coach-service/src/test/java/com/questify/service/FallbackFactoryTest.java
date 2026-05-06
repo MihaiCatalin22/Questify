@@ -12,7 +12,10 @@ class FallbackFactoryTest {
 
     @Test
     void create_returns_safe_fallback_payload() {
-        var factory = new FallbackFactory(Clock.fixed(Instant.parse("2026-03-19T14:31:12Z"), ZoneOffset.UTC));
+        var factory = new FallbackFactory(
+                Clock.fixed(Instant.parse("2026-03-19T14:31:12Z"), ZoneOffset.UTC),
+                new GoalFacetExtractor()
+        );
         var context = new CoachPromptContext(
                 "I want to improve my school grades by doing more math and studying more history.",
                 java.util.List.of("Evening walk"),
@@ -41,7 +44,10 @@ class FallbackFactoryTest {
 
     @Test
     void create_returns_game_practice_fallback_for_speedrunning_goals() {
-        var factory = new FallbackFactory(Clock.fixed(Instant.parse("2026-03-19T14:31:12Z"), ZoneOffset.UTC));
+        var factory = new FallbackFactory(
+                Clock.fixed(Instant.parse("2026-03-19T14:31:12Z"), ZoneOffset.UTC),
+                new GoalFacetExtractor()
+        );
         var context = new CoachPromptContext(
                 "I want to practice speedrunning Grand Theft Auto V and improve my execution.",
                 java.util.List.of(),
@@ -65,7 +71,10 @@ class FallbackFactoryTest {
 
     @Test
     void create_returns_neutral_other_fallback_for_unclear_goals() {
-        var factory = new FallbackFactory(Clock.fixed(Instant.parse("2026-03-19T14:31:12Z"), ZoneOffset.UTC));
+        var factory = new FallbackFactory(
+                Clock.fixed(Instant.parse("2026-03-19T14:31:12Z"), ZoneOffset.UTC),
+                new GoalFacetExtractor()
+        );
         var context = new CoachPromptContext(
                 "I just want life to feel a bit less chaotic.",
                 java.util.List.of(),

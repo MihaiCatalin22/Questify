@@ -22,19 +22,24 @@ public class PromptBuilder {
 
     private final PromptAssets assets;
     private final CoachProperties properties;
+    private final GoalFacetExtractor goalFacetExtractor;
 
-    public PromptBuilder(PromptAssets assets, CoachProperties properties) {
+    public PromptBuilder(PromptAssets assets, CoachProperties properties, GoalFacetExtractor goalFacetExtractor) {
         this.assets = assets;
         this.properties = properties;
+        this.goalFacetExtractor = goalFacetExtractor;
     }
 
     public GenerationPrompt buildPrimaryPrompt(CoachPromptContext context,
                                                CoachSuggestionMode mode,
                                                List<String> excludedSuggestionTitles) {
+        GoalFacetExtractor.GoalFacets facets = goalFacetExtractor.derive(context);
         Map<String, String> values = new LinkedHashMap<>();
         values.put("schema", assets.schemaText());
         values.put("mode", mode.name());
         values.put("goal", context.goal());
+        values.put("goalFacetSummary", facets.facetSummary());
+        values.put("goalCoverageGuidance", facets.coverageGuidance());
         values.put("recentQuestHistory", formatRecentHistory(context));
         values.put("recentPattern", formatRecentPattern(context));
         values.put("excludedSuggestionTitles", formatExcludedSuggestionTitles(excludedSuggestionTitles));
@@ -44,30 +49,60 @@ public class PromptBuilder {
         return new GenerationPrompt(assets.systemTemplate(), userPrompt);
     }
 
-    public GenerationPrompt buildRepairPrompt(GenerationPrompt originalPrompt,
+    public GenerationPrompt buildRepairPrompt(CoachPromptContext context,
+                                              CoachSuggestionMode mode,
+                                              List<String> excludedSuggestionTitles,
                                               String invalidOutput,
                                               List<String> validationErrors) {
+        GoalFacetExtractor.GoalFacets facets = goalFacetExtractor.derive(context);
         String errorLines = validationErrors == null || validationErrors.isEmpty()
                 ? "- No validation errors were captured."
-                : validationErrors.stream().map(error -> "- " + error).collect(Collectors.joining("\n"));
+                : validationErrors.stream()
+                .limit(6)
+                .map(error -> "- " + error)
+                .collect(Collectors.joining("\n"));
 
         String repairUserPrompt = """
                 Return JSON that exactly matches this schema:
                 %s
 
+                Suggestion mode:
+                %s
+
+                User goal:
+                %s
+
+                Goal facets:
+                %s
+
+                Coverage guidance:
+                %s
+
+                Recent quest history:
+                %s
+
+                Recent pattern:
+                %s
+
+                Excluded suggestion titles:
+                %s
+
                 Validation errors:
                 %s
 
-                Original prompt:
-                %s
-
-                Previous invalid output:
+                Previous invalid output excerpt:
                 %s
                 """.formatted(
                 assets.schemaText(),
+                mode.name(),
+                context.goal(),
+                facets.facetSummary(),
+                facets.coverageGuidance(),
+                formatRecentHistory(context),
+                formatRecentPattern(context),
+                formatExcludedSuggestionTitles(excludedSuggestionTitles),
                 errorLines,
-                originalPrompt.userPrompt(),
-                invalidOutput == null ? "" : invalidOutput
+                abbreviate(normalizeWhitespace(invalidOutput), 900)
         ).trim();
 
         debugLog("repair", assets.repairTemplate(), repairUserPrompt);
@@ -81,22 +116,38 @@ public class PromptBuilder {
         if (context.recentCompletions().isEmpty()) {
             return "No recent completions available.";
         }
-        return context.recentCompletions().stream()
+
+        List<CoachPromptContext.RecentCompletion> limited = context.recentCompletions().stream()
+                .limit(5)
+                .toList();
+        String lines = limited.stream()
                 .map(item -> "- " + item.title() + " @ " + item.completedAt())
                 .collect(Collectors.joining("\n"));
+        int remaining = Math.max(0, context.recentCompletions().size() - limited.size());
+        if (remaining > 0) {
+            lines += "\n- +" + remaining + " more recent completions";
+        }
+        return lines;
     }
 
     private String formatRecentPattern(CoachPromptContext context) {
-        String activeTitles = context.activeQuestTitles().isEmpty()
+        List<String> activeTitles = context.activeQuestTitles().stream()
+                .limit(5)
+                .toList();
+        String activeTitleSummary = activeTitles.isEmpty()
                 ? "No active quest titles available."
-                : String.join(", ", context.activeQuestTitles());
+                : String.join(", ", activeTitles);
+        int remaining = Math.max(0, context.activeQuestTitles().size() - activeTitles.size());
+        if (remaining > 0) {
+            activeTitleSummary += ", +" + remaining + " more";
+        }
         return """
                 Active quest titles: %s
                 Active quest count: %d
                 Total completed quest count: %d
                 Recent history included: %s
                 """.formatted(
-                activeTitles,
+                activeTitleSummary,
                 context.activeQuestCount(),
                 context.totalCompletedCount(),
                 context.includeRecentHistory()
@@ -107,9 +158,17 @@ public class PromptBuilder {
         if (excludedSuggestionTitles == null || excludedSuggestionTitles.isEmpty()) {
             return "No excluded suggestion titles were provided.";
         }
-        return excludedSuggestionTitles.stream()
+        List<String> limited = excludedSuggestionTitles.stream()
+                .limit(8)
+                .toList();
+        String lines = limited.stream()
                 .map(title -> "- " + title)
                 .collect(Collectors.joining("\n"));
+        int remaining = Math.max(0, excludedSuggestionTitles.size() - limited.size());
+        if (remaining > 0) {
+            lines += "\n- +" + remaining + " more excluded titles";
+        }
+        return lines;
     }
 
     private String render(String template, Map<String, String> values) {
@@ -129,6 +188,23 @@ public class PromptBuilder {
                 sha256(systemPrompt),
                 sha256(userPrompt),
                 userPrompt.length());
+    }
+
+    private static String normalizeWhitespace(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replaceAll("\\s+", " ").trim();
+    }
+
+    private static String abbreviate(String value, int maxLength) {
+        if (value == null || value.isBlank()) {
+            return "<empty>";
+        }
+        if (value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength).trim() + "...";
     }
 
     private static String sha256(String value) {

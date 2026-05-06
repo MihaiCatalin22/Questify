@@ -1,134 +1,96 @@
 import { Link } from 'react-router-dom';
-import { useAuthContext } from '../contexts/AuthContext';
+import { useAuthContext } from '../contexts/useAuthContext';
 import logoMark from '../assets/questify_logo_mark_compass.png';
-import { Target, Camera, Flame, Shield } from 'lucide-react';
+import { Bot, Camera, FileCheck2, Shield, Target } from 'lucide-react';
+import { Panel } from '../components/ui';
 
 export default function HomePage() {
   const { user } = useAuthContext();
   const loggedIn = !!user;
-  const displayName = user?.displayName ?? user?.username ?? 'Adventurer';
 
   return (
-    <main className="relative min-h-screen flex items-center justify-center">
-      <div className="absolute inset-0 -z-10 bg-gradient-to-b from-indigo-50 via-white to-white dark:from-[#0b0d12] dark:via-[#0b0d12] dark:to-[#0b0d12]" />
+    <main className="min-h-screen px-4 py-6 sm:px-6">
+      <section className="mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-6xl items-center gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(360px,1fr)]">
+        <div className="space-y-7">
+          <div className="flex items-center gap-3">
+            <img src={logoMark} alt="" className="h-10 w-10" width={40} height={40} />
+            <span className="text-lg font-semibold">Questify</span>
+          </div>
 
-      <section className="w-full max-w-6xl px-6">
-        <div className="mx-auto flex w-full max-w-4xl flex-col items-center">
-          <div className="w-full max-w-2xl rounded-3xl border bg-white/70 p-10 text-center shadow-xl backdrop-blur dark:border-slate-800 dark:bg-[#0f1115]/70">
-            <div className="mb-6 flex justify-center">
+          <div>
+            <h1 className="max-w-2xl text-4xl font-semibold leading-tight sm:text-5xl">
+              Quests, proof, and feedback in one workspace.
+            </h1>
+            <p className="mt-4 max-w-xl text-base leading-7 text-[rgb(var(--muted))]">
+              Create focused quests, submit proof files, review submissions, and ask the AI Coach for realistic next
+              quest ideas when you get stuck.
+            </p>
+          </div>
+
+          {!loggedIn ? (
+            <div className="flex flex-wrap gap-3">
+              <Link to="/login" className="btn btn-primary">Log in</Link>
+              <Link to="/register" className="btn btn-secondary">Register</Link>
+              <Link to="/privacy" className="btn btn-ghost">Privacy Policy</Link>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              <Link to="/quests" className="btn btn-primary">Open quests</Link>
+              <Link to="/quests/discover" className="btn btn-secondary">Discover</Link>
+              <Link to="/coach" className="btn btn-ghost">AI Coach</Link>
+            </div>
+          )}
+        </div>
+
+        <Panel className="overflow-hidden">
+          <div className="border-b border-[rgb(var(--border-soft))] p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold">Quest workspace</h2>
+                <p className="mt-1 text-sm text-[rgb(var(--muted))]">A quick view of how the product is organized.</p>
+              </div>
               <img
                 src={logoMark}
-                alt="Questify logo"
-                className="h-20 w-20"
-                width={90}
-                height={90}
+                alt=""
+                className="h-12 w-12"
+                width={48}
+                height={48}
                 loading="eager"
               />
             </div>
-
-            <h1 className="text-4xl font-bold tracking-tight"></h1>
-            <p className="mt-3 text-base text-slate-600 dark:text-slate-300">
-              Create quests, submit proofs, earn streaks and badges. Stay consistent—and make it fun.
-            </p>
-
-            {!loggedIn ? (
-              <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-                <Link
-                  to="/login"
-                  className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md hover:bg-gray-100 dark:hover:bg-[#161b26]"
-                >
-                  Log in
-                </Link>
-                <Link
-                  to="/register"
-                  className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md hover:bg-gray-100 dark:hover:bg-[#161b26]"
-                >
-                  Register
-                </Link>
-              </div>
-            ) : (
-              <div className="mt-7 space-y-3">
-                <div className="text-sm opacity-80">
-                  Welcome back, <span className="font-semibold">{displayName}</span> 👋
-                </div>
-                <div className="flex flex-wrap items-center justify-center gap-3">
-                  <Link
-                    to="/quests"
-                    className="rounded-2xl bg-black px-4 py-2 text-sm text-white shadow hover:shadow-md dark:bg-white dark:text-black"
-                    title="See quests you own or joined"
-                  >
-                    Open My Quests
-                  </Link>
-                  <Link
-                    to="/quests/discover"
-                    className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md hover:bg-gray-100 dark:hover:bg-[#161b26]"
-                  >
-                    Discover
-                  </Link>
-                  <Link
-                    to="/quests/new"
-                    className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md hover:bg-gray-100 dark:hover:bg-[#161b26]"
-                  >
-                    New Quest
-                  </Link>
-                  <Link
-                    to="/submissions"
-                    className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md hover:bg-gray-100 dark:hover:bg-[#161b26]"
-                  >
-                    Submissions
-                  </Link>
-                </div>
-              </div>
-            )}
-
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-              <Link
-                to="/privacy"
-                className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md hover:bg-gray-100 dark:hover:bg-[#161b26]"
-              >
-                Privacy Policy
-              </Link>
-            </div>
           </div>
 
-          <div className="mx-auto mt-8 w-full max-w-3xl grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid gap-3 p-6">
             <FeatureCard
               Icon={Target}
-              title="Set Quests"
-              text="Define goals with start/end dates, visibility, and categories."
+              title="Create quests"
+              text="Set the goal, category, visibility, and deadline."
             />
             <FeatureCard
               Icon={Camera}
-              title="Prove It"
-              text="Upload images or videos, or link external proofs—securely via signed URLs."
+              title="Upload proof"
+              text="Submit one or more proof files through the existing proof flow."
             />
             <FeatureCard
-              Icon={Flame}
-              title="Keep Streaks"
-              text="Stay on track and earn badges as you progress."
+              Icon={FileCheck2}
+              title="Track review"
+              text="See pending, approved, rejected, and scanning states clearly."
             />
             <FeatureCard
-              Icon={Shield}
-              title="Privacy-First"
-              text="Short-lived links, no PII in filenames, GDPR-minded by design."
+              Icon={Bot}
+              title="Use AI Coach"
+              text="Generate quest suggestions from your saved coach goal."
             />
+            <div className="mt-2 rounded-lg border border-[rgb(var(--border-soft))] bg-[rgba(var(--surface-2),0.45)] p-4">
+              <div className="flex items-start gap-3">
+                <Shield className="mt-0.5 h-5 w-5 text-[rgb(var(--accent))]" />
+                <p className="text-sm leading-6 text-[rgb(var(--muted))]">
+                  Proof links are short-lived and uploads avoid using personal information in file names.
+                </p>
+              </div>
+            </div>
           </div>
-
-          <div className="mx-auto mt-6 max-w-2xl text-center text-sm text-slate-600 dark:text-slate-300">
-            {!loggedIn ? (
-              <>
-                Join us today,{' '}
-                <Link to="/register" className="underline">create an account</Link> and start building your streak.
-              </>
-            ) : (
-              <>
-                Need ideas? Check{' '}
-                <Link to="/quests/discover" className="underline">Discover</Link> or spin up a{' '}
-                <Link to="/quests/new" className="underline">New Quest</Link> to kickstart your next streak.
-              </>
-            )}
-          </div>
-        </div>
+        </Panel>
       </section>
     </main>
   );
@@ -144,12 +106,12 @@ function FeatureCard({
   text: string;
 }) {
   return (
-    <div className="rounded-2xl border bg-white/70 p-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-[#0f1115]/70">
+    <div className="rounded-lg border border-[rgb(var(--border-soft))] bg-[rgba(var(--surface-2),0.45)] p-4">
       <div className="flex items-center gap-3">
-        <Icon className="h-6 w-6 flex-shrink-0 opacity-90" />
+        <Icon className="h-5 w-5 flex-shrink-0 text-[rgb(var(--accent))]" />
         <div className="flex-1">
           <div className="font-semibold">{title}</div>
-          <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{text}</div>
+          <div className="mt-1 text-sm leading-6 text-[rgb(var(--muted))]">{text}</div>
         </div>
       </div>
     </div>

@@ -2,29 +2,365 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    color-scheme: dark;
+    --bg: 10 13 17;
+    --bg-soft: 14 18 24;
+    --surface: 18 24 31;
+    --surface-2: 22 29 38;
+    --surface-3: 28 37 48;
+    --border: 50 61 76;
+    --border-soft: 37 47 60;
+    --text: 232 237 232;
+    --muted: 154 166 175;
+    --faint: 106 119 131;
+    --accent: 62 211 178;
+    --accent-strong: 34 197 149;
+    --green: 74 222 128;
+    --amber: 245 180 65;
+    --coral: 248 113 113;
+    --lavender: 169 139 250;
+  }
+
+  html {
+    min-height: 100%;
+    background: rgb(var(--bg));
+  }
+
+  body {
+    min-height: 100%;
+    background: linear-gradient(135deg, rgb(var(--bg)) 0%, rgb(12 16 22) 45%, rgb(9 12 16) 100%);
+    color: rgb(var(--text));
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  ::selection {
+    background: rgba(62, 211, 178, 0.28);
+  }
+}
+
 @layer components {
+  .app-shell {
+    @apply min-h-screen lg:grid lg:grid-cols-[256px_minmax(0,1fr)];
+  }
+
+  .app-sidebar {
+    @apply fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col border-r px-4 py-5 lg:flex;
+    border-color: rgb(var(--border-soft));
+    background: rgba(var(--bg-soft), 0.92);
+    backdrop-filter: blur(18px);
+  }
+
+  .app-main {
+    @apply min-h-screen lg:col-start-2;
+  }
+
+  .app-topbar {
+    @apply sticky top-0 z-30 flex h-16 items-center gap-3 border-b px-4 sm:px-6 lg:px-8;
+    border-color: rgb(var(--border-soft));
+    background: rgba(var(--bg), 0.78);
+    backdrop-filter: blur(18px);
+  }
+
+  .app-content {
+    @apply mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 lg:px-8 lg:py-8;
+  }
+
+  .brand-lockup {
+    @apply flex items-center gap-3 text-base font-semibold;
+  }
+
+  .brand-fallback {
+    @apply grid h-8 w-8 place-items-center rounded-lg text-sm font-bold;
+    background: rgba(var(--accent), 0.16);
+    color: rgb(var(--accent));
+  }
+
+  .side-link {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition;
+    color: rgb(var(--muted));
+  }
+
+  .side-link:hover {
+    background: rgba(var(--surface-2), 0.85);
+    color: rgb(var(--text));
+  }
+
+  .side-link-active {
+    background: linear-gradient(135deg, rgba(var(--accent), 0.18), rgba(var(--lavender), 0.1));
+    color: rgb(var(--text));
+    box-shadow: inset 0 0 0 1px rgba(var(--accent), 0.22);
+  }
+
+  .sidebar-note {
+    @apply mt-5 rounded-lg border p-4 text-sm leading-6;
+    border-color: rgb(var(--border-soft));
+    background: rgba(var(--surface), 0.7);
+    color: rgb(var(--muted));
+  }
+
+  .mobile-menu {
+    @apply fixed inset-0 z-50 lg:hidden;
+  }
+
+  .mobile-menu-backdrop {
+    @apply absolute inset-0 bg-black/60;
+  }
+
+  .mobile-menu-panel {
+    @apply relative z-10 flex h-full w-[min(20rem,calc(100vw-2rem))] flex-col border-r p-4;
+    border-color: rgb(var(--border-soft));
+    background: rgb(var(--bg-soft));
+  }
+
+  .topbar-title {
+    @apply text-sm font-semibold text-[rgb(var(--muted))] lg:hidden;
+  }
+
+  .quest-page {
+    @apply mx-auto w-full space-y-5;
+  }
+
+  .page-heading {
+    @apply flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between;
+  }
+
+  .page-heading h1 {
+    @apply text-2xl font-semibold leading-tight sm:text-3xl;
+    color: rgb(var(--text));
+  }
+
+  .page-heading p {
+    @apply mt-2 max-w-3xl text-sm leading-6;
+    color: rgb(var(--muted));
+  }
+
+  .page-kicker {
+    @apply mb-2 flex items-center gap-2 text-sm font-medium;
+    color: rgb(var(--accent));
+  }
+
+  .page-actions,
+  .panel-actions {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .panel,
+  .card {
+    @apply rounded-lg border shadow-none;
+    border-color: rgb(var(--border-soft));
+    background: rgba(var(--surface), 0.86);
+  }
+
+  .card-body {
+    @apply p-5;
+  }
+
+  .panel-header {
+    @apply flex flex-col gap-3 border-b p-5 sm:flex-row sm:items-start sm:justify-between;
+    border-color: rgb(var(--border-soft));
+  }
+
+  .panel-header h2,
+  .section-title {
+    @apply text-lg font-semibold;
+    color: rgb(var(--text));
+  }
+
+  .panel-header p {
+    @apply mt-1 text-sm leading-6;
+    color: rgb(var(--muted));
+  }
+
   .btn {
-    @apply inline-flex items-center justify-center rounded-lg px-3 py-2 text-sm font-medium
-           border border-slate-300 bg-white text-slate-700 shadow-sm
-           hover:bg-slate-50 active:shadow-none
-           focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-55;
+    border-color: rgb(var(--border));
   }
+
   .btn-primary {
-    @apply btn bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 hover:border-indigo-700;
+    border-color: rgba(var(--accent), 0.55);
+    background: linear-gradient(135deg, rgb(var(--accent-strong)), rgb(31 165 132));
+    color: rgb(5 18 16);
   }
+
+  .btn-primary:hover {
+    filter: brightness(1.06);
+  }
+
+  .btn-secondary {
+    background: rgba(var(--surface-2), 0.92);
+    color: rgb(var(--text));
+  }
+
+  .btn-secondary:hover,
+  .btn-ghost:hover {
+    background: rgba(var(--surface-3), 0.9);
+  }
+
   .btn-ghost {
-    @apply inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100;
+    border-color: transparent;
+    background: transparent;
+    color: rgb(var(--muted));
   }
-  .chip {
-    @apply inline-flex items-center h-6 rounded-full border border-slate-300 bg-white text-xs font-medium px-2 text-slate-600;
+
+  .btn-danger {
+    border-color: rgba(var(--coral), 0.45);
+    background: rgba(var(--coral), 0.12);
+    color: rgb(254 202 202);
   }
-  .chip-brand { @apply chip border-indigo-200 bg-indigo-50 text-indigo-700; }
-  .card { @apply rounded-xl border border-slate-200 bg-white shadow; }
-  .card-body { @apply p-5; }
+
+  .icon-btn {
+    @apply inline-grid h-10 w-10 place-items-center rounded-lg border transition;
+    border-color: rgb(var(--border-soft));
+    background: rgba(var(--surface), 0.7);
+    color: rgb(var(--muted));
+  }
+
+  .icon-btn:hover {
+    background: rgba(var(--surface-2), 0.9);
+    color: rgb(var(--text));
+  }
+
   .field {
-    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none
-           focus:ring-2 focus:ring-indigo-400;
+    @apply w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition disabled:cursor-not-allowed disabled:opacity-60;
+    border-color: rgb(var(--border));
+    background: rgba(var(--bg-soft), 0.86);
+    color: rgb(var(--text));
   }
-  .muted { @apply text-sm text-slate-500; }
-  .kbd { @apply rounded-md border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[11px] font-mono text-slate-500; }
+
+  .field:focus {
+    border-color: rgba(var(--accent), 0.7);
+    box-shadow: 0 0 0 3px rgba(var(--accent), 0.12);
+  }
+
+  .field::placeholder {
+    color: rgb(var(--faint));
+  }
+
+  .field-label,
+  .label {
+    @apply mb-1.5 block text-sm font-medium;
+    color: rgb(var(--muted));
+  }
+
+  .muted {
+    @apply text-sm;
+    color: rgb(var(--muted));
+  }
+
+  .badge,
+  .chip,
+  .pill {
+    @apply inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium;
+    border-color: rgb(var(--border));
+    background: rgba(var(--surface-2), 0.7);
+    color: rgb(var(--muted));
+  }
+
+  .badge-neutral {
+    border-color: rgb(var(--border));
+    color: rgb(var(--muted));
+  }
+
+  .badge-accent,
+  .chip-brand {
+    border-color: rgba(var(--accent), 0.35);
+    background: rgba(var(--accent), 0.12);
+    color: rgb(153 246 228);
+  }
+
+  .badge-success {
+    border-color: rgba(var(--green), 0.38);
+    background: rgba(var(--green), 0.1);
+    color: rgb(187 247 208);
+  }
+
+  .badge-warning {
+    border-color: rgba(var(--amber), 0.42);
+    background: rgba(var(--amber), 0.11);
+    color: rgb(253 230 138);
+  }
+
+  .badge-danger {
+    border-color: rgba(var(--coral), 0.45);
+    background: rgba(var(--coral), 0.11);
+    color: rgb(254 202 202);
+  }
+
+  .badge-info {
+    border-color: rgba(var(--lavender), 0.4);
+    background: rgba(var(--lavender), 0.11);
+    color: rgb(221 214 254);
+  }
+
+  .tabs {
+    @apply inline-flex rounded-lg border p-1;
+    border-color: rgb(var(--border-soft));
+    background: rgba(var(--bg-soft), 0.82);
+  }
+
+  .tab {
+    @apply rounded-md px-3 py-1.5 text-sm font-medium transition;
+    color: rgb(var(--muted));
+  }
+
+  .tab-active {
+    background: rgba(var(--accent), 0.16);
+    color: rgb(var(--text));
+  }
+
+  .table-shell {
+    @apply overflow-x-auto rounded-lg border;
+    border-color: rgb(var(--border-soft));
+  }
+
+  .data-table {
+    @apply min-w-full text-left text-sm;
+  }
+
+  .data-table th {
+    @apply border-b px-4 py-3 font-medium;
+    border-color: rgb(var(--border-soft));
+    color: rgb(var(--muted));
+    background: rgba(var(--surface-2), 0.65);
+  }
+
+  .data-table td {
+    @apply border-b px-4 py-3 align-top;
+    border-color: rgb(var(--border-soft));
+    color: rgb(var(--text));
+  }
+
+  .data-table tr:hover td {
+    background: rgba(var(--surface-2), 0.36);
+  }
+
+  .empty-state {
+    @apply rounded-lg border border-dashed p-6 text-sm;
+    border-color: rgb(var(--border));
+    background: rgba(var(--surface), 0.55);
+  }
+
+  .state-line {
+    @apply flex items-center gap-2 rounded-lg border p-4 text-sm;
+    border-color: rgb(var(--border-soft));
+    background: rgba(var(--surface), 0.75);
+    color: rgb(var(--muted));
+  }
+
+  .state-error {
+    border-color: rgba(var(--coral), 0.45);
+    background: rgba(var(--coral), 0.1);
+    color: rgb(254 202 202);
+  }
+
+  .link {
+    @apply font-medium underline-offset-4 hover:underline;
+    color: rgb(var(--accent));
+  }
 }

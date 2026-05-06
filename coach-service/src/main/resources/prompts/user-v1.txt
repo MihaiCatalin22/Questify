@@ -53,6 +53,12 @@ Suggestion mode:
 User goal:
 {{goal}}
 
+Goal facets:
+{{goalFacetSummary}}
+
+Coverage guidance:
+{{goalCoverageGuidance}}
+
 Recent quest history:
 {{recentQuestHistory}}
 

@@ -1,9 +1,23 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useDeleteQuest, useLeaveQuest, useMyQuestsServerPage } from '../../hooks/useQuests';
-import { useAuthContext } from '../../contexts/AuthContext';
+import { useAuthContext } from '../../contexts/useAuthContext';
 import type { QuestDTO } from '../../types/quest';
 import { toast } from 'react-hot-toast';
+import { Archive, ChevronLeft, ChevronRight, Compass, RefreshCcw, XCircle } from 'lucide-react';
+import { getErrorMessage } from '../../utils/errors';
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+  PageShell,
+  Panel,
+  SelectInput,
+  StatusBadge,
+} from '../../components/ui';
 
 type Tab = 'ACTIVE' | 'ARCHIVED';
 
@@ -12,6 +26,7 @@ const HIDE_AFTER_DAYS = 7;
 const HIDE_AFTER_MS = HIDE_AFTER_DAYS * 24 * 60 * 60 * 1000;
 
 type SeenMap = Record<string, number>;
+type QuestListItem = QuestDTO & { participants?: unknown[] };
 
 function loadSeen(): SeenMap {
   try {
@@ -19,11 +34,17 @@ function loadSeen(): SeenMap {
     if (!raw) return {};
     const obj = JSON.parse(raw);
     if (obj && typeof obj === 'object') return obj as SeenMap;
-  } catch {}
+  } catch {
+    return {};
+  }
   return {};
 }
 function saveSeen(map: SeenMap) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(map)); } catch {}
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(map));
+  } catch {
+    return;
+  }
 }
 
 export default function QuestsList() {
@@ -58,7 +79,7 @@ export default function QuestsList() {
     let changed = false;
     for (const q of quests) {
       const id = String(q.id);
-      const completed = Boolean((q as any).completedByCurrentUser);
+      const completed = Boolean(q.completedByCurrentUser);
       if (completed && next[id] == null) {
         next[id] = now;
         changed = true;
@@ -78,15 +99,15 @@ export default function QuestsList() {
     return Date.now() - firstSeen >= HIDE_AFTER_MS;
   }, [seenCompletedAt]);
 
-  if (isLoading) return <div className="p-6">Loading quests…</div>;
-  if (isError) return <div className="p-6 text-red-600">{(error as any)?.message || 'Failed to load quests'}</div>;
+  if (isLoading) return <LoadingState label="Loading quests..." />;
+  if (isError) return <ErrorState message={getErrorMessage(error, 'Failed to load quests')} />;
 
   // Backend already filtered by "archived" flag.
   // Optionally hide long-ago completed on ACTIVE tab only.
-  const list = (tab === 'ACTIVE'
-    ? quests.filter((q: any) => (showCompletedInActive ? true : !(q as any).completedByCurrentUser || !isCompletedAgedOut(q as any)))
+  const list: QuestListItem[] = tab === 'ACTIVE'
+    ? quests.filter((q) => (showCompletedInActive ? true : !q.completedByCurrentUser || !isCompletedAgedOut(q)))
     : quests
-  ) as (QuestDTO & any)[];
+  ;
 
   const nextDisabled = page + 1 >= totalPages || isFetching;
   const prevDisabled = page <= 0 || isFetching;
@@ -95,29 +116,32 @@ export default function QuestsList() {
   const goNext = () => { if (!nextDisabled) setPage(p => p + 1); };
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">My Quests</h1>
-        <div className="flex items-center gap-2">
-          <Link to="/quests/new" className="rounded-2xl border px-3 py-1.5 hover:shadow">
-            New Quest
-          </Link>
-          <Link to="/quests/discover" className="rounded-2xl border px-3 py-1.5 hover:shadow">
-            Discover
-          </Link>
-        </div>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Quests"
+        description="Manage the quests you own or joined. Active quests stay visible until they are completed or archived."
+        actions={
+          <>
+            <Link to="/quests/discover" className="btn btn-secondary">
+              <Compass className="h-4 w-4" />
+              Discover
+            </Link>
+            <Link to="/quests/new" className="btn btn-primary">New Quest</Link>
+          </>
+        }
+      />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
+      <Panel className="p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="tabs">
           <button
-            className={`rounded-full px-3 py-1.5 text-sm border ${tab === 'ACTIVE' ? 'bg-black text-white' : 'bg-white'}`}
+            className={`tab ${tab === 'ACTIVE' ? 'tab-active' : ''}`}
             onClick={() => setTab('ACTIVE')}
           >
             Active
           </button>
           <button
-            className={`rounded-full px-3 py-1.5 text-sm border ${tab === 'ARCHIVED' ? 'bg-black text-white' : 'bg-white'}`}
+            className={`tab ${tab === 'ARCHIVED' ? 'tab-active' : ''}`}
             onClick={() => setTab('ARCHIVED')}
           >
             Archived
@@ -125,42 +149,44 @@ export default function QuestsList() {
         </div>
 
         {tab === 'ACTIVE' && (
-          <label className="ml-1 flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-[rgb(var(--muted))]">
             <input
               type="checkbox"
               checked={showCompletedInActive}
               onChange={(e) => setShowCompletedInActive(e.target.checked)}
+              className="h-4 w-4 rounded border-[rgb(var(--border))] bg-[rgb(var(--bg-soft))]"
             />
             Show completed
           </label>
         )}
 
-        {/* Pager with totals (server-provided) */}
-        <div className="ml-auto flex items-center gap-2 text-sm">
-          <button
-            className="rounded border px-2 py-1 disabled:opacity-50"
+          <div className="ml-auto flex flex-wrap items-center gap-2 text-sm">
+            <Button
+              variant="ghost"
             onClick={goPrev}
             disabled={prevDisabled}
             title="Previous page"
           >
-            ‹ Prev
-          </button>
+              <ChevronLeft className="h-4 w-4" />
+              Prev
+            </Button>
 
-          <span className="px-2">
+            <span className="px-2 text-[rgb(var(--muted))]">
             Page <strong>{page + 1}</strong> of <strong>{totalPages}</strong>
           </span>
 
-          <button
-            className="rounded border px-2 py-1 disabled:opacity-50"
+            <Button
+              variant="ghost"
             onClick={goNext}
             disabled={nextDisabled}
             title="Next page"
           >
-            Next ›
-          </button>
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
 
-          <select
-            className="ml-2 rounded border px-2 py-1"
+            <SelectInput
+              className="w-auto py-2"
             value={size}
             onChange={(e) => { setPage(0); setSize(Number(e.target.value)); }}
             title="Items per page"
@@ -168,35 +194,39 @@ export default function QuestsList() {
             <option value={12}>12 / page</option>
             <option value={24}>24 / page</option>
             <option value={48}>48 / page</option>
-          </select>
+            </SelectInput>
 
-          <span className="opacity-70">Total: {total}</span>
+            <span className="text-[rgb(var(--muted))]">Total: {total}</span>
 
-          <button
-            className="ml-2 rounded border px-2 py-1"
+            <Button
+              variant="ghost"
             onClick={() => refetch()}
             disabled={isFetching}
             title="Refresh"
           >
-            {isFetching ? 'Refreshing…' : 'Refresh'}
-          </button>
+              <RefreshCcw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+              {isFetching ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          </div>
         </div>
-      </div>
+      </Panel>
 
       {list.length === 0 ? (
-        <div className="text-sm text-gray-600">
-          {tab === 'ACTIVE' ? 'No active quests on this page.' : 'No archived quests on this page.'}
-        </div>
+        <EmptyState
+          title={tab === 'ACTIVE' ? 'No active quests on this page.' : 'No archived quests on this page.'}
+          description="Change the tab, refresh the list, or create a new quest."
+          action={<Link to="/quests/new" className="btn btn-secondary">Create quest</Link>}
+        />
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {list.map((q) => {
             const participantsCount =
-              (q as any).participantsCount ??
-              (Array.isArray((q as any).participants) ? (q as any).participants.length : 0);
+              q.participantsCount ??
+              (Array.isArray(q.participants) ? q.participants.length : 0);
 
-            const completed = Boolean((q as any).completedByCurrentUser);
-            const archivedQuest = (q as any).status === 'ARCHIVED';
-            const isOwner = user && String(user.id) === String((q as any).createdByUserId);
+            const completed = Boolean(q.completedByCurrentUser);
+            const archivedQuest = q.status === 'ARCHIVED';
+            const isOwner = Boolean(user && String(user.id) === String(q.createdByUserId));
 
             const onArchive = async () => {
               try {
@@ -207,95 +237,87 @@ export default function QuestsList() {
                     setPage(p => Math.max(0, p - 1));
                   }
                 }, 0);
-              } catch (e: any) {
-                const msg = e?.response?.data?.message || e?.message || 'Failed to archive quest';
-                toast.error(String(msg));
+              } catch (e: unknown) {
+                toast.error(getErrorMessage(e, 'Failed to archive quest'));
               }
             };
 
             const onLeave = async () => {
               if (isOwner) {
-                toast('You can’t leave quests you own. Archive or delete the quest instead.', { icon: 'ℹ️' });
+                toast('You cannot leave quests you own. Archive the quest instead.');
                 return;
               }
               try {
                 await leave.mutateAsync(String(q.id));
                 toast.success('Left quest');
-              } catch (e: any) {
-                const msg = e?.response?.data?.message || e?.message || 'Failed to leave quest';
-                toast.error(String(msg));
+              } catch (e: unknown) {
+                toast.error(getErrorMessage(e, 'Failed to leave quest'));
               }
             };
 
             return (
-              <div key={q.id} className="rounded-2xl border p-4 space-y-2 bg-white shadow-sm dark:bg-[#0f1115]">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-semibold text-lg">
-                    <Link to={`/quests/${q.id}`} className="underline">{q.title}</Link>
+              <Panel key={q.id} className="flex min-h-[220px] flex-col p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="min-w-0 text-lg font-semibold leading-snug">
+                    <Link to={`/quests/${q.id}`} className="hover:text-[rgb(var(--accent))]">{q.title}</Link>
                   </h3>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border">
-                      {q.category ?? 'General'}
-                    </span>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Badge tone="info">{q.category ?? 'General'}</Badge>
 
-                    {(q as any).status && !completed && !archivedQuest && (
-                      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border">
-                        {(q as any).status}
-                      </span>
+                    {q.status && !completed && !archivedQuest && (
+                      <StatusBadge status={q.status} />
                     )}
 
-                    <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border" title="Participants">
+                    <Badge title="Participants">
                       Participants: {participantsCount}
-                    </span>
+                    </Badge>
 
                     {completed && (
-                      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border border-green-600 text-green-700 bg-green-50">
-                        Completed
-                      </span>
+                      <Badge tone="success">Completed</Badge>
                     )}
 
                     {archivedQuest && (
-                      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border border-slate-400 text-slate-600 bg-slate-50">
-                        Archived
-                      </span>
+                      <Badge>Archived</Badge>
                     )}
                   </div>
                 </div>
 
                 {q.description && (
-                  <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-3">{q.description}</p>
+                  <p className="mt-3 line-clamp-3 text-sm leading-6 text-[rgb(var(--muted))]">{q.description}</p>
                 )}
 
-                <div className="flex gap-3 text-sm">
+                <div className="mt-auto flex flex-wrap gap-2 pt-5">
                   {isOwner && !completed && !archivedQuest && (
-                    <Link to={`/quests/${q.id}/edit`} className="underline">Edit</Link>
+                    <Link to={`/quests/${q.id}/edit`} className="btn btn-ghost">Edit</Link>
                   )}
                   {isOwner && (
-                    <button
+                    <Button
+                      variant="ghost"
                       onClick={onArchive}
-                      className="underline"
                       disabled={del.isPending}
                     >
-                      {del.isPending ? 'Archiving…' : 'Archive'}
-                    </button>
+                      <Archive className="h-4 w-4" />
+                      {del.isPending ? 'Archiving...' : 'Archive'}
+                    </Button>
                   )}
 
                   {!archivedQuest && (
-                    <button
+                    <Button
+                      variant="ghost"
                       onClick={onLeave}
-                      className="underline"
                       disabled={leave.isPending && !isOwner}
                       title={isOwner ? "You can't leave quests you own" : "Leave this quest"}
                     >
-                      {leave.isPending && !isOwner ? 'Leaving…' : 'Leave'}
-                    </button>
+                      <XCircle className="h-4 w-4" />
+                      {leave.isPending && !isOwner ? 'Leaving...' : 'Leave'}
+                    </Button>
                   )}
                 </div>
-              </div>
+              </Panel>
             );
           })}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

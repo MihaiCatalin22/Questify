@@ -721,7 +721,7 @@ video {
   overflow-x: auto;
 }
 
-.rounded-2xl {
+.rounded-lg {
   border-radius: 1rem;
 }
 

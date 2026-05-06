@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { useAuth } from "react-oidc-context";
+import { Button, LoadingState, Panel } from "./ui";
 
 const LOGOUT_REASON_KEY = "questify:logout-reason";
 
@@ -21,7 +22,7 @@ export default function ProtectedRoute() {
   }, [auth, reason]);
 
   if (auth.activeNavigator || auth.isLoading || redirecting) {
-    return <div className="p-6 text-sm opacity-70">Loading…</div>;
+    return <div className="p-6"><LoadingState label="Loading..." /></div>;
   }
 
   if (!auth.isAuthenticated) {
@@ -35,23 +36,22 @@ export default function ProtectedRoute() {
 
     return (
       <div className="p-6 max-w-xl">
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f1115] p-5 space-y-3">
+        <Panel className="p-5 space-y-3">
           <div className="text-lg font-semibold">{title}</div>
           <div className="text-sm opacity-80">{desc}</div>
 
           <div className="flex flex-wrap gap-2 pt-2">
-            <button
+            <Button
               onClick={() => {
                 sessionStorage.removeItem(LOGOUT_REASON_KEY);
                 auth.signinRedirect();
               }}
-              className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
-                         bg-white dark:bg-[#0f1115] border-slate-200 dark:border-slate-800"
+              variant="primary"
             >
               Sign in
-            </button>
+            </Button>
 
-            <button
+            <Button
               onClick={async () => {
                 sessionStorage.removeItem(LOGOUT_REASON_KEY);
                 try {
@@ -60,13 +60,11 @@ export default function ProtectedRoute() {
                   window.location.href = "/";
                 }
               }}
-              className="rounded-2xl border px-4 py-2 text-sm shadow hover:shadow-md
-                         border-slate-200 dark:border-slate-800 opacity-80"
             >
               Go home
-            </button>
+            </Button>
           </div>
-        </div>
+        </Panel>
       </div>
     );
   }

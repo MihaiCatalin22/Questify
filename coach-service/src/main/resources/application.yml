@@ -34,10 +34,10 @@ server:
 
 coach:
   runtime: ${COACH_RUNTIME:ollama}
-  model: ${COACH_MODEL:smollm2:1.7b}
+  model: ${COACH_MODEL:qwen2.5:3b}
   timeout-ms: ${COACH_TIMEOUT_MS:90000}
-  max-output-tokens: ${COACH_MAX_OUTPUT_TOKENS:220}
-  temperature: ${COACH_TEMPERATURE:0.3}
+  max-output-tokens: ${COACH_MAX_OUTPUT_TOKENS:500}
+  temperature: ${COACH_TEMPERATURE:0.10}
   retry-enabled: ${COACH_RETRY_ENABLED:true}
   max-retries: ${COACH_MAX_RETRIES:1}
   debug-logging: ${COACH_DEBUG_LOGGING:false}

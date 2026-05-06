@@ -2,19 +2,40 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuest, useJoinQuest, useLeaveQuest, useMyQuests } from '../../hooks/useQuests';
 import { useCreateSubmission, useSubmissionsForQuest } from '../../hooks/useSubmissions';
-import { useAuthContext } from '../../contexts/AuthContext';
+import { useAuthContext } from '../../contexts/useAuthContext';
 import { toast } from 'react-hot-toast';
 import http from '../../api/https';
 import type { SubmissionDTO } from '../../types/submission';
+import type { QuestDTO, QuestStatus, QuestVisibility } from '../../types/quest';
+import { CalendarDays, CheckCircle2, Image as ImageIcon, UploadCloud, Users, X } from 'lucide-react';
+import { getErrorMessage } from '../../utils/errors';
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  FieldLabel,
+  LoadingState,
+  PageHeader,
+  PageShell,
+  Panel,
+  StatusBadge,
+  TextArea,
+} from '../../components/ui';
 
-function getBearer(auth: ReturnType<typeof useAuthContext> | any): string | null {
-  try {
-    const fromFn = auth?.getAuthToken?.();
-    const fromField = auth?.jwt;
-    return fromFn || fromField || null;
-  } catch {
-    return auth?.jwt ?? null;
-  }
+type QuestDetailView = QuestDTO & {
+  createdBy?: { id?: string | number };
+  createdById?: string | number;
+  participants?: unknown[];
+};
+
+type SubmissionView = SubmissionDTO & {
+  reviewStatus?: SubmissionDTO['status'];
+  closed?: boolean;
+};
+
+function getBearer(auth: ReturnType<typeof useAuthContext>): string | null {
+  return auth.getAuthToken() || auth.jwt || null;
 }
 
 function toSameOriginS3(url?: string | null): string | null {
@@ -62,7 +83,9 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
     let excerpt = '';
     try {
       excerpt = (await blob.text()).slice(0, 300);
-    } catch {}
+    } catch {
+      excerpt = '';
+    }
     throw new Error(excerpt ? `Non-image response:\n${excerpt}` : 'Non-image response (no preview)');
   }
 
@@ -75,7 +98,7 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
     if (!ctx) throw new Error('No 2D context');
     ctx.drawImage(bmp, 0, 0);
     const dataUrl = canvas.toDataURL('image/png');
-    if ((bmp as any).close) try { (bmp as any).close(); } catch {}
+    bmp.close();
     return { src: dataUrl };
   } catch {
     const obj = URL.createObjectURL(blob);
@@ -84,7 +107,7 @@ async function materializeRenderableSrc(url: string): Promise<{ src: string; rev
 }
 
 /**
- * ✅ Strips EXIF/GPS/time metadata by re-encoding via Canvas.
+ * Strips EXIF/GPS/time metadata by re-encoding via Canvas.
  * - Resizes if needed
  * - Tries to preserve original format (png/webp/jpeg)
  * - Keeps GIF as-is (avoid breaking animation)
@@ -111,7 +134,7 @@ async function sanitizeImageForUpload(
     if (!ctx) return file;
     ctx.drawImage(bmp, 0, 0, w, h);
 
-    if ((bmp as any).close) try { (bmp as any).close(); } catch {}
+    bmp.close();
 
     const inputType = (file.type || '').toLowerCase();
     const preferredType =
@@ -226,8 +249,8 @@ function ProofImage({
       revokeRef.current = revoke ?? null;
       setSrc(safeSrc);
       setDebug(null);
-    } catch (e: any) {
-      setDebug(String(e?.message || e) || 'Failed to fetch image.');
+    } catch (e: unknown) {
+      setDebug(getErrorMessage(e, 'Failed to fetch image.'));
     }
   };
 
@@ -265,7 +288,7 @@ function ProofImage({
   );
 }
 
-/** ✅ Collapsed by default, expandable to show all proofs (like SubmissionDetail) */
+/** Collapsed by default, expandable to show all proofs (like SubmissionDetail) */
 function SubmissionPreview({ submission }: { submission: SubmissionDTO }) {
   const auth = useAuthContext();
   const token = getBearer(auth);
@@ -344,7 +367,7 @@ function SubmissionPreview({ submission }: { submission: SubmissionDTO }) {
   }, [submission?.id, token]);
 
   if (displayUrls.length === 0) {
-    return <div className="text-sm text-gray-500">Generating secure link…</div>;
+    return <div className="text-sm text-[rgb(var(--muted))]">Generating secure link...</div>;
   }
 
   const total = displayUrls.length;
@@ -360,7 +383,7 @@ function SubmissionPreview({ submission }: { submission: SubmissionDTO }) {
         {total > 1 && (
           <button
             type="button"
-            className="text-xs underline opacity-70 hover:opacity-100"
+            className="text-xs text-[rgb(var(--accent))] underline-offset-4 hover:underline"
             onClick={() => setExpanded((v) => !v)}
           >
             {expanded ? 'Hide' : `Show all (${total})`}
@@ -403,23 +426,20 @@ function InfoModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border bg-white p-5 shadow-xl dark:bg-[#0f1115] dark:border-slate-700">
+      <Panel className="relative z-10 w-full max-w-md p-5">
         <div className="flex items-start justify-between">
           <h3 className="text-lg font-semibold">{title}</h3>
-          <button className="text-sm opacity-70 hover:opacity-100" onClick={onClose}>
-            ✕
-          </button>
+          <Button variant="ghost" className="h-9 px-2" onClick={onClose} aria-label="Close dialog">
+            <X className="h-4 w-4" />
+          </Button>
         </div>
         <div className="mt-3 text-sm">{children}</div>
         <div className="mt-5 text-right">
-          <button
-            className="px-3 py-1.5 rounded-lg border shadow text-sm hover:bg-gray-100 dark:hover:bg-[#161b26]"
-            onClick={onClose}
-          >
+          <Button onClick={onClose}>
             OK
-          </button>
+          </Button>
         </div>
-      </div>
+      </Panel>
     </div>
   );
 }
@@ -433,6 +453,7 @@ export default function QuestDetail() {
   const { user } = auth;
 
   const { data: quest, isLoading, isError, error } = useQuest(safeQuestId);
+  const questView = quest as QuestDetailView | undefined;
   const { data: submissions } = useSubmissionsForQuest(safeQuestId);
   const { data: myQuests } = useMyQuests();
   const create = useCreateSubmission(safeQuestId);
@@ -449,31 +470,31 @@ export default function QuestDetail() {
   const [showOwnerLeaveModal, setShowOwnerLeaveModal] = useState(false);
 
   const ownerId =
-    (quest as any)?.createdByUserId ??
-    (quest as any)?.createdBy?.id ??
-    (quest as any)?.createdById ??
+    questView?.createdByUserId ??
+    questView?.createdBy?.id ??
+    questView?.createdById ??
     null;
 
   const isOwner = !!(user && ownerId && String(user.id) === String(ownerId));
   const joinedFromServer =
-    isOwner || !!myQuests?.some((q) => String(q.id) === String((quest as any)?.id));
+    isOwner || !!myQuests?.some((q) => String(q.id) === String(questView?.id));
   const joinedByMe = localJoined == null ? joinedFromServer : localJoined;
 
-  const startDate = (quest as any)?.startDate ? new Date((quest as any).startDate) : null;
-  const endDate = (quest as any)?.endDate ? new Date((quest as any).endDate) : null;
+  const startDate = questView?.startDate ? new Date(questView.startDate) : null;
+  const endDate = questView?.endDate ? new Date(questView.endDate) : null;
   const now = new Date();
 
   const notStartedYet = !!(startDate && now < startDate);
   const ended = !!(endDate && now >= endDate);
 
-  const visibility = (quest as any)?.visibility ?? 'PRIVATE';
-  const status = (quest as any)?.status ?? 'ACTIVE';
+  const visibility: QuestVisibility = questView?.visibility ?? 'PRIVATE';
+  const status: QuestStatus = questView?.status ?? 'ACTIVE';
 
   const participantCount =
-    typeof (quest as any)?.participantsCount === 'number'
-      ? (quest as any).participantsCount
-      : Array.isArray((quest as any)?.participants)
-        ? (quest as any).participants.length
+    typeof questView?.participantsCount === 'number'
+      ? questView.participantsCount
+      : Array.isArray(questView?.participants)
+        ? questView.participants.length
         : 0;
 
   const mySubs = useMemo(() => {
@@ -484,7 +505,7 @@ export default function QuestDetail() {
     });
   }, [submissions, user?.id]);
 
-  const completed = Boolean((quest as any)?.completedByCurrentUser);
+  const completed = Boolean(questView?.completedByCurrentUser);
 
   const canSubmit = Boolean(
     joinedByMe && !completed && status !== 'ARCHIVED' && !notStartedYet && !ended
@@ -507,42 +528,36 @@ export default function QuestDetail() {
     const toastId = 'upload-many';
 
     try {
-      toast.loading(`Preparing ${files.length} file(s)…`, { id: toastId });
+      toast.loading(`Preparing ${files.length} file(s)...`, { id: toastId });
 
-      // ✅ Always sanitize images (removes EXIF/GPS/time); also resizes if needed.
+      // Always sanitize images (removes EXIF/GPS/time); also resizes if needed.
       const processed: File[] = [];
       for (let i = 0; i < files.length; i++) {
         const original = files[i];
-        toast.loading(`Optimizing ${i + 1}/${files.length}…`, { id: toastId });
+        toast.loading(`Optimizing ${i + 1}/${files.length}...`, { id: toastId });
 
         let f: File = original;
         if (/^image\//i.test(f.type)) {
-          // eslint-disable-next-line no-await-in-loop
           f = await sanitizeImageForUpload(f);
         }
         processed.push(f);
       }
 
-      toast.loading(`Uploading ${processed.length} file(s)…`, { id: toastId });
+      toast.loading(`Uploading ${processed.length} file(s)...`, { id: toastId });
 
       await create.mutateAsync({
         questId: safeQuestId,
         comment: comment || undefined,
         files: processed,
-      } as any);
+      });
 
       toast.success(`Uploaded ${processed.length} proof(s)!`, { id: toastId });
 
       setComment('');
       setFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = '';
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        err?.message ||
-        'Failed to create submission';
-      toast.error(String(msg), { id: toastId });
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to create submission'), { id: toastId });
     } finally {
       setBatchSubmitting(false);
     }
@@ -566,293 +581,239 @@ export default function QuestDetail() {
       await leave.mutateAsync(safeQuestId);
       setLocalJoined(false);
       toast.success('Left quest');
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Failed to leave quest');
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, 'Failed to leave quest'));
     }
   };
 
   return (
-    <div className="p-6">
-      <div className="mx-auto" style={{ maxWidth: 1100 }}>
+    <PageShell>
+      <div className="mx-auto max-w-6xl">
         {!safeQuestId ? (
-          <div className="p-6 text-sm text-gray-600">No quest selected.</div>
+          <EmptyState title="No quest selected." description="Open a quest from the list to view details." />
         ) : isLoading ? (
-          <div className="p-6">Loading quest…</div>
+          <LoadingState label="Loading quest..." />
         ) : isError || !quest ? (
-          <div className="p-6 text-red-600">
-            {(error as any)?.message || 'Failed to load quest'}
-          </div>
+          <ErrorState message={getErrorMessage(error, 'Failed to load quest')} />
         ) : (
-          <div className="space-y-6">
-            <div className="rounded-2xl border bg-white shadow-sm dark:bg-[#0f1115]">
-              <div className="p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <h1 className="text-2xl font-semibold leading-tight break-words">
-                      {quest.title}
-                    </h1>
-                    {quest.description && (
-                      <p className="mt-2 text-gray-700 dark:text-gray-300">
-                        {quest.description}
-                      </p>
-                    )}
-
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border">
-                        {quest.category ?? 'General'}
-                      </span>
-
-                      <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border">
-                        {visibility}
-                      </span>
-
-                      {(quest as any).status && !completed && (
-                        <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border">
-                          {(quest as any).status}
-                        </span>
-                      )}
-
-                      <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border">
-                        Participants: {participantCount}
-                      </span>
-
-                      {startDate && (
-                        <span
-                          className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border"
-                          title="Start date"
-                        >
-                          Starts: {startDate.toLocaleDateString()}
-                        </span>
-                      )}
-                      {endDate && (
-                        <span
-                          className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border"
-                          title="End date"
-                        >
-                          Ends: {endDate.toLocaleDateString()}
-                        </span>
-                      )}
-
-                      {completed ? (
-                        <span
-                          className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border border-green-600 text-green-700 bg-green-50"
-                          title="You have completed this quest"
-                        >
-                          Completed
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="shrink-0 flex items-center gap-2">
-                    {String(user?.id) === String((quest as any)?.createdByUserId) &&
+          <div className="space-y-5">
+            <Panel className="p-5">
+              <PageHeader
+                title={quest.title}
+                description={quest.description}
+                actions={
+                  <>
+                    {String(user?.id) === String(questView?.createdByUserId) &&
                       !completed &&
                       status !== 'ARCHIVED' && (
-                        <Link
-                          to={`/quests/${quest.id}/edit`}
-                          className="px-3 py-1.5 rounded-lg border shadow text-sm hover:bg-gray-100 dark:hover:bg-[#161b26] dark:border-slate-700"
-                        >
+                        <Link to={`/quests/${quest.id}/edit`} className="btn btn-secondary">
                           Edit
                         </Link>
                       )}
 
                     {canJoin && (
-                      <button
-                        onClick={onJoin}
-                        className="px-3 py-1.5 rounded-lg border shadow text-sm hover:bg-gray-100 dark:hover:bg-[#161b26] dark:border-slate-700"
-                        disabled={join.isPending}
-                      >
-                        {join.isPending ? 'Joining…' : 'Join'}
-                      </button>
+                      <Button onClick={onJoin} disabled={join.isPending}>
+                        {join.isPending ? 'Joining...' : 'Join'}
+                      </Button>
                     )}
 
                     {showLeaveButton && (
-                      <button
+                      <Button
                         onClick={onLeave}
-                        className="px-3 py-1.5 rounded-lg border shadow text-sm hover:bg-gray-100 dark:hover:bg-[#161b26] dark:border-slate-700"
                         disabled={leave.isPending}
                         title={
-                          String(user?.id) === String((quest as any)?.createdByUserId)
+                          String(user?.id) === String(questView?.createdByUserId)
                             ? "You can't leave quests you own"
                             : 'Leave this quest'
                         }
                       >
-                        {leave.isPending ? 'Leaving…' : 'Leave'}
-                      </button>
+                        {leave.isPending ? 'Leaving...' : 'Leave'}
+                      </Button>
                     )}
-                  </div>
-                </div>
+                  </>
+                }
+              />
+
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                <Badge tone="info">{quest.category ?? 'General'}</Badge>
+                <Badge tone={visibility === 'PUBLIC' ? 'accent' : 'neutral'}>{visibility}</Badge>
+                {status && !completed ? <StatusBadge status={status} /> : null}
+                <Badge>
+                  <Users className="mr-1 h-3.5 w-3.5" />
+                  {participantCount} participants
+                </Badge>
+                {startDate ? (
+                  <Badge title="Start date">
+                    <CalendarDays className="mr-1 h-3.5 w-3.5" />
+                    Starts {startDate.toLocaleDateString()}
+                  </Badge>
+                ) : null}
+                {endDate ? (
+                  <Badge title="End date">
+                    <CalendarDays className="mr-1 h-3.5 w-3.5" />
+                    Ends {endDate.toLocaleDateString()}
+                  </Badge>
+                ) : null}
+                {completed ? (
+                  <Badge tone="success" title="You have completed this quest">
+                    <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                    Completed
+                  </Badge>
+                ) : null}
               </div>
-            </div>
+            </Panel>
 
-            <div className="grid md:grid-cols-2 gap-6">
-              <section className="rounded-2xl border bg-white shadow-sm dark:bg-[#0f1115]">
-                <div className="p-5">
-                  <h2 className="font-semibold mb-3">Your Submissions</h2>
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_400px]">
+              <Panel className="p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h2 className="text-lg font-semibold">Your Submissions</h2>
+                  <Badge>{mySubs.length}</Badge>
+                </div>
 
-                  {mySubs.length === 0 ? (
-                    <div className="border border-dashed rounded-2xl p-8 text-center text-sm text-gray-500 dark:border-slate-700">
-                      No submissions yet.
-                    </div>
-                  ) : (
-                    <ul className="space-y-3">
-                      {mySubs.map((s) => {
-                        const st = (s.status as any) ?? (s as any).reviewStatus;
-                        const closed = Boolean((s as any).closed);
+                {mySubs.length === 0 ? (
+                  <EmptyState
+                    title="No submissions yet."
+                    description="Once you upload proof for this quest, it will appear here."
+                  />
+                ) : (
+                  <ul className="space-y-3">
+                    {mySubs.map((s) => {
+                      const submissionView = s as SubmissionView;
+                      const st = submissionView.status ?? submissionView.reviewStatus;
+                      const closed = Boolean(submissionView.closed);
 
-                        return (
-                          <li
-                            key={s.id}
-                            className="border rounded-xl p-3 bg-white dark:bg-[#0f1115]"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="text-sm">
-                                <div className="font-medium">{s.comment || 'Submission'}</div>
-                                <div className="text-xs opacity-70">
-                                  {new Date(s.createdAt).toLocaleString()}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {st && (
-                                  <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border">
-                                    {st}
-                                  </span>
-                                )}
-                                {closed && (
-                                  <span
-                                    className="inline-block px-2 py-0.5 text-xs font-medium rounded-full border border-slate-400 text-slate-600 bg-slate-50"
-                                    title="This submission is closed"
-                                  >
-                                    Closed
-                                  </span>
-                                )}
+                      return (
+                        <li
+                          key={s.id}
+                          className="rounded-lg border border-[rgb(var(--border-soft))] bg-[rgba(var(--surface-2),0.42)] p-4"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 text-sm">
+                              <div className="font-medium">{s.comment || 'Submission'}</div>
+                              <div className="mt-1 text-xs text-[rgb(var(--faint))]">
+                                {new Date(s.createdAt).toLocaleString()}
                               </div>
                             </div>
-
-                            <SubmissionPreview submission={s} />
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              </section>
-
-              <aside className="rounded-2xl border bg-white shadow-sm dark:bg-[#0f1115]">
-                <div className="p-5">
-                  <h2 className="font-semibold mb-3">New Submission</h2>
-
-                  {!joinedByMe ? (
-                    <div className="text-sm text-gray-600 space-y-2">
-                      <p>You don’t have this quest yet, so you can’t submit to it.</p>
-                      {canJoin && (
-                        <button
-                          onClick={onJoin}
-                          className="px-3 py-1.5 rounded-lg border shadow text-sm hover:bg-gray-100 dark:hover:bg-[#161b26] dark:border-slate-700"
-                          disabled={join.isPending}
-                        >
-                          {join.isPending ? 'Joining…' : 'Join this quest'}
-                        </button>
-                      )}
-                    </div>
-                  ) : completed ? (
-                    <div className="rounded-lg border border-green-600/30 bg-green-50 text-green-800 p-4 text-sm">
-                      🎉 This quest is already completed. Congratulations!
-                    </div>
-                  ) : status === 'ARCHIVED' ? (
-                    <div className="rounded-lg border border-slate-300 bg-slate-50 text-slate-700 p-4 text-sm">
-                      This quest is archived and no longer accepts submissions.
-                    </div>
-                  ) : notStartedYet ? (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-800 p-4 text-sm">
-                      Quest has not started yet, you can’t submit anything.{' '}
-                      {startDate ? `Starts on ${startDate.toLocaleString()}.` : ''}
-                    </div>
-                  ) : ended ? (
-                    <div className="rounded-lg border border-slate-300 bg-slate-50 text-slate-700 p-4 text-sm">
-                      Quest has ended, new submissions are closed.{' '}
-                      {endDate ? `Ended on ${endDate.toLocaleString()}.` : ''}
-                    </div>
-                  ) : (
-                    <form className="space-y-4" onSubmit={submit}>
-                      <div>
-                        <label className="block text-sm font-medium mb-1">
-                          Comment (optional)
-                        </label>
-                        <textarea
-                          className="field"
-                          value={comment}
-                          onChange={(e) => setComment(e.target.value)}
-                          placeholder="Add context for your proof…"
-                          disabled={batchSubmitting || create.isPending || !canSubmit}
-                        />
-                      </div>
-
-                      <div className="text-xs text-gray-500">Attach one or more images</div>
-
-                      <div className="space-y-2">
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-                          className="block text-sm"
-                          disabled={batchSubmitting || create.isPending || !canSubmit}
-                        />
-
-                        {files.length > 0 && (
-                          <div className="text-xs text-gray-500">
-                            Selected: <span className="font-medium">{files.length}</span> file(s)
-                            <button
-                              type="button"
-                              className="ml-2 underline"
-                              onClick={() => {
-                                setFiles([]);
-                                if (fileInputRef.current) fileInputRef.current.value = '';
-                              }}
-                              disabled={batchSubmitting || create.isPending}
-                            >
-                              clear
-                            </button>
-
-                            <div className="mt-2 space-y-1 opacity-80">
-                              {files.slice(0, 6).map((f) => (
-                                <div
-                                  key={`${f.name}-${f.size}`}
-                                  className="truncate"
-                                  title={f.name}
-                                >
-                                  • {f.name}
-                                </div>
-                              ))}
-                              {files.length > 6 ? (
-                                <div>• …and {files.length - 6} more</div>
-                              ) : null}
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {st ? <StatusBadge status={st} /> : null}
+                              {closed ? <Badge>Closed</Badge> : null}
                             </div>
                           </div>
-                        )}
-                      </div>
 
-                      <div className="pt-1 flex items-center gap-3">
-                        <button
-                          type="submit"
-                          className="btn-primary disabled:opacity-60"
-                          disabled={batchSubmitting || create.isPending || !canSend || !canSubmit}
-                          title={!canSend ? 'Attach at least one image' : 'Submit'}
-                        >
-                          {batchSubmitting || create.isPending ? 'Submitting…' : 'Submit'}
-                        </button>
-                        {!canSend && (
-                          <span className="text-xs text-gray-500">
-                            Provide at least one image to submit.
-                          </span>
-                        )}
-                      </div>
-                    </form>
-                  )}
+                          <SubmissionPreview submission={s} />
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </Panel>
+
+              <Panel className="p-5">
+                <div className="mb-4 flex items-center gap-2">
+                  <UploadCloud className="h-5 w-5 text-[rgb(var(--accent))]" />
+                  <h2 className="text-lg font-semibold">New Submission</h2>
                 </div>
-              </aside>
+
+                {!joinedByMe ? (
+                  <EmptyState
+                    title="You have not joined this quest."
+                    description="Join the quest before submitting proof."
+                    action={
+                      canJoin ? (
+                        <Button onClick={onJoin} disabled={join.isPending}>
+                          {join.isPending ? 'Joining...' : 'Join this quest'}
+                        </Button>
+                      ) : null
+                    }
+                  />
+                ) : completed ? (
+                  <div className="rounded-lg border border-[rgba(var(--green),0.35)] bg-[rgba(var(--green),0.1)] p-4 text-sm text-green-100">
+                    This quest is already completed.
+                  </div>
+                ) : status === 'ARCHIVED' ? (
+                  <div className="rounded-lg border border-[rgb(var(--border-soft))] bg-[rgba(var(--surface-2),0.5)] p-4 text-sm text-[rgb(var(--muted))]">
+                    This quest is archived and no longer accepts submissions.
+                  </div>
+                ) : notStartedYet ? (
+                  <div className="rounded-lg border border-[rgba(var(--amber),0.4)] bg-[rgba(var(--amber),0.1)] p-4 text-sm text-amber-100">
+                    Quest has not started yet. {startDate ? `Starts on ${startDate.toLocaleString()}.` : ''}
+                  </div>
+                ) : ended ? (
+                  <div className="rounded-lg border border-[rgb(var(--border-soft))] bg-[rgba(var(--surface-2),0.5)] p-4 text-sm text-[rgb(var(--muted))]">
+                    Quest has ended and new submissions are closed. {endDate ? `Ended on ${endDate.toLocaleString()}.` : ''}
+                  </div>
+                ) : (
+                  <form className="space-y-4" onSubmit={submit}>
+                    <div>
+                      <FieldLabel>Comment (optional)</FieldLabel>
+                      <TextArea
+                        value={comment}
+                        onChange={(e) => setComment(e.target.value)}
+                        placeholder="Add context for your proof..."
+                        disabled={batchSubmitting || create.isPending || !canSubmit}
+                      />
+                    </div>
+
+                    <div className="rounded-lg border border-dashed border-[rgb(var(--border))] bg-[rgba(var(--bg-soft),0.58)] p-4">
+                      <div className="mb-3 flex items-center gap-2 text-sm text-[rgb(var(--muted))]">
+                        <ImageIcon className="h-4 w-4 text-[rgb(var(--accent))]" />
+                        Attach one or more images
+                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+                        className="block w-full text-sm text-[rgb(var(--muted))] file:mr-3 file:rounded-lg file:border-0 file:bg-[rgba(var(--accent),0.16)] file:px-3 file:py-2 file:text-sm file:font-medium file:text-teal-100 hover:file:bg-[rgba(var(--accent),0.24)]"
+                        disabled={batchSubmitting || create.isPending || !canSubmit}
+                      />
+
+                      {files.length > 0 && (
+                        <div className="mt-3 text-xs text-[rgb(var(--muted))]">
+                          Selected: <span className="font-medium">{files.length}</span> file(s)
+                          <button
+                            type="button"
+                            className="ml-2 text-[rgb(var(--accent))] underline-offset-4 hover:underline"
+                            onClick={() => {
+                              setFiles([]);
+                              if (fileInputRef.current) fileInputRef.current.value = '';
+                            }}
+                            disabled={batchSubmitting || create.isPending}
+                          >
+                            clear
+                          </button>
+
+                          <div className="mt-2 space-y-1">
+                            {files.slice(0, 6).map((f) => (
+                              <div key={`${f.name}-${f.size}`} className="truncate" title={f.name}>
+                                - {f.name}
+                              </div>
+                            ))}
+                            {files.length > 6 ? <div>- and {files.length - 6} more</div> : null}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 pt-1">
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        disabled={batchSubmitting || create.isPending || !canSend || !canSubmit}
+                        title={!canSend ? 'Attach at least one image' : 'Submit'}
+                      >
+                        {batchSubmitting || create.isPending ? 'Submitting...' : 'Submit proof'}
+                      </Button>
+                      {!canSend && (
+                        <span className="text-xs text-[rgb(var(--faint))]">
+                          Provide at least one image to submit.
+                        </span>
+                      )}
+                    </div>
+                  </form>
+                )}
+              </Panel>
             </div>
           </div>
         )}
@@ -861,13 +822,13 @@ export default function QuestDetail() {
       <InfoModal
         open={showOwnerLeaveModal}
         onClose={() => setShowOwnerLeaveModal(false)}
-        title="Can’t leave your own quest"
+        title="Can't leave your own quest"
       >
         <p>
-          You are the owner of this quest, so you can’t leave it. You can archive or
+          You are the owner of this quest, so you can't leave it. You can archive or
           delete the quest instead.
         </p>
       </InfoModal>
-    </div>
+    </PageShell>
   );
 }

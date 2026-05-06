@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosHeaders } from "axios";
 import { getAccessToken } from "./token";
 
 function normalizeApiBase(raw?: string): string {
@@ -36,7 +36,7 @@ function normalizeApiBase(raw?: string): string {
 }
 
 const baseURL = normalizeApiBase(
-  (import.meta.env && (import.meta.env as any).VITE_API_BASE) || "/api"
+  import.meta.env.VITE_API_BASE || "/api"
 );
 
 const http = axios.create({
@@ -47,8 +47,9 @@ const http = axios.create({
 http.interceptors.request.use((config) => {
   const t = getAccessToken();
   if (t) {
-    config.headers = config.headers ?? {};
-    (config.headers as any).Authorization = `Bearer ${t}`;
+    const headers = AxiosHeaders.from(config.headers);
+    headers.set("Authorization", `Bearer ${t}`);
+    config.headers = headers;
   }
   return config;
 });

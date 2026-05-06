@@ -17,9 +17,9 @@ const KEY = {
 function sanitize<T extends object>(obj: T): Partial<T> {
   const out = {} as Partial<T>;
   for (const key of Object.keys(obj) as Array<keyof T>) {
-    const v = (obj as any)[key];
+    const v = obj[key];
     if (v === "" || v === undefined) continue;
-    (out as any)[key] = v;
+    out[key] = v;
   }
   return out;
 }

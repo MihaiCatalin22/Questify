@@ -26,8 +26,10 @@ export type RegisterRequest = {
 
 
 export async function login(_input: LoginRequest): Promise<AuthResponse> {
+  void _input;
   throw new Error("Use OIDC login (AuthContext.login) instead of /api/login.");
 }
 export async function register(_input: RegisterRequest): Promise<AuthResponse> {
+  void _input;
   throw new Error("Use OIDC register (AuthContext.login({ register: true })) instead of /api/register.");
 }

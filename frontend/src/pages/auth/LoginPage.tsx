@@ -1,8 +1,15 @@
 import { useEffect } from "react";
 import { useAuth } from "react-oidc-context";
+import { LoadingState, PageShell, Panel } from "../../components/ui";
 
 export default function LoginRedirect() {
-  const auth = useAuth();
-  useEffect(() => { void auth.signinRedirect(); }, []);
-  return <div className="p-6">Redirecting to sign in…</div>;
+  const { signinRedirect } = useAuth();
+  useEffect(() => { void signinRedirect(); }, [signinRedirect]);
+  return (
+    <PageShell className="flex min-h-screen items-center justify-center px-4">
+      <Panel className="w-full max-w-md p-6">
+        <LoadingState label="Redirecting to sign in..." />
+      </Panel>
+    </PageShell>
+  );
 }

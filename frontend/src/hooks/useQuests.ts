@@ -16,15 +16,16 @@ export const KEY = {
   detail: (id: string) => ["quests", id] as const,
 };
 
-function normalizeList<T>(payload: any): T[] {
+function normalizeList<T>(payload: unknown): T[] {
   if (Array.isArray(payload)) return payload;
   if (!payload || typeof payload !== "object") return [];
+  const record = payload as Record<string, unknown>;
   const candidates = [
-    payload.content,
-    payload.items,
-    payload.data,
-    payload.results,
-    payload.list,
+    record.content,
+    record.items,
+    record.data,
+    record.results,
+    record.list,
   ];
   const found = candidates.find(Array.isArray);
   return found ?? [];
