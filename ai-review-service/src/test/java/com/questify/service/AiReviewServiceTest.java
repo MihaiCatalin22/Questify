@@ -93,4 +93,19 @@ class AiReviewServiceTest {
         assertThat(out.getRecommendation()).isEqualTo(AiReviewRecommendation.AI_FAILED);
         assertThat(out.getReasons()).contains("AI review failed; manual review is required.");
     }
+
+    @Test
+    void reviewSubmission_stores_ai_failed_when_context_fetch_fails_and_does_not_throw() {
+        when(results.findBySubmissionId(13L)).thenReturn(Optional.empty());
+        when(quests.getQuest(5L)).thenThrow(new RuntimeException("quest service unavailable"));
+        when(results.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        AiReviewResult out = service.reviewSubmission(new AiReviewService.SubmissionCreated(
+                13L, 5L, "u1", "I did it.", Instant.parse("2026-05-01T10:00:00Z")
+        ));
+
+        assertThat(out.getRecommendation()).isEqualTo(AiReviewRecommendation.AI_FAILED);
+        assertThat(out.getReasons()).contains("AI review failed; manual review is required.");
+        verifyNoInteractions(model);
+    }
 }

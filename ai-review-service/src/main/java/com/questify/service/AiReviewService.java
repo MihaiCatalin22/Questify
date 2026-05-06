@@ -41,29 +41,29 @@ public class AiReviewService {
         var existing = results.findBySubmissionId(event.submissionId()).orElse(null);
         if (existing != null) return existing;
 
-        QuestClient.QuestContext quest = quests.getQuest(event.questId());
-        List<ProofClient.ProofObject> proofObjects = event.proofKeys().isEmpty()
-                ? proofs.getProofs(event.submissionId())
-                : proofs.getProofsFromKeys(event.proofKeys());
-        List<String> images = supportedImages(proofObjects);
-
-        if (images.isEmpty()) {
-            return save(event, AiReviewRecommendation.UNSUPPORTED_MEDIA, 0.0,
-                    "No supported image proof was available for AI review.", false, null);
-        }
-
-        String prompt = """
-                Review this Questify submission as advisory evidence only.
-                Quest title: %s
-                Quest description: %s
-                Student comment: %s
-
-                Return JSON only:
-                {"recommendation":"LIKELY_VALID|UNCLEAR|LIKELY_INVALID","confidence":0.0-1.0,"reasons":["short reason"],"mediaSupported":true}
-                Do not claim certainty. If the image/comment do not clearly support the quest, use UNCLEAR or LIKELY_INVALID.
-                """.formatted(quest.title(), quest.description(), event.note() == null ? "" : event.note());
-
         try {
+            QuestClient.QuestContext quest = quests.getQuest(event.questId());
+            List<ProofClient.ProofObject> proofObjects = event.proofKeys().isEmpty()
+                    ? proofs.getProofs(event.submissionId())
+                    : proofs.getProofsFromKeys(event.proofKeys());
+            List<String> images = supportedImages(proofObjects);
+
+            if (images.isEmpty()) {
+                return save(event, AiReviewRecommendation.UNSUPPORTED_MEDIA, 0.0,
+                        "No supported image proof was available for AI review.", false, null);
+            }
+
+            String prompt = """
+                    Review this Questify submission as advisory evidence only.
+                    Quest title: %s
+                    Quest description: %s
+                    Student comment: %s
+
+                    Return JSON only:
+                    {"recommendation":"LIKELY_VALID|UNCLEAR|LIKELY_INVALID","confidence":0.0-1.0,"reasons":["short reason"],"mediaSupported":true}
+                    Do not claim certainty. If the image/comment do not clearly support the quest, use UNCLEAR or LIKELY_INVALID.
+                    """.formatted(quest.title(), quest.description(), event.note() == null ? "" : event.note());
+
             String raw = model.generate(new AiReviewPrompt(prompt, images));
             ParsedReview parsed = parse(raw);
             return save(event, parsed.recommendation(), parsed.confidence(), String.join("\n", parsed.reasons()), true, raw);
