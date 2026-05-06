@@ -161,6 +161,10 @@ settings.gradle.kts
 !coach-service/settings.gradle.kts
 build.gradle.kts
 !coach-service/build.gradle.kts
+!ai-review-service/settings.gradle.kts
+!ai-review-service/build.gradle.kts
+!streak-service/settings.gradle.kts
+!streak-service/build.gradle.kts
 docker-compose.yml
 infra/keycloak/realm-questify.json/realm-questify.json
 scripts/generate_coach_portfolio_docs.py
