@@ -9,6 +9,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Slf4j
@@ -29,13 +31,18 @@ public class QuestProgressClient {
         this.internalToken = internalToken;
     }
 
-    public void markCompleted(Long questId, String userId, Long submissionId) {
+    public void markCompleted(Long questId, String userId, Long submissionId, Instant submittedAt) {
         try {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("userId", userId);
+            body.put("submissionId", submissionId);
+            if (submittedAt != null) body.put("submittedAt", submittedAt);
+
             http.post()
                     .uri("/internal/quests/{id}/completion", questId)
                     .header("X-Internal-Token", internalToken)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(Map.of("userId", userId, "submissionId", submissionId))
+                    .bodyValue(body)
                     .retrieve()
                     .toBodilessEntity()
                     .block(Duration.ofSeconds(5));

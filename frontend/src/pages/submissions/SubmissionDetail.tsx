@@ -1,9 +1,11 @@
 import { useParams, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useSubmission, useReviewSubmission } from '../../hooks/useSubmissions';
 import { useState, useEffect, useRef } from 'react';
 import { useAuthContext } from '../../contexts/useAuthContext';
 import { toast } from 'react-hot-toast';
 import http from '../../api/https';
+import { AiReviewsApi, type AiReviewRecommendation } from '../../api/aiReviews';
 import type { SubmissionDTO, SubmissionStatus } from '../../types/submission';
 import { getErrorMessage, getResponseStatus } from '../../utils/errors';
 import {
@@ -43,6 +45,17 @@ function hasReviewerRole(user?: { roles?: string[] } | null): boolean {
 function toSameOriginS3(url?: string | null): string | null {
   if (!url) return null;
   return url;
+}
+
+function recommendationLabel(value: AiReviewRecommendation) {
+  return value.replaceAll('_', ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+}
+
+function recommendationTone(value: AiReviewRecommendation): React.ComponentProps<typeof Badge>['tone'] {
+  if (value === 'LIKELY_VALID') return 'success';
+  if (value === 'LIKELY_INVALID' || value === 'AI_FAILED') return 'danger';
+  if (value === 'UNCLEAR' || value === 'UNSUPPORTED_MEDIA') return 'warning';
+  return undefined;
 }
 
 async function looksLikeImage(blob: Blob): Promise<boolean> {
@@ -226,6 +239,13 @@ export default function SubmissionDetail() {
     return () => { alive = false; };
   }, [token]);
   const canReview = (mayReview ?? hasReviewerRole(user));
+  const aiReview = useQuery({
+    queryKey: ['ai-review', id],
+    queryFn: () => AiReviewsApi.getForSubmission(id ?? ''),
+    enabled: Boolean(id && canReview),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
 
   const status = submission?.reviewStatus ?? submission?.status ?? 'PENDING';
   const existingNote = submission?.reviewNote;
@@ -369,6 +389,68 @@ export default function SubmissionDetail() {
           )}
         </div>
       </Panel>
+
+      {canReview && (
+        <Panel>
+          <div className="card-body space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="section-title">AI review</h2>
+              {aiReview.data?.modelName && (
+                <Badge>{aiReview.data.modelName}</Badge>
+              )}
+            </div>
+
+            {aiReview.isLoading && (
+              <div className="text-sm text-[rgb(var(--muted))]">AI review is running...</div>
+            )}
+
+            {aiReview.isError && getResponseStatus(aiReview.error) === 404 && (
+              <div className="text-sm text-[rgb(var(--muted))]">
+                AI review is not ready yet. Manual review is still available.
+              </div>
+            )}
+
+            {aiReview.isError && getResponseStatus(aiReview.error) !== 404 && (
+              <div className="text-sm text-red-300">
+                Failed to load AI review. Manual review is still available.
+              </div>
+            )}
+
+            {aiReview.data && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={recommendationTone(aiReview.data.recommendation)}>
+                    {recommendationLabel(aiReview.data.recommendation)}
+                  </Badge>
+                  <span className="text-sm text-[rgb(var(--muted))]">
+                    Confidence {Math.round((aiReview.data.confidence ?? 0) * 100)}%
+                  </span>
+                </div>
+
+                {aiReview.data.recommendation === 'UNSUPPORTED_MEDIA' && (
+                  <div className="text-sm text-[rgb(var(--muted))]">
+                    This proof type needs manual review because the AI reviewer only checks image evidence in v1.
+                  </div>
+                )}
+
+                {!!aiReview.data.reasons?.length && (
+                  <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
+                    {aiReview.data.reasons.map((reason, idx) => (
+                      <li key={`${reason}-${idx}`}>{reason}</li>
+                    ))}
+                  </ul>
+                )}
+
+                {aiReview.data.reviewedAt && (
+                  <div className="text-xs text-[rgb(var(--faint))]">
+                    Reviewed: {new Date(aiReview.data.reviewedAt).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </Panel>
+      )}
 
       {canReview && status === 'PENDING' && (
         <Panel>

@@ -44,6 +44,12 @@ jobs:
           - name: coach-service
             dir: coach-service
             image: questify-coach-service
+          - name: ai-review-service
+            dir: ai-review-service
+            image: questify-ai-review-service
+          - name: streak-service
+            dir: streak-service
+            image: questify-streak-service
           - name: user-service
             dir: user-service
             image: questify-user-service
@@ -227,6 +233,8 @@ jobs:
 
           images = {
             "coach-service":       f"ghcr.io/{owner_lc}/questify-coach-service",
+            "ai-review-service":   f"ghcr.io/{owner_lc}/questify-ai-review-service",
+            "streak-service":      f"ghcr.io/{owner_lc}/questify-streak-service",
             "frontend":            f"ghcr.io/{owner_lc}/questify-frontend",
             "proof-service":       f"ghcr.io/{owner_lc}/questify-proof-service",
             "quest-service":       f"ghcr.io/{owner_lc}/questify-quest-service",

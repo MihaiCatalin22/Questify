@@ -28,6 +28,9 @@ public class QuestCompletion {
     @Column(name = "submission_id")
     private Long submissionId;
 
+    @Column(name = "submitted_at")
+    private Instant submittedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private QuestStatus status;

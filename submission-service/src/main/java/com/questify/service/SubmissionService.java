@@ -72,7 +72,7 @@ public class SubmissionService {
                 .userId(userId)
                 .proofKey(req.proofKey())
                 .note(req.note())
-                .status(ReviewStatus.SCANNING)
+                .status(ReviewStatus.PENDING)
                 .build();
 
         var saved = submissions.save(s);
@@ -122,7 +122,7 @@ public class SubmissionService {
                     .userId(userId)
                     .proofKey(firstUp.key())
                     .note(note)
-                    .status(ReviewStatus.SCANNING)
+                    .status(ReviewStatus.PENDING)
                     .build();
 
             var saved = submissions.save(s);
@@ -195,8 +195,12 @@ public class SubmissionService {
         payload.put("questId", saved.getQuestId());
         payload.put("userId", saved.getUserId());
         payload.put("status", saved.getStatus().name());
+        payload.put("submittedAt", saved.getCreatedAt());
         if (notBlank(saved.getNote())) payload.put("note", saved.getNote());
-        if (notBlank(saved.getProofKey())) payload.put("proofKey", saved.getProofKey()); // primary proof
+        if (notBlank(saved.getProofKey())) {
+            payload.put("proofKey", saved.getProofKey()); // primary proof
+            payload.put("proofKeys", List.of(saved.getProofKey()));
+        }
 
         events.publish(
                 submissionsTopic,
@@ -235,13 +239,6 @@ public class SubmissionService {
     public Submission review(Long id, ReviewReq req, String reviewerUserId) {
         var s = get(id);
 
-        if (req.status() == ReviewStatus.APPROVED && s.getStatus() == ReviewStatus.SCANNING) {
-            throw new ResponseStatusException(
-                    org.springframework.http.HttpStatus.CONFLICT,
-                    "Cannot approve while proof is still scanning"
-            );
-        }
-
         s.setStatus(req.status());
         s.setReviewerUserId(reviewerUserId);
         s.setReviewedAt(Instant.now());
@@ -266,7 +263,7 @@ public class SubmissionService {
         );
 
         if (req.status() == ReviewStatus.APPROVED) {
-            questProgress.markCompleted(saved.getQuestId(), saved.getUserId(), saved.getId());
+            questProgress.markCompleted(saved.getQuestId(), saved.getUserId(), saved.getId(), saved.getCreatedAt());
         }
 
         return saved;

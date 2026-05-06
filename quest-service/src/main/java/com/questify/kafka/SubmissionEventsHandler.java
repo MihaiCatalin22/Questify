@@ -40,12 +40,13 @@ public class SubmissionEventsHandler {
             Long questId = toLong(p.get("questId"));
             String userId = str(p.get("userId"));
             Long submissionId = toLong(p.get("submissionId"));
+            java.time.Instant submittedAt = toInstant(p.get("submittedAt"));
 
             if (questId == null || userId == null) {
                 throw new IllegalStateException("Missing questId and/or userId in SubmissionReviewed payload: " + p);
             }
 
-            completionService.upsertCompleted(questId, userId, submissionId);
+            completionService.upsertCompleted(questId, userId, submissionId, submittedAt);
             log.info("Marked quest {} completed for user {} via event {}", questId, userId, env.eventId());
         }
     }
@@ -56,4 +57,10 @@ public class SubmissionEventsHandler {
         try { return Long.parseLong(String.valueOf(o)); } catch (Exception e) { return null; }
     }
     private static String str(Object o) { return o == null ? null : String.valueOf(o); }
+
+    private static java.time.Instant toInstant(Object o) {
+        if (o == null) return null;
+        if (o instanceof java.time.Instant instant) return instant;
+        try { return java.time.Instant.parse(String.valueOf(o)); } catch (Exception e) { return null; }
+    }
 }

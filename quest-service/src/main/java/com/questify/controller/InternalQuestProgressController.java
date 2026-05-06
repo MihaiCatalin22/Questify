@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.Map;
 
 @RestController
@@ -20,8 +21,10 @@ public class InternalQuestProgressController {
         String userId = String.valueOf(body.get("userId"));
         Long submissionId = body.get("submissionId") != null
                 ? Long.valueOf(String.valueOf(body.get("submissionId"))) : null;
+        Instant submittedAt = body.get("submittedAt") != null
+                ? Instant.parse(String.valueOf(body.get("submittedAt"))) : null;
 
-        completionService.upsertCompleted(questId, userId, submissionId);
+        completionService.upsertCompleted(questId, userId, submissionId, submittedAt);
         return ResponseEntity.noContent().build();
     }
 }

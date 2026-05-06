@@ -4,8 +4,9 @@ import { useDeleteQuest, useLeaveQuest, useMyQuestsServerPage } from '../../hook
 import { useAuthContext } from '../../contexts/useAuthContext';
 import type { QuestDTO } from '../../types/quest';
 import { toast } from 'react-hot-toast';
-import { Archive, ChevronLeft, ChevronRight, Compass, RefreshCcw, XCircle } from 'lucide-react';
+import { Archive, ChevronLeft, ChevronRight, Compass, Flame, RefreshCcw, Trophy, XCircle } from 'lucide-react';
 import { getErrorMessage } from '../../utils/errors';
+import { StreaksApi, type StreakSummary } from '../../api/streaks';
 import {
   Badge,
   Button,
@@ -56,6 +57,7 @@ export default function QuestsList() {
   const [size, setSize] = React.useState(12);
   const [showCompletedInActive, setShowCompletedInActive] = React.useState(false);
   const [seenCompletedAt, setSeenCompletedAt] = React.useState<SeenMap>(() => loadSeen());
+  const [streak, setStreak] = React.useState<StreakSummary | null>(null);
 
   // Server-side paged + archived filter
   const { data: paged, isLoading, isError, error, isFetching, refetch } =
@@ -63,6 +65,18 @@ export default function QuestsList() {
 
   const del = useDeleteQuest();
   const leave = useLeaveQuest();
+
+  React.useEffect(() => {
+    let alive = true;
+    StreaksApi.mine()
+      .then((summary) => {
+        if (alive) setStreak(summary);
+      })
+      .catch(() => {
+        if (alive) setStreak(null);
+      });
+    return () => { alive = false; };
+  }, []);
 
   // Reset to first page on tab/size change
   React.useEffect(() => { setPage(0); }, [tab, size]);
@@ -130,6 +144,43 @@ export default function QuestsList() {
           </>
         }
       />
+
+      {streak && (
+        <Panel className="p-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-lg border border-[rgba(var(--accent),0.35)] bg-[rgba(var(--accent),0.12)] text-[rgb(var(--accent))]">
+                <Flame className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-xs text-[rgb(var(--faint))]">Current streak</div>
+                <div className="font-semibold">{streak.currentStreak} day(s)</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-lg border border-[rgba(var(--accent-2),0.35)] bg-[rgba(var(--accent-2),0.12)] text-[rgb(var(--accent-2))]">
+                <Trophy className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-xs text-[rgb(var(--faint))]">Level</div>
+                <div className="font-semibold">Level {streak.level}</div>
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 flex items-center justify-between text-xs text-[rgb(var(--faint))]">
+                <span>XP progress</span>
+                <span>{streak.levelXp}/{streak.nextLevelXp}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-[rgba(var(--surface-3),0.9)]">
+                <div
+                  className="h-full rounded-full bg-[rgb(var(--accent))]"
+                  style={{ width: `${Math.min(100, Math.round((streak.levelXp / streak.nextLevelXp) * 100))}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </Panel>
+      )}
 
       <Panel className="p-4">
         <div className="flex flex-wrap items-center gap-3">
