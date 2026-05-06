@@ -46,7 +46,7 @@ public class FallbackFactory {
         );
     }
 
-    private static List<CoachSuggestionRes> buildSuggestions(GoalFacets facets, List<String> excludedSuggestionTitles) {
+    private static List<CoachSuggestionRes> buildSuggestions(GoalFacetExtractor.GoalFacets facets, List<String> excludedSuggestionTitles) {
         List<SuggestionTemplate> candidates = new ArrayList<>(goalDerivedTemplates(facets));
 
         Set<String> excluded = new LinkedHashSet<>();
