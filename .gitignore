@@ -200,3 +200,4 @@ argocd.zip
 !/docs/ai-review-recovery/**
 docs/ai-review-recovery/README.md
 /docs
+tmp-ai-review-model-patch.json

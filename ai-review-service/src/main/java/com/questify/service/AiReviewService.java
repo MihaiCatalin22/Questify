@@ -47,7 +47,7 @@ public class AiReviewService {
             "activity", "valid", "match", "matches", "relevant", "looks", "good", "appears"
     );
 
-    @Value("${ai-review.model:qwen2.5vl:7b}")
+    @Value("${ai-review.model:qwen2.5vl:3b}")
     private String modelName;
 
     public AiReviewService(AiReviewResultRepository results,

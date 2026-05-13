@@ -17,7 +17,7 @@ public class OllamaVisionClient implements ModelClient {
     private final int timeoutMs;
 
     public OllamaVisionClient(@Value("${ai-review.runtime-base-url:http://ollama:11434}") String baseUrl,
-                              @Value("${ai-review.model:qwen2.5vl:7b}") String model,
+                              @Value("${ai-review.model:qwen2.5vl:3b}") String model,
                               @Value("${ai-review.timeout-ms:90000}") int timeoutMs) {
         this.http = WebClient.builder().baseUrl(baseUrl).build();
         this.model = model;
