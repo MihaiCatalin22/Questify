@@ -7,7 +7,7 @@ resources:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-submission-service
-    newTag: origin-ai-review-streak-service-11a316f
+    newTag: origin-ai-review-streak-service-3439eb6
 
 patchesJson6902:
   - target:
