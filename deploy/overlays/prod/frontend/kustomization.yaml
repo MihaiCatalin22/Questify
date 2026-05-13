@@ -19,4 +19,4 @@ generatorOptions:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-frontend
-    newTag: origin-ai-review-streak-service-2330954
+    newTag: origin-ai-review-streak-service-11a316f
