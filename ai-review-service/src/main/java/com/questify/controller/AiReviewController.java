@@ -45,6 +45,12 @@ public class AiReviewController {
             return AiReviewRes.from(result);
         } catch (IllegalArgumentException notFound) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, notFound.getMessage(), notFound);
+        } catch (Exception runError) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "AI review rerun failed. Please retry shortly; manual review remains available.",
+                    runError
+            );
         }
     }
 

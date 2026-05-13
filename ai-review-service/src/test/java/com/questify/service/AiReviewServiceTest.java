@@ -52,7 +52,7 @@ class AiReviewServiceTest {
         when(model.generate(any())).thenReturn("""
                 {"recommendation":"LIKELY_VALID","confidence":0.82,"reasons":["The comment and image match a completed run."],"mediaSupported":true}
                 """);
-        when(results.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(results.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         AiReviewResult out = service.reviewSubmission(new AiReviewService.SubmissionCreated(
                 10L, 5L, "u1", "Finished a 20 minute run.", Instant.parse("2026-05-01T10:00:00Z")
@@ -64,7 +64,7 @@ class AiReviewServiceTest {
         assertThat(out.getReasons()).contains("completed run");
 
         ArgumentCaptor<AiReviewResult> saved = ArgumentCaptor.forClass(AiReviewResult.class);
-        verify(results).save(saved.capture());
+        verify(results).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getSubmissionId()).isEqualTo(10L);
         verify(attempts).save(any());
     }
@@ -74,7 +74,7 @@ class AiReviewServiceTest {
         when(results.findBySubmissionId(11L)).thenReturn(Optional.empty());
         when(quests.getQuest(5L)).thenReturn(new QuestClient.QuestContext("Practice guitar", "Upload proof."));
         when(proofs.getProofs(11L)).thenReturn(List.of(new ProofClient.ProofObject("proof/v.mp4", "video/mp4", null)));
-        when(results.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(results.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         AiReviewResult out = service.reviewSubmission(new AiReviewService.SubmissionCreated(
                 11L, 5L, "u1", "I practiced.", Instant.parse("2026-05-01T10:00:00Z")
@@ -92,7 +92,7 @@ class AiReviewServiceTest {
         when(quests.getQuest(5L)).thenReturn(new QuestClient.QuestContext("Read chapter", "Show notes."));
         when(proofs.getProofs(12L)).thenReturn(List.of(new ProofClient.ProofObject("proof/a.jpg", "image/jpeg", "BASE64IMG")));
         when(model.generate(any())).thenThrow(new RuntimeException("ollama down"));
-        when(results.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(results.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         AiReviewResult out = service.reviewSubmission(new AiReviewService.SubmissionCreated(
                 12L, 5L, "u1", "I read it.", Instant.parse("2026-05-01T10:00:00Z")
@@ -107,7 +107,7 @@ class AiReviewServiceTest {
     void reviewSubmission_stores_ai_failed_when_context_fetch_fails_and_does_not_throw() {
         when(results.findBySubmissionId(13L)).thenReturn(Optional.empty());
         when(quests.getQuest(5L)).thenThrow(new RuntimeException("quest service unavailable"));
-        when(results.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(results.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         AiReviewResult out = service.reviewSubmission(new AiReviewService.SubmissionCreated(
                 13L, 5L, "u1", "I did it.", Instant.parse("2026-05-01T10:00:00Z")
@@ -144,7 +144,7 @@ class AiReviewServiceTest {
         when(model.generate(any())).thenReturn("""
                 {"recommendation":"LIKELY_VALID","confidence":0.91,"reasons":["Good match"],"mediaSupported":true}
                 """);
-        when(results.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(results.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         AiReviewResult out = service.rerunForSubmission(20L, AiReviewRunSource.MANUAL, "reviewer-1");
 

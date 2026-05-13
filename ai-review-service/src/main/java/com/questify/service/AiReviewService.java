@@ -14,6 +14,7 @@ import com.questify.provider.ModelClient;
 import com.questify.repository.AiReviewAttemptRepository;
 import com.questify.repository.AiReviewResultRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,8 +61,16 @@ public class AiReviewService {
 
     @Transactional
     public AiReviewResult rerunForSubmission(Long submissionId, AiReviewRunSource source, String triggeredBy) {
+        AiReviewResult existing = results.findBySubmissionId(submissionId).orElse(null);
         var context = submissions.getSubmissionContext(submissionId);
         if (context == null || context.submissionId() == null || context.questId() == null || context.userId() == null) {
+            if (existing != null) {
+                log.warn("AI review rerun context unavailable, returning existing result submissionId={} source={}",
+                        submissionId, source);
+                recordAttempt(submissionId, source, triggeredBy, "SKIPPED_CONTEXT_UNAVAILABLE",
+                        existing.getRecommendation(), existing.getConfidence(), "Context unavailable, returned existing result");
+                return existing;
+            }
             throw new IllegalArgumentException("Submission context missing required fields for id=" + submissionId);
         }
         SubmissionCreated event = new SubmissionCreated(
@@ -163,11 +172,28 @@ public class AiReviewService {
         target.setRecommendation(recommendation);
         target.setConfidence(Math.max(0.0, Math.min(1.0, confidence)));
         target.setModel(modelName);
-        target.setReasons(reasons == null || reasons.isBlank() ? "Manual review is required." : reasons);
+        target.setReasons(truncate(reasons == null || reasons.isBlank() ? "Manual review is required." : reasons, 2000));
         target.setRawOutput(raw);
         target.setMediaSupported(mediaSupported);
         target.setReviewedAt(Instant.now());
-        AiReviewResult saved = results.save(target);
+
+        AiReviewResult saved;
+        try {
+            saved = results.saveAndFlush(target);
+        } catch (DataIntegrityViolationException race) {
+            log.warn("AI review upsert race hit submissionId={}, retrying as update", event.submissionId());
+            AiReviewResult current = results.findBySubmissionId(event.submissionId()).orElseThrow(() -> race);
+            current.setQuestId(target.getQuestId());
+            current.setUserId(target.getUserId());
+            current.setRecommendation(target.getRecommendation());
+            current.setConfidence(target.getConfidence());
+            current.setModel(target.getModel());
+            current.setReasons(target.getReasons());
+            current.setRawOutput(target.getRawOutput());
+            current.setMediaSupported(target.isMediaSupported());
+            current.setReviewedAt(target.getReviewedAt());
+            saved = results.saveAndFlush(current);
+        }
 
         recordAttempt(event.submissionId(), source, triggeredBy, outcome, recommendation, saved.getConfidence(), raw);
         return saved;
