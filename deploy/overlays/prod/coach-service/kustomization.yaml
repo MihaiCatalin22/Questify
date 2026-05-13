@@ -7,7 +7,7 @@ resources:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-coach-service
-    newTag: origin-ai-review-streak-service-36ae3c5
+    newTag: origin-ai-review-streak-service-dae3c1d
 
 patchesJson6902:
   - target:
