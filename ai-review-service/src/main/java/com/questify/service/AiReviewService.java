@@ -29,6 +29,8 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
 @Service
@@ -51,6 +53,7 @@ public class AiReviewService {
     private final ProofClient proofs;
     private final ModelClient model;
     private final ObjectMapper mapper = new ObjectMapper();
+    private final ConcurrentHashMap<Long, ReentrantLock> submissionLocks = new ConcurrentHashMap<>();
 
     public AiReviewService(AiReviewResultRepository results,
                            AiReviewAttemptRepository attempts,
@@ -97,6 +100,10 @@ public class AiReviewService {
     }
 
     private AiReviewResult runReview(SubmissionCreated event, AiReviewRunSource source, String triggeredBy, boolean force) {
+        return withSubmissionLock(event.submissionId(), () -> runReviewLocked(event, source, triggeredBy, force));
+    }
+
+    private AiReviewResult runReviewLocked(SubmissionCreated event, AiReviewRunSource source, String triggeredBy, boolean force) {
         log.info("AI review run started submissionId={} source={} triggeredBy={} force={} proofKeys={}",
                 event.submissionId(), source, triggeredBy, force,
                 event.proofKeys() == null ? 0 : event.proofKeys().size());
@@ -139,6 +146,19 @@ public class AiReviewService {
                     event.submissionId(), source, triggeredBy, e.toString(), e);
             BuildResult failed = BuildResult.failed("AI review failed; manual review is required. " + truncate(e.getMessage(), 300));
             return saveAndRecord(existing, event, failed, source, triggeredBy, "FAILED");
+        }
+    }
+
+    private AiReviewResult withSubmissionLock(Long submissionId, java.util.function.Supplier<AiReviewResult> action) {
+        ReentrantLock lock = submissionLocks.computeIfAbsent(submissionId, ignored -> new ReentrantLock());
+        lock.lock();
+        try {
+            return action.get();
+        } finally {
+            lock.unlock();
+            if (!lock.hasQueuedThreads()) {
+                submissionLocks.remove(submissionId, lock);
+            }
         }
     }
 

@@ -18,9 +18,9 @@ public class OllamaVisionClient implements ModelClient {
     private final int timeoutMs;
 
     public OllamaVisionClient(@Value("${ai-review.runtime-base-url:http://ollama:11434}") String baseUrl,
-                              @Value("${ai-review.model-primary:${AI_REVIEW_MODEL:qwen2.5vl:7b}}") String primaryModel,
-                              @Value("${ai-review.model-fallback:qwen2.5vl:3b}") String fallbackModel,
-                              @Value("${ai-review.timeout-ms:90000}") int timeoutMs) {
+                              @Value("${ai-review.model-primary:${AI_REVIEW_MODEL:qwen2.5vl:3b}}") String primaryModel,
+                              @Value("${ai-review.model-fallback:}") String fallbackModel,
+                              @Value("${ai-review.timeout-ms:45000}") int timeoutMs) {
         this.http = WebClient.builder().baseUrl(baseUrl).build();
         this.primaryModel = primaryModel;
         this.fallbackModel = fallbackModel;
