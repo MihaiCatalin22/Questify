@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.reactive.function.client.WebClientResponseException.NotFound;
@@ -34,9 +35,13 @@ public class ProofClient {
     public ProofClient(@Value("${proof.service.base:http://proof-service}") String proofBase,
                        @Value("${internal.token:}") String internalDotToken,
                        @Value("${SECURITY_INTERNAL_TOKEN:}") String securityInternalToken,
-                       @Value("${INTERNAL_TOKEN:dev-internal-token}") String internalToken) {
-        this.proofHttp = WebClient.builder().baseUrl(proofBase).build();
-        this.rawHttp = WebClient.builder().build();
+                       @Value("${INTERNAL_TOKEN:dev-internal-token}") String internalToken,
+                       @Value("${ai.review.proof.max-in-memory-bytes:10485760}") int maxInMemoryBytes) {
+        ExchangeStrategies strategies = ExchangeStrategies.builder()
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(maxInMemoryBytes))
+                .build();
+        this.proofHttp = WebClient.builder().baseUrl(proofBase).exchangeStrategies(strategies).build();
+        this.rawHttp = WebClient.builder().exchangeStrategies(strategies).build();
         this.internalToken = firstNonBlank(internalDotToken, securityInternalToken, internalToken);
     }
 
