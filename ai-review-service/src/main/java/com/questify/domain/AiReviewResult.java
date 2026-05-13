@@ -42,6 +42,36 @@ public class AiReviewResult {
     @Column(length = 500)
     private String decisionNote;
 
+    @Column(nullable = false)
+    private boolean generatedPolicy;
+
+    @Column(length = 128)
+    private String modelUsed;
+
+    @Column(nullable = false)
+    private boolean fallbackUsed;
+
+    @Column(length = 500)
+    private String fallbackReason;
+
+    @Lob
+    private String matchedEvidence;
+
+    @Lob
+    private String missingEvidence;
+
+    @Lob
+    private String matchedDisqualifiers;
+
+    @Lob
+    private String ocrSnippets;
+
+    @Lob
+    private String observedSignals;
+
+    @Column(length = 500)
+    private String decisionPath;
+
     @Lob
     private String rawOutput;
 

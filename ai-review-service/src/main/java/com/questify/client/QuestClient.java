@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Duration;
+import java.util.List;
 
 @Component
 public class QuestClient {
@@ -35,14 +36,47 @@ public class QuestClient {
                 .retrieve()
                 .bodyToMono(QuestResponse.class)
                 .block(Duration.ofSeconds(5));
-        if (res == null) return new QuestContext("Quest " + questId, "");
-        return new QuestContext(nullToBlank(res.title()), nullToBlank(res.description()));
+        if (res == null) return new QuestContext("Quest " + questId, "", List.of(), List.of(), List.of(), 0.7, null);
+        return new QuestContext(
+                nullToBlank(res.title()),
+                nullToBlank(res.description()),
+                nullSafeList(res.requiredEvidence()),
+                nullSafeList(res.optionalEvidence()),
+                nullSafeList(res.disqualifiers()),
+                res.minSupportScore() == null ? 0.7 : Math.max(0.0, Math.min(1.0, res.minSupportScore())),
+                res.taskType()
+        );
     }
 
     private static String nullToBlank(String value) {
         return value == null ? "" : value;
     }
 
-    public record QuestContext(String title, String description) {}
-    private record QuestResponse(String title, String description) {}
+    private static List<String> nullSafeList(List<String> values) {
+        if (values == null) return List.of();
+        return values.stream()
+                .filter(v -> v != null && !v.isBlank())
+                .map(String::trim)
+                .toList();
+    }
+
+    public record QuestContext(
+            String title,
+            String description,
+            List<String> requiredEvidence,
+            List<String> optionalEvidence,
+            List<String> disqualifiers,
+            double minSupportScore,
+            String taskType
+    ) {}
+
+    private record QuestResponse(
+            String title,
+            String description,
+            List<String> requiredEvidence,
+            List<String> optionalEvidence,
+            List<String> disqualifiers,
+            Double minSupportScore,
+            String taskType
+    ) {}
 }

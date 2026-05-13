@@ -13,20 +13,50 @@ import java.util.Map;
 @Component
 public class OllamaVisionClient implements ModelClient {
     private final WebClient http;
-    private final String model;
+    private final String primaryModel;
+    private final String fallbackModel;
     private final int timeoutMs;
 
     public OllamaVisionClient(@Value("${ai-review.runtime-base-url:http://ollama:11434}") String baseUrl,
-                              @Value("${ai-review.model:qwen2.5vl:3b}") String model,
+                              @Value("${ai-review.model-primary:${AI_REVIEW_MODEL:qwen2.5vl:7b}}") String primaryModel,
+                              @Value("${ai-review.model-fallback:qwen2.5vl:3b}") String fallbackModel,
                               @Value("${ai-review.timeout-ms:90000}") int timeoutMs) {
         this.http = WebClient.builder().baseUrl(baseUrl).build();
-        this.model = model;
+        this.primaryModel = primaryModel;
+        this.fallbackModel = fallbackModel;
         this.timeoutMs = timeoutMs;
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    public String generate(AiReviewPrompt prompt) {
+    public ModelResponse generate(AiReviewPrompt prompt) {
+        Exception primaryError = null;
+        try {
+            String content = generateWithModel(primaryModel, prompt);
+            return new ModelResponse(content, primaryModel, false, null);
+        } catch (Exception ex) {
+            primaryError = ex;
+            log.warn("AI review primary model failed model={} error={}", primaryModel, ex.toString());
+        }
+
+        if (fallbackModel == null || fallbackModel.isBlank() || fallbackModel.equals(primaryModel)) {
+            if (primaryError instanceof RuntimeException runtimeException) throw runtimeException;
+            throw new IllegalStateException("Primary model failed and no distinct fallback model configured", primaryError);
+        }
+
+        try {
+            String content = generateWithModel(fallbackModel, prompt);
+            return new ModelResponse(content, fallbackModel, true, primaryError == null ? null : primaryError.toString());
+        } catch (Exception fallbackError) {
+            throw new IllegalStateException(
+                    "Both primary and fallback models failed. primary=" + primaryModel + " fallback=" + fallbackModel,
+                    fallbackError
+            );
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private String generateWithModel(String model, AiReviewPrompt prompt) {
         log.info("AI review model request model={} images={} promptChars={} timeoutMs={}",
                 model,
                 prompt.base64Images() == null ? 0 : prompt.base64Images().size(),
@@ -54,6 +84,9 @@ public class OllamaVisionClient implements ModelClient {
         Object message = response == null ? null : response.get("message");
         if (message instanceof Map<?, ?> map && map.get("content") != null) {
             return String.valueOf(map.get("content"));
+        }
+        if (response != null && response.get("error") != null) {
+            throw new IllegalStateException("Model error response: " + response.get("error"));
         }
         return "";
     }

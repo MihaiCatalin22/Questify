@@ -105,6 +105,13 @@ export default function CoachSuggestionReviewPage() {
         endDate,
         createdByUserId: String(user.id),
         visibility: "PRIVATE",
+        verificationPolicy: {
+          requiredEvidence: [trimmedTitle.split(" ").slice(0, 3).join(" ")].filter((value) => value.length >= 2),
+          optionalEvidence: [categoryLabel(category).toLowerCase()],
+          disqualifiers: ["game hud", "meme", "unrelated screenshot"],
+          minSupportScore: 0.75,
+          taskType: "generic",
+        },
       });
 
       rememberAcceptedQuest(draft.suggestionKey, {

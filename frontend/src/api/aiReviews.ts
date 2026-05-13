@@ -15,6 +15,17 @@ export type AiReviewDTO = {
   recommendation: AiReviewRecommendation;
   confidence: number;
   reasons: string[];
+  decisionNote?: string | null;
+  matchedEvidence?: string[];
+  missingEvidence?: string[];
+  matchedDisqualifiers?: string[];
+  ocrSnippets?: string[];
+  observedSignals?: string[];
+  decisionPath?: string | null;
+  generatedPolicy?: boolean;
+  modelUsed?: string | null;
+  fallbackUsed?: boolean;
+  fallbackReason?: string | null;
   modelName?: string | null;
   rawStatus?: string | null;
   reviewedAt?: string | null;

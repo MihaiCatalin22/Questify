@@ -13,7 +13,10 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class QuestService {
@@ -45,6 +48,7 @@ public class QuestService {
                 .visibility(req.visibility())
                 .createdByUserId(req.createdByUserId())
                 .build();
+        applyVerificationPolicy(q, req.verificationPolicy());
         var saved = quests.save(q);
 
         events.publish(
@@ -60,7 +64,8 @@ public class QuestService {
                         "visibility", saved.getVisibility().name(),
                         "status", saved.getStatus().name(),
                         "startDate", saved.getStartDate(),
-                        "endDate", saved.getEndDate()
+                        "endDate", saved.getEndDate(),
+                        "verificationPolicy", verificationPolicyMap(saved)
                 )
         );
 
@@ -83,6 +88,7 @@ public class QuestService {
         q.setStartDate(req.startDate());
         q.setEndDate(req.endDate());
         q.setVisibility(req.visibility());
+        applyVerificationPolicy(q, req.verificationPolicy());
         var saved = quests.save(q);
 
         events.publish(
@@ -96,7 +102,8 @@ public class QuestService {
                         "category", saved.getCategory().name(),
                         "visibility", saved.getVisibility().name(),
                         "startDate", saved.getStartDate(),
-                        "endDate", saved.getEndDate()
+                        "endDate", saved.getEndDate(),
+                        "verificationPolicy", verificationPolicyMap(saved)
                 )
         );
 
@@ -240,4 +247,48 @@ public class QuestService {
                 : quests.countMyOrParticipatingNotStatus(userId, QuestStatus.ARCHIVED);
     }
 
+    private static void applyVerificationPolicy(Quest quest, com.questify.dto.QuestDtos.VerificationPolicyDto policy) {
+        Set<String> required = normalizeSignals(policy == null ? null : policy.requiredEvidence());
+        Set<String> optional = normalizeSignals(policy == null ? null : policy.optionalEvidence());
+        Set<String> disqualifiers = normalizeSignals(policy == null ? null : policy.disqualifiers());
+
+        quest.setVerificationRequiredEvidence(required);
+        quest.setVerificationOptionalEvidence(optional);
+        quest.setVerificationDisqualifiers(disqualifiers);
+
+        double minSupport = policy == null || policy.minSupportScore() == null
+                ? 0.7
+                : clamp(policy.minSupportScore(), 0.0, 1.0);
+        quest.setVerificationMinSupportScore(minSupport);
+
+        String taskType = policy == null || policy.taskType() == null ? null : policy.taskType().trim();
+        quest.setVerificationTaskType(taskType == null || taskType.isBlank() ? null : taskType);
+    }
+
+    private static Set<String> normalizeSignals(List<String> values) {
+        if (values == null || values.isEmpty()) return new LinkedHashSet<>();
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String value : values) {
+            if (value == null) continue;
+            String trimmed = value.trim();
+            if (trimmed.length() < 2) continue;
+            if (trimmed.length() > 120) trimmed = trimmed.substring(0, 120);
+            normalized.add(trimmed);
+        }
+        return normalized;
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private static Map<String, Object> verificationPolicyMap(Quest quest) {
+        return Map.of(
+                "requiredEvidence", quest.getVerificationRequiredEvidence() == null ? List.of() : quest.getVerificationRequiredEvidence(),
+                "optionalEvidence", quest.getVerificationOptionalEvidence() == null ? List.of() : quest.getVerificationOptionalEvidence(),
+                "disqualifiers", quest.getVerificationDisqualifiers() == null ? List.of() : quest.getVerificationDisqualifiers(),
+                "minSupportScore", quest.getVerificationMinSupportScore(),
+                "taskType", quest.getVerificationTaskType() == null ? "" : quest.getVerificationTaskType()
+        );
+    }
 }

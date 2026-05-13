@@ -15,7 +15,6 @@ import com.questify.repository.AiReviewAttemptRepository;
 import com.questify.repository.AiReviewResultRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,15 +22,28 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 public class AiReviewService {
+    private static final Pattern TOKEN_PATTERN = Pattern.compile("[a-z0-9]{3,}");
+    private static final Set<String> STOPWORDS = Set.of(
+            "this", "that", "with", "from", "into", "your", "have", "been", "were", "will", "then", "than",
+            "there", "their", "about", "quest", "proof", "image", "student", "comment", "submission",
+            "manual", "review", "show", "shows", "showing", "activity", "valid", "match", "matches",
+            "relevant", "looks", "good", "appears", "photo", "screenshot"
+    );
+    private static final List<String> DEFAULT_DISQUALIFIERS = List.of(
+            "game", "video game", "hud", "ui overlay", "menu screen", "meme", "cartoon", "cinematic"
+    );
+
     private final AiReviewResultRepository results;
     private final AiReviewAttemptRepository attempts;
     private final QuestClient quests;
@@ -39,16 +51,6 @@ public class AiReviewService {
     private final ProofClient proofs;
     private final ModelClient model;
     private final ObjectMapper mapper = new ObjectMapper();
-    private static final Pattern TOKEN_PATTERN = Pattern.compile("[a-z0-9]{4,}");
-    private static final Set<String> STOPWORDS = Set.of(
-            "this", "that", "with", "from", "into", "your", "have", "been", "were", "will",
-            "then", "than", "there", "their", "about", "quest", "proof", "image", "student",
-            "comment", "submission", "manual", "review", "show", "shows", "showing", "completed",
-            "activity", "valid", "match", "matches", "relevant", "looks", "good", "appears"
-    );
-
-    @Value("${ai-review.model:qwen2.5vl:3b}")
-    private String modelName;
 
     public AiReviewService(AiReviewResultRepository results,
                            AiReviewAttemptRepository attempts,
@@ -110,54 +112,33 @@ public class AiReviewService {
 
         try {
             QuestClient.QuestContext quest = quests.getQuest(event.questId());
-            List<ProofClient.ProofObject> proofObjects = event.proofKeys().isEmpty()
+            List<ProofClient.ProofObject> proofObjects = event.proofKeys() == null || event.proofKeys().isEmpty()
                     ? proofs.getProofs(event.submissionId())
                     : proofs.getProofsFromKeys(event.proofKeys());
             List<String> images = supportedImages(proofObjects);
-            log.info("AI review context prepared submissionId={} questId={} proofsFetched={} supportedImages={}",
-                    event.submissionId(), event.questId(), proofObjects == null ? 0 : proofObjects.size(), images.size());
-
             if (images.isEmpty()) {
-                log.warn("AI review unsupported media submissionId={} questId={} reason=no_supported_images",
-                        event.submissionId(), event.questId());
-                return saveAndRecord(existing, event, AiReviewRecommendation.UNSUPPORTED_MEDIA, 0.0,
-                        "No supported image proof was available for AI review.", null, false, null,
-                        source, triggeredBy, "UNSUPPORTED_MEDIA");
+                return saveAndRecord(existing, event, BuildResult.unsupportedMedia(), source, triggeredBy, "UNSUPPORTED_MEDIA");
             }
 
-            String prompt = """
-                    Review this Questify submission as advisory evidence only.
-                    Quest title: %s
-                    Quest description: %s
-                    Student comment: %s
+            Policy policy = toPolicy(quest);
 
-                    Return only valid JSON (no markdown fences) with exactly these fields:
-                    {"recommendation":"LIKELY_VALID","confidence":0.75,"reasons":["short reason"],"mediaSupported":true}
+            ModelClient.ModelResponse ocrRaw = model.generate(new AiReviewPrompt(buildOcrPrompt(quest, event), images));
+            OcrExtraction ocrExtraction = parseOcrExtraction(ocrRaw.content());
 
-                    Rules:
-                    - recommendation must be one of: LIKELY_VALID, UNCLEAR, LIKELY_INVALID
-                    - confidence must be a single number between 0 and 1 (example: 0.62)
-                    - reasons must be 1-3 short strings
-                    - mediaSupported must be true when you could inspect the image
-                    - do not output placeholders, ranges, or option lists
-                    - if uncertain, use UNCLEAR with lower confidence
-                    """.formatted(quest.title(), quest.description(), event.note() == null ? "" : event.note());
+            ModelClient.ModelResponse observationRaw = model.generate(new AiReviewPrompt(
+                    buildObservationPrompt(quest, event, ocrExtraction),
+                    images
+            ));
+            Observation observation = parseObservation(observationRaw.content(), ocrExtraction);
 
-            String raw = model.generate(new AiReviewPrompt(prompt, images));
-            log.info("AI review model response received submissionId={} rawPreview={}",
-                    event.submissionId(), truncate(raw, 400));
-            ParsedReview parsed = parse(raw);
-            FinalDecision decision = applyPrecisionGuard(parsed, quest, event, proofObjects);
-            log.info("AI review parsed submissionId={} recommendation={} confidence={} downgraded={}",
-                    event.submissionId(), parsed.recommendation(), parsed.confidence(), decision.decisionNote() != null);
-            return saveAndRecord(existing, event, decision.recommendation(), decision.confidence(),
-                    String.join("\n", decision.reasons()), decision.decisionNote(), true, raw, source, triggeredBy, "SUCCESS");
+            Scorecard scorecard = evaluate(policy, observation);
+            BuildResult review = finalizeDecision(policy, scorecard, observation, ocrRaw, observationRaw);
+            return saveAndRecord(existing, event, review, source, triggeredBy, "SUCCESS");
         } catch (Exception e) {
             log.error("AI review failed submissionId={} source={} triggeredBy={} error={}",
                     event.submissionId(), source, triggeredBy, e.toString(), e);
-            return saveAndRecord(existing, event, AiReviewRecommendation.AI_FAILED, 0.0,
-                    "AI review failed; manual review is required. " + truncate(e.getMessage(), 300), null, true, e.toString(),
-                    source, triggeredBy, "FAILED");
+            BuildResult failed = BuildResult.failed("AI review failed; manual review is required. " + truncate(e.getMessage(), 300));
+            return saveAndRecord(existing, event, failed, source, triggeredBy, "FAILED");
         }
     }
 
@@ -168,12 +149,7 @@ public class AiReviewService {
 
     private AiReviewResult saveAndRecord(AiReviewResult existing,
                                          SubmissionCreated event,
-                                         AiReviewRecommendation recommendation,
-                                         double confidence,
-                                         String reasons,
-                                         String decisionNote,
-                                         boolean mediaSupported,
-                                         String raw,
+                                         BuildResult build,
                                          AiReviewRunSource source,
                                          String triggeredBy,
                                          String outcome) {
@@ -181,13 +157,23 @@ public class AiReviewService {
         target.setSubmissionId(event.submissionId());
         target.setQuestId(event.questId());
         target.setUserId(event.userId());
-        target.setRecommendation(recommendation);
-        target.setConfidence(Math.max(0.0, Math.min(1.0, confidence)));
-        target.setModel(modelName);
-        target.setReasons(truncate(reasons == null || reasons.isBlank() ? "Manual review is required." : reasons, 2000));
-        target.setDecisionNote(truncate(decisionNote, 500));
-        target.setRawOutput(raw);
-        target.setMediaSupported(mediaSupported);
+        target.setRecommendation(build.recommendation());
+        target.setConfidence(clamp01(build.confidence()));
+        target.setModel(build.modelUsed() == null ? "n/a" : build.modelUsed());
+        target.setModelUsed(build.modelUsed());
+        target.setFallbackUsed(build.fallbackUsed());
+        target.setFallbackReason(truncate(build.fallbackReason(), 500));
+        target.setReasons(toMultiline(build.reasons()));
+        target.setDecisionNote(truncate(build.decisionNote(), 500));
+        target.setGeneratedPolicy(build.generatedPolicy());
+        target.setMatchedEvidence(toMultiline(build.matchedEvidence()));
+        target.setMissingEvidence(toMultiline(build.missingEvidence()));
+        target.setMatchedDisqualifiers(toMultiline(build.matchedDisqualifiers()));
+        target.setOcrSnippets(toMultiline(build.ocrSnippets()));
+        target.setObservedSignals(toMultiline(build.observedSignals()));
+        target.setDecisionPath(truncate(build.decisionPath(), 500));
+        target.setRawOutput(truncate(build.rawOutput(), 12000));
+        target.setMediaSupported(build.mediaSupported());
         target.setReviewedAt(Instant.now());
 
         AiReviewResult saved;
@@ -201,15 +187,25 @@ public class AiReviewService {
             current.setRecommendation(target.getRecommendation());
             current.setConfidence(target.getConfidence());
             current.setModel(target.getModel());
+            current.setModelUsed(target.getModelUsed());
+            current.setFallbackUsed(target.isFallbackUsed());
+            current.setFallbackReason(target.getFallbackReason());
             current.setReasons(target.getReasons());
             current.setDecisionNote(target.getDecisionNote());
+            current.setGeneratedPolicy(target.isGeneratedPolicy());
+            current.setMatchedEvidence(target.getMatchedEvidence());
+            current.setMissingEvidence(target.getMissingEvidence());
+            current.setMatchedDisqualifiers(target.getMatchedDisqualifiers());
+            current.setOcrSnippets(target.getOcrSnippets());
+            current.setObservedSignals(target.getObservedSignals());
+            current.setDecisionPath(target.getDecisionPath());
             current.setRawOutput(target.getRawOutput());
             current.setMediaSupported(target.isMediaSupported());
             current.setReviewedAt(target.getReviewedAt());
             saved = results.saveAndFlush(current);
         }
 
-        recordAttempt(event.submissionId(), source, triggeredBy, outcome, recommendation, saved.getConfidence(), raw);
+        recordAttempt(event.submissionId(), source, triggeredBy, outcome, saved.getRecommendation(), saved.getConfidence(), saved.getDecisionPath());
         return saved;
     }
 
@@ -232,9 +228,255 @@ public class AiReviewService {
                 .build());
     }
 
-    private static String truncate(String value, int max) {
-        if (value == null || value.length() <= max) return value;
-        return value.substring(0, max);
+    private String buildOcrPrompt(QuestClient.QuestContext quest, SubmissionCreated event) {
+        return """
+                You are OCR extraction for proof review.
+                Quest title: %s
+                Quest description: %s
+                Student comment: %s
+
+                Return only JSON:
+                {"ocr_text":["line 1","line 2"],"quality":"HIGH|MEDIUM|LOW"}
+
+                Rules:
+                - Only include text directly visible in the image.
+                - Do not infer missing text.
+                - If no readable text exists, return empty ocr_text.
+                """.formatted(quest.title(), quest.description(), event.note() == null ? "" : event.note());
+    }
+
+    private String buildObservationPrompt(QuestClient.QuestContext quest, SubmissionCreated event, OcrExtraction ocr) {
+        return """
+                You are visual evidence extractor for Questify AI review.
+                Quest title: %s
+                Quest description: %s
+                Student comment: %s
+                OCR text extracted: %s
+
+                Return only JSON:
+                {
+                  "visible_objects":["..."],
+                  "visible_text":["..."],
+                  "scene_type":"...",
+                  "activity_clues":["..."],
+                  "uncertainty_flags":["..."]
+                }
+
+                Rules:
+                - Describe only directly observable evidence from image(s).
+                - No recommendation and no confidence here.
+                - If uncertain, populate uncertainty_flags.
+                """.formatted(
+                quest.title(),
+                quest.description(),
+                event.note() == null ? "" : event.note(),
+                ocr.text().isEmpty() ? "[]" : ocr.text()
+        );
+    }
+
+    private Policy toPolicy(QuestClient.QuestContext quest) {
+        List<String> required = normalizeSignals(quest.requiredEvidence());
+        List<String> optional = normalizeSignals(quest.optionalEvidence());
+        List<String> disqualifiers = normalizeSignals(quest.disqualifiers());
+        String taskType = quest.taskType() == null ? null : quest.taskType().trim();
+        double minSupport = clamp01(quest.minSupportScore() <= 0.0 ? 0.7 : quest.minSupportScore());
+
+        boolean generated = required.isEmpty() && optional.isEmpty() && disqualifiers.isEmpty();
+        if (!generated) {
+            return new Policy(required, optional, disqualifiers, minSupport, taskType, false);
+        }
+
+        Set<String> baseTokens = extractTokens(quest.title() + " " + quest.description());
+        List<String> autoRequired = baseTokens.stream().limit(4).toList();
+        List<String> autoOptional = baseTokens.stream().skip(4).limit(6).toList();
+        List<String> autoDisqualifiers = new ArrayList<>(DEFAULT_DISQUALIFIERS);
+        return new Policy(
+                autoRequired,
+                autoOptional,
+                autoDisqualifiers,
+                0.75,
+                taskType == null || taskType.isBlank() ? "generic" : taskType,
+                true
+        );
+    }
+
+    private OcrExtraction parseOcrExtraction(String raw) {
+        JsonNode node = parseJsonNode(raw);
+        List<String> lines = readStringList(node.path("ocr_text"));
+        String quality = node.path("quality").asText("LOW");
+        return new OcrExtraction(lines, quality);
+    }
+
+    private Observation parseObservation(String raw, OcrExtraction ocr) {
+        JsonNode node = parseJsonNode(raw);
+        List<String> visibleObjects = readStringList(node.path("visible_objects"));
+        List<String> visibleText = dedupeConcat(readStringList(node.path("visible_text")), ocr.text());
+        String sceneType = node.path("scene_type").asText("");
+        List<String> activityClues = readStringList(node.path("activity_clues"));
+        List<String> uncertaintyFlags = readStringList(node.path("uncertainty_flags"));
+        return new Observation(visibleObjects, visibleText, sceneType, activityClues, uncertaintyFlags);
+    }
+
+    private Scorecard evaluate(Policy policy, Observation observation) {
+        List<String> signalParts = new ArrayList<>();
+        signalParts.addAll(observation.visibleObjects());
+        signalParts.addAll(observation.visibleText());
+        signalParts.addAll(observation.activityClues());
+        if (observation.sceneType() != null && !observation.sceneType().isBlank()) {
+            signalParts.add(observation.sceneType());
+        }
+        String signalBlob = String.join(" ", signalParts).toLowerCase(Locale.ROOT);
+
+        List<String> matchedRequired = matchSignals(policy.requiredEvidence(), signalBlob);
+        List<String> missingRequired = policy.requiredEvidence().stream()
+                .filter(required -> !containsSignal(signalBlob, required))
+                .toList();
+        List<String> matchedOptional = matchSignals(policy.optionalEvidence(), signalBlob);
+        List<String> matchedDisqualifiers = matchSignals(policy.disqualifiers(), signalBlob);
+
+        List<String> uncertainty = observation.uncertaintyFlags().stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(String::trim)
+                .toList();
+
+        double requiredRatio = policy.requiredEvidence().isEmpty()
+                ? 0.0
+                : ((double) matchedRequired.size() / (double) policy.requiredEvidence().size());
+        double optionalRatio = policy.optionalEvidence().isEmpty()
+                ? 0.0
+                : ((double) matchedOptional.size() / (double) policy.optionalEvidence().size());
+        double disqualifierPenalty = matchedDisqualifiers.isEmpty() ? 0.0 : Math.min(1.0, matchedDisqualifiers.size() * 0.35);
+        double uncertaintyPenalty = uncertainty.isEmpty() ? 0.0 : Math.min(0.35, uncertainty.size() * 0.1);
+
+        double supportScore = clamp01((requiredRatio * 0.75) + (optionalRatio * 0.25) - disqualifierPenalty - uncertaintyPenalty);
+        return new Scorecard(
+                matchedRequired,
+                missingRequired,
+                matchedOptional,
+                matchedDisqualifiers,
+                uncertainty,
+                supportScore
+        );
+    }
+
+    private BuildResult finalizeDecision(Policy policy,
+                                         Scorecard scorecard,
+                                         Observation observation,
+                                         ModelClient.ModelResponse ocrRaw,
+                                         ModelClient.ModelResponse obsRaw) {
+        AiReviewRecommendation recommendation;
+        String decisionPath;
+
+        boolean hasDisqualifier = !scorecard.matchedDisqualifiers().isEmpty();
+        boolean hasRequired = !policy.requiredEvidence().isEmpty();
+        boolean requiredSatisfied = hasRequired && scorecard.missingRequired().isEmpty();
+        boolean strongSupport = scorecard.supportScore() >= policy.minSupportScore();
+        boolean uncertaintyHeavy = scorecard.uncertaintyFlags().size() >= 2;
+
+        if (hasDisqualifier && scorecard.supportScore() < 0.8) {
+            recommendation = AiReviewRecommendation.LIKELY_INVALID;
+            decisionPath = "disqualifier_hit";
+        } else if (requiredSatisfied && strongSupport && !uncertaintyHeavy) {
+            recommendation = AiReviewRecommendation.LIKELY_VALID;
+            decisionPath = "required_satisfied";
+        } else if (hasRequired && scorecard.matchedRequired().isEmpty() && scorecard.supportScore() < 0.35) {
+            recommendation = AiReviewRecommendation.LIKELY_INVALID;
+            decisionPath = "required_missing";
+        } else {
+            recommendation = AiReviewRecommendation.UNCLEAR;
+            decisionPath = "insufficient_evidence";
+        }
+
+        if (policy.generated() && recommendation == AiReviewRecommendation.LIKELY_VALID && scorecard.supportScore() < 0.9) {
+            recommendation = AiReviewRecommendation.UNCLEAR;
+            decisionPath = "generated_policy_conservative";
+        }
+
+        List<String> reasons = new ArrayList<>();
+        reasons.add("Support score: %.2f".formatted(scorecard.supportScore()));
+        if (!scorecard.matchedRequired().isEmpty()) reasons.add("Matched required: " + String.join(", ", scorecard.matchedRequired()));
+        if (!scorecard.missingRequired().isEmpty()) reasons.add("Missing required: " + String.join(", ", scorecard.missingRequired()));
+        if (!scorecard.matchedDisqualifiers().isEmpty()) reasons.add("Disqualifiers: " + String.join(", ", scorecard.matchedDisqualifiers()));
+        if (reasons.size() > 4) reasons = reasons.subList(0, 4);
+
+        String decisionNote = policy.generated()
+                ? "Used generated verification policy from quest text; recommendation is conservative."
+                : null;
+
+        String rawCombined = "OCR_MODEL=" + ocrRaw.modelUsed() + "\nOCR_RAW=" + truncate(ocrRaw.content(), 4000) +
+                "\nOBS_MODEL=" + obsRaw.modelUsed() + "\nOBS_RAW=" + truncate(obsRaw.content(), 6000);
+
+        return new BuildResult(
+                recommendation,
+                scorecard.supportScore(),
+                reasons,
+                decisionNote,
+                true,
+                obsRaw.modelUsed(),
+                ocrRaw.fallbackUsed() || obsRaw.fallbackUsed(),
+                firstNonBlank(obsRaw.fallbackReason(), ocrRaw.fallbackReason()),
+                policy.generated(),
+                scorecard.matchedRequired(),
+                scorecard.missingRequired(),
+                scorecard.matchedDisqualifiers(),
+                observation.visibleText().stream().limit(8).toList(),
+                buildObservedSignals(observation),
+                decisionPath,
+                rawCombined
+        );
+    }
+
+    private List<String> buildObservedSignals(Observation observation) {
+        LinkedHashSet<String> signals = new LinkedHashSet<>();
+        signals.addAll(normalizeSignals(observation.visibleObjects()));
+        signals.addAll(normalizeSignals(observation.activityClues()));
+        signals.addAll(normalizeSignals(observation.visibleText()));
+        if (observation.sceneType() != null && !observation.sceneType().isBlank()) {
+            signals.add(observation.sceneType().trim());
+        }
+        return signals.stream().limit(20).toList();
+    }
+
+    private static List<String> matchSignals(List<String> candidates, String signalBlob) {
+        if (candidates == null || candidates.isEmpty()) return List.of();
+        return candidates.stream()
+                .filter(candidate -> containsSignal(signalBlob, candidate))
+                .distinct()
+                .toList();
+    }
+
+    private static boolean containsSignal(String signalBlob, String signal) {
+        if (signal == null || signal.isBlank()) return false;
+        String normalized = signal.trim().toLowerCase(Locale.ROOT);
+        return signalBlob.contains(normalized);
+    }
+
+    private static List<String> normalizeSignals(List<String> values) {
+        if (values == null || values.isEmpty()) return List.of();
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String value : values) {
+            if (value == null) continue;
+            String trimmed = value.trim().toLowerCase(Locale.ROOT);
+            if (trimmed.length() < 2) continue;
+            if (trimmed.length() > 120) trimmed = trimmed.substring(0, 120);
+            normalized.add(trimmed);
+        }
+        return normalized.stream().toList();
+    }
+
+    private static Set<String> extractTokens(String text) {
+        String source = text == null ? "" : text.toLowerCase(Locale.ROOT);
+        LinkedHashSet<String> tokens = new LinkedHashSet<>();
+        Matcher matcher = TOKEN_PATTERN.matcher(source);
+        while (matcher.find()) {
+            String token = matcher.group();
+            if (STOPWORDS.contains(token) || token.chars().allMatch(Character::isDigit)) continue;
+            tokens.add(token);
+        }
+        return tokens.stream()
+                .sorted(Comparator.comparingInt(String::length).reversed())
+                .limit(10)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private List<String> supportedImages(List<ProofClient.ProofObject> proofObjects) {
@@ -247,32 +489,12 @@ public class AiReviewService {
         return images;
     }
 
-    private ParsedReview parse(String raw) {
-        String json = extractJson(raw);
+    private JsonNode parseJsonNode(String raw) {
         try {
-            JsonNode node = mapper.readTree(json);
-            return toParsedReview(node);
-        } catch (Exception parseError) {
-            log.warn("AI review JSON parse failed, applying heuristic fallback rawPreview={} error={}",
-                    truncate(raw, 300), parseError.toString());
-            return heuristicParse(raw);
+            return mapper.readTree(extractJson(raw));
+        } catch (Exception ignored) {
+            return mapper.createObjectNode();
         }
-    }
-
-    private ParsedReview toParsedReview(JsonNode node) {
-        AiReviewRecommendation recommendation = switch (node.path("recommendation").asText("UNCLEAR")) {
-            case "LIKELY_VALID" -> AiReviewRecommendation.LIKELY_VALID;
-            case "LIKELY_INVALID" -> AiReviewRecommendation.LIKELY_INVALID;
-            default -> AiReviewRecommendation.UNCLEAR;
-        };
-        double confidence = parseConfidence(node.path("confidence"));
-        List<String> reasons = new ArrayList<>();
-        JsonNode reasonNode = node.path("reasons");
-        if (reasonNode.isArray()) {
-            reasonNode.forEach(reason -> reasons.add(reason.asText()));
-        }
-        if (reasons.isEmpty()) reasons.add("Manual review is required.");
-        return new ParsedReview(recommendation, confidence, reasons);
     }
 
     private static String extractJson(String raw) {
@@ -284,162 +506,134 @@ public class AiReviewService {
         return cleaned;
     }
 
-    private static double parseConfidence(JsonNode confidenceNode) {
-        if (confidenceNode == null || confidenceNode.isMissingNode()) return 0.0;
-        if (confidenceNode.isNumber()) {
-            return clampConfidence(confidenceNode.asDouble(0.0));
-        }
-        if (confidenceNode.isTextual()) {
-            Matcher matcher = Pattern.compile("(\\d+(?:\\.\\d+)?)").matcher(confidenceNode.asText());
-            if (matcher.find()) {
-                double value = Double.parseDouble(matcher.group(1));
-                if (value > 1.0) value = value / 100.0;
-                return clampConfidence(value);
-            }
-        }
-        return 0.0;
+    private static List<String> readStringList(JsonNode node) {
+        if (node == null || !node.isArray()) return List.of();
+        List<String> list = new ArrayList<>();
+        node.forEach(value -> {
+            String text = value.asText("");
+            if (!text.isBlank()) list.add(text.trim());
+        });
+        return list;
     }
 
-    private static ParsedReview heuristicParse(String raw) {
-        String text = raw == null ? "" : raw.toUpperCase(Locale.ROOT);
-        AiReviewRecommendation recommendation = AiReviewRecommendation.UNCLEAR;
-        if (text.contains("LIKELY_INVALID") && !text.contains("LIKELY_VALID|")) {
-            recommendation = AiReviewRecommendation.LIKELY_INVALID;
-        } else if (text.contains("LIKELY_VALID") && !text.contains("LIKELY_VALID|")) {
-            recommendation = AiReviewRecommendation.LIKELY_VALID;
-        }
-
-        Matcher confidenceMatch = Pattern.compile("CONFIDENCE[^0-9]*(\\d+(?:\\.\\d+)?)").matcher(text);
-        double confidence = 0.35;
-        if (confidenceMatch.find()) {
-            try {
-                double parsed = Double.parseDouble(confidenceMatch.group(1));
-                confidence = parsed > 1.0 ? parsed / 100.0 : parsed;
-            } catch (NumberFormatException ignored) {
-                confidence = 0.35;
-            }
-        }
-
-        List<String> reasons = List.of("Model output was partially malformed; reviewer should verify manually.");
-        return new ParsedReview(recommendation, clampConfidence(confidence), reasons);
+    private static List<String> dedupeConcat(List<String> first, List<String> second) {
+        LinkedHashSet<String> merged = new LinkedHashSet<>();
+        if (first != null) merged.addAll(first);
+        if (second != null) merged.addAll(second);
+        return merged.stream().filter(value -> value != null && !value.isBlank()).toList();
     }
 
-    private static double clampConfidence(double value) {
+    private static String toMultiline(List<String> values) {
+        if (values == null || values.isEmpty()) return null;
+        return values.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(String::trim)
+                .collect(Collectors.joining("\n"));
+    }
+
+    private static String truncate(String value, int max) {
+        if (value == null || value.length() <= max) return value;
+        return value.substring(0, max);
+    }
+
+    private static double clamp01(double value) {
         if (Double.isNaN(value) || Double.isInfinite(value)) return 0.0;
         return Math.max(0.0, Math.min(1.0, value));
     }
 
-    private FinalDecision applyPrecisionGuard(ParsedReview parsed,
-                                              QuestClient.QuestContext quest,
-                                              SubmissionCreated event,
-                                              List<ProofClient.ProofObject> proofsUsed) {
-        if (parsed.recommendation() != AiReviewRecommendation.LIKELY_VALID) {
-            return new FinalDecision(parsed.recommendation(), parsed.confidence(), parsed.reasons(), null);
-        }
-        if (hasSpecificEvidence(parsed.reasons(), quest, event, proofsUsed)) {
-            return new FinalDecision(parsed.recommendation(), parsed.confidence(), parsed.reasons(), null);
-        }
-
-        List<String> downgradedReasons = new ArrayList<>(parsed.reasons());
-        downgradedReasons.add("Auto-policy: reasons were too generic for auto-valid recommendation.");
-        return new FinalDecision(
-                AiReviewRecommendation.UNCLEAR,
-                Math.min(parsed.confidence(), 0.49),
-                downgradedReasons,
-                "Downgraded to UNCLEAR because evidence was generic and not quest/proof-specific."
-        );
+    private static String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) return first;
+        return second;
     }
 
-    private boolean hasSpecificEvidence(List<String> reasons,
-                                        QuestClient.QuestContext quest,
-                                        SubmissionCreated event,
-                                        List<ProofClient.ProofObject> proofsUsed) {
-        if (reasons == null || reasons.isEmpty()) return false;
-        Set<String> evidenceTokens = buildEvidenceTokens(quest, event, proofsUsed);
-        List<String> normalizedReasons = reasons.stream()
-                .map(reason -> reason == null ? "" : reason.toLowerCase(Locale.ROOT))
-                .toList();
+    private record Policy(
+            List<String> requiredEvidence,
+            List<String> optionalEvidence,
+            List<String> disqualifiers,
+            double minSupportScore,
+            String taskType,
+            boolean generated
+    ) {}
 
-        for (String reason : normalizedReasons) {
-            for (String token : evidenceTokens) {
-                if (reason.contains(token)) return true;
-            }
+    private record OcrExtraction(List<String> text, String quality) {}
+
+    private record Observation(
+            List<String> visibleObjects,
+            List<String> visibleText,
+            String sceneType,
+            List<String> activityClues,
+            List<String> uncertaintyFlags
+    ) {}
+
+    private record Scorecard(
+            List<String> matchedRequired,
+            List<String> missingRequired,
+            List<String> matchedOptional,
+            List<String> matchedDisqualifiers,
+            List<String> uncertaintyFlags,
+            double supportScore
+    ) {}
+
+    private record BuildResult(
+            AiReviewRecommendation recommendation,
+            double confidence,
+            List<String> reasons,
+            String decisionNote,
+            boolean mediaSupported,
+            String modelUsed,
+            boolean fallbackUsed,
+            String fallbackReason,
+            boolean generatedPolicy,
+            List<String> matchedEvidence,
+            List<String> missingEvidence,
+            List<String> matchedDisqualifiers,
+            List<String> ocrSnippets,
+            List<String> observedSignals,
+            String decisionPath,
+            String rawOutput
+    ) {
+        static BuildResult unsupportedMedia() {
+            return new BuildResult(
+                    AiReviewRecommendation.UNSUPPORTED_MEDIA,
+                    0.0,
+                    List.of("No supported image proof was available for AI review."),
+                    null,
+                    false,
+                    null,
+                    false,
+                    null,
+                    false,
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    "unsupported_media",
+                    null
+            );
         }
-        return !looksGeneric(normalizedReasons);
+
+        static BuildResult failed(String reason) {
+            return new BuildResult(
+                    AiReviewRecommendation.AI_FAILED,
+                    0.0,
+                    List.of(reason == null ? "AI review failed; manual review is required." : reason),
+                    "Model/runtime failure; manual review required.",
+                    true,
+                    null,
+                    false,
+                    null,
+                    false,
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    "ai_failed",
+                    reason
+            );
+        }
     }
-
-    private static boolean looksGeneric(List<String> normalizedReasons) {
-        int genericCount = 0;
-        for (String reason : normalizedReasons) {
-            String text = reason == null ? "" : reason.trim();
-            if (text.isBlank()) {
-                genericCount++;
-                continue;
-            }
-            boolean hasWeakPhrase = text.contains("looks relevant")
-                    || text.contains("seems relevant")
-                    || text.contains("appears relevant")
-                    || text.contains("matches the quest")
-                    || text.contains("aligned with")
-                    || text.contains("appropriate proof")
-                    || text.contains("sufficient evidence")
-                    || text.contains("likely completed")
-                    || text.contains("could indicate");
-            boolean hasConcreteMarker = text.contains("equation")
-                    || text.contains("worksheet")
-                    || text.contains("graph")
-                    || text.contains("map")
-                    || text.contains("code")
-                    || text.contains("chapter")
-                    || text.contains("minutes")
-                    || text.contains("pages")
-                    || text.contains("photo")
-                    || text.contains("screenshot")
-                    || text.contains("contains");
-            if (hasWeakPhrase && !hasConcreteMarker) genericCount++;
-        }
-        return genericCount == normalizedReasons.size();
-    }
-
-    private static Set<String> buildEvidenceTokens(QuestClient.QuestContext quest,
-                                                   SubmissionCreated event,
-                                                   List<ProofClient.ProofObject> proofsUsed) {
-        StringBuilder source = new StringBuilder();
-        if (quest != null) {
-            source.append(" ").append(quest.title()).append(" ").append(quest.description());
-        }
-        if (event != null && event.note() != null) {
-            source.append(" ").append(event.note());
-        }
-        if (proofsUsed != null) {
-            for (ProofClient.ProofObject proof : proofsUsed) {
-                if (proof != null && proof.key() != null) {
-                    source.append(" ").append(proof.key().replace('/', ' ').replace('-', ' ').replace('_', ' '));
-                }
-            }
-        }
-
-        Set<String> tokens = new HashSet<>();
-        Matcher matcher = TOKEN_PATTERN.matcher(source.toString().toLowerCase(Locale.ROOT));
-        while (matcher.find()) {
-            String token = matcher.group();
-            if (!STOPWORDS.contains(token) && !token.chars().allMatch(Character::isDigit)) {
-                tokens.add(token);
-            }
-        }
-
-        return tokens.stream()
-                .sorted(Comparator.comparingInt(String::length).reversed())
-                .limit(30)
-                .collect(HashSet::new, HashSet::add, HashSet::addAll);
-    }
-
-    private record FinalDecision(AiReviewRecommendation recommendation,
-                                 double confidence,
-                                 List<String> reasons,
-                                 String decisionNote) {}
-
-    private record ParsedReview(AiReviewRecommendation recommendation, double confidence, List<String> reasons) {}
 
     public record SubmissionCreated(Long submissionId, Long questId, String userId, String note, Instant submittedAt,
                                     List<String> proofKeys) {

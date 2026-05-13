@@ -457,6 +457,26 @@ export default function SubmissionDetail() {
                   </div>
                 )}
 
+                {aiReview.data.generatedPolicy && (
+                  <div className="text-sm text-amber-300">
+                    This recommendation used an auto-generated verification policy from quest text and is conservative.
+                  </div>
+                )}
+
+                {!!aiReview.data.decisionPath && (
+                  <div className="text-xs text-[rgb(var(--faint))]">
+                    Decision path: {aiReview.data.decisionPath}
+                  </div>
+                )}
+
+                {(aiReview.data.modelUsed || aiReview.data.fallbackUsed) && (
+                  <div className="text-xs text-[rgb(var(--faint))]">
+                    Model used: {aiReview.data.modelUsed || aiReview.data.modelName || 'n/a'}
+                    {aiReview.data.fallbackUsed ? ` (fallback)` : ''}
+                    {aiReview.data.fallbackReason ? ` — ${aiReview.data.fallbackReason}` : ''}
+                  </div>
+                )}
+
                 {!!aiReview.data.reasons?.length && (
                   <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
                     {aiReview.data.reasons.map((reason, idx) => (
@@ -464,6 +484,45 @@ export default function SubmissionDetail() {
                     ))}
                   </ul>
                 )}
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Matched evidence</div>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
+                      {(aiReview.data.matchedEvidence ?? []).map((item, idx) => (
+                        <li key={`match-${idx}`}>{item}</li>
+                      ))}
+                      {(aiReview.data.matchedEvidence ?? []).length === 0 && <li>None</li>}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Missing evidence</div>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
+                      {(aiReview.data.missingEvidence ?? []).map((item, idx) => (
+                        <li key={`missing-${idx}`}>{item}</li>
+                      ))}
+                      {(aiReview.data.missingEvidence ?? []).length === 0 && <li>None</li>}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Disqualifiers</div>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
+                      {(aiReview.data.matchedDisqualifiers ?? []).map((item, idx) => (
+                        <li key={`disq-${idx}`}>{item}</li>
+                      ))}
+                      {(aiReview.data.matchedDisqualifiers ?? []).length === 0 && <li>None</li>}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">OCR snippets</div>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
+                      {(aiReview.data.ocrSnippets ?? []).map((item, idx) => (
+                        <li key={`ocr-${idx}`}>{item}</li>
+                      ))}
+                      {(aiReview.data.ocrSnippets ?? []).length === 0 && <li>None</li>}
+                    </ul>
+                  </div>
+                </div>
 
                 {aiReview.data.reviewedAt && (
                   <div className="text-xs text-[rgb(var(--faint))]">

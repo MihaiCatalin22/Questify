@@ -180,7 +180,8 @@ class QuestControllerTest {
                 Instant.parse("2025-01-01T00:00:00Z"),
                 Instant.parse("2025-01-02T00:00:00Z"),
                 QuestVisibility.PUBLIC,
-                createdBy
+                createdBy,
+                null
         );
     }
 
@@ -191,7 +192,8 @@ class QuestControllerTest {
                 QuestCategory.OTHER,
                 Instant.parse("2025-01-01T00:00:00Z"),
                 Instant.parse("2025-01-02T00:00:00Z"),
-                QuestVisibility.PUBLIC
+                QuestVisibility.PUBLIC,
+                null
         );
     }
 

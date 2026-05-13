@@ -5,8 +5,17 @@ import com.questify.domain.QuestStatus;
 import com.questify.domain.QuestVisibility;
 import jakarta.validation.constraints.*;
 import java.time.Instant;
+import java.util.List;
 
 public class QuestDtos {
+    public record VerificationPolicyDto(
+            List<@Size(min = 2, max = 120) String> requiredEvidence,
+            List<@Size(min = 2, max = 120) String> optionalEvidence,
+            List<@Size(min = 2, max = 120) String> disqualifiers,
+            @DecimalMin("0.0") @DecimalMax("1.0") Double minSupportScore,
+            @Size(min = 2, max = 80) String taskType
+    ) {}
+
     public record CreateQuestReq(
             @NotBlank @Size(min = 3, max = 140) String title,
             @NotBlank @Size(min = 10, max = 2000) String description,
@@ -14,7 +23,8 @@ public class QuestDtos {
             @NotNull Instant startDate,
             @NotNull Instant endDate,
             @NotNull QuestVisibility visibility,
-            @NotNull String createdByUserId
+            @NotNull String createdByUserId,
+            VerificationPolicyDto verificationPolicy
     ) {}
 
     public record UpdateQuestReq(
@@ -23,7 +33,8 @@ public class QuestDtos {
             @NotNull QuestCategory category,
             Instant startDate,
             Instant endDate,
-            @NotNull QuestVisibility visibility
+            @NotNull QuestVisibility visibility,
+            VerificationPolicyDto verificationPolicy
     ) {}
 
     public record UpdateQuestStatusReq(
@@ -43,7 +54,8 @@ public class QuestDtos {
             String createdByUserId,
             Integer participantsCount,
             Boolean completedByCurrentUser,
-            QuestVisibility visibility
+            QuestVisibility visibility,
+            VerificationPolicyDto verificationPolicy
     ) {}
 
 }
