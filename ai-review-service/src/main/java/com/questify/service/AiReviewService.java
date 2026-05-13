@@ -21,8 +21,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,8 +39,15 @@ public class AiReviewService {
     private final ProofClient proofs;
     private final ModelClient model;
     private final ObjectMapper mapper = new ObjectMapper();
+    private static final Pattern TOKEN_PATTERN = Pattern.compile("[a-z0-9]{4,}");
+    private static final Set<String> STOPWORDS = Set.of(
+            "this", "that", "with", "from", "into", "your", "have", "been", "were", "will",
+            "then", "than", "there", "their", "about", "quest", "proof", "image", "student",
+            "comment", "submission", "manual", "review", "show", "shows", "showing", "completed",
+            "activity", "valid", "match", "matches", "relevant", "looks", "good", "appears"
+    );
 
-    @Value("${ai-review.model:llava:7b}")
+    @Value("${ai-review.model:qwen2.5vl:7b}")
     private String modelName;
 
     public AiReviewService(AiReviewResultRepository results,
@@ -111,7 +121,7 @@ public class AiReviewService {
                 log.warn("AI review unsupported media submissionId={} questId={} reason=no_supported_images",
                         event.submissionId(), event.questId());
                 return saveAndRecord(existing, event, AiReviewRecommendation.UNSUPPORTED_MEDIA, 0.0,
-                        "No supported image proof was available for AI review.", false, null,
+                        "No supported image proof was available for AI review.", null, false, null,
                         source, triggeredBy, "UNSUPPORTED_MEDIA");
             }
 
@@ -137,15 +147,16 @@ public class AiReviewService {
             log.info("AI review model response received submissionId={} rawPreview={}",
                     event.submissionId(), truncate(raw, 400));
             ParsedReview parsed = parse(raw);
-            log.info("AI review parsed submissionId={} recommendation={} confidence={}",
-                    event.submissionId(), parsed.recommendation(), parsed.confidence());
-            return saveAndRecord(existing, event, parsed.recommendation(), parsed.confidence(),
-                    String.join("\n", parsed.reasons()), true, raw, source, triggeredBy, "SUCCESS");
+            FinalDecision decision = applyPrecisionGuard(parsed, quest, event, proofObjects);
+            log.info("AI review parsed submissionId={} recommendation={} confidence={} downgraded={}",
+                    event.submissionId(), parsed.recommendation(), parsed.confidence(), decision.decisionNote() != null);
+            return saveAndRecord(existing, event, decision.recommendation(), decision.confidence(),
+                    String.join("\n", decision.reasons()), decision.decisionNote(), true, raw, source, triggeredBy, "SUCCESS");
         } catch (Exception e) {
             log.error("AI review failed submissionId={} source={} triggeredBy={} error={}",
                     event.submissionId(), source, triggeredBy, e.toString(), e);
             return saveAndRecord(existing, event, AiReviewRecommendation.AI_FAILED, 0.0,
-                    "AI review failed; manual review is required. " + truncate(e.getMessage(), 300), true, e.toString(),
+                    "AI review failed; manual review is required. " + truncate(e.getMessage(), 300), null, true, e.toString(),
                     source, triggeredBy, "FAILED");
         }
     }
@@ -160,6 +171,7 @@ public class AiReviewService {
                                          AiReviewRecommendation recommendation,
                                          double confidence,
                                          String reasons,
+                                         String decisionNote,
                                          boolean mediaSupported,
                                          String raw,
                                          AiReviewRunSource source,
@@ -173,6 +185,7 @@ public class AiReviewService {
         target.setConfidence(Math.max(0.0, Math.min(1.0, confidence)));
         target.setModel(modelName);
         target.setReasons(truncate(reasons == null || reasons.isBlank() ? "Manual review is required." : reasons, 2000));
+        target.setDecisionNote(truncate(decisionNote, 500));
         target.setRawOutput(raw);
         target.setMediaSupported(mediaSupported);
         target.setReviewedAt(Instant.now());
@@ -189,6 +202,7 @@ public class AiReviewService {
             current.setConfidence(target.getConfidence());
             current.setModel(target.getModel());
             current.setReasons(target.getReasons());
+            current.setDecisionNote(target.getDecisionNote());
             current.setRawOutput(target.getRawOutput());
             current.setMediaSupported(target.isMediaSupported());
             current.setReviewedAt(target.getReviewedAt());
@@ -314,6 +328,116 @@ public class AiReviewService {
         if (Double.isNaN(value) || Double.isInfinite(value)) return 0.0;
         return Math.max(0.0, Math.min(1.0, value));
     }
+
+    private FinalDecision applyPrecisionGuard(ParsedReview parsed,
+                                              QuestClient.QuestContext quest,
+                                              SubmissionCreated event,
+                                              List<ProofClient.ProofObject> proofsUsed) {
+        if (parsed.recommendation() != AiReviewRecommendation.LIKELY_VALID) {
+            return new FinalDecision(parsed.recommendation(), parsed.confidence(), parsed.reasons(), null);
+        }
+        if (hasSpecificEvidence(parsed.reasons(), quest, event, proofsUsed)) {
+            return new FinalDecision(parsed.recommendation(), parsed.confidence(), parsed.reasons(), null);
+        }
+
+        List<String> downgradedReasons = new ArrayList<>(parsed.reasons());
+        downgradedReasons.add("Auto-policy: reasons were too generic for auto-valid recommendation.");
+        return new FinalDecision(
+                AiReviewRecommendation.UNCLEAR,
+                Math.min(parsed.confidence(), 0.49),
+                downgradedReasons,
+                "Downgraded to UNCLEAR because evidence was generic and not quest/proof-specific."
+        );
+    }
+
+    private boolean hasSpecificEvidence(List<String> reasons,
+                                        QuestClient.QuestContext quest,
+                                        SubmissionCreated event,
+                                        List<ProofClient.ProofObject> proofsUsed) {
+        if (reasons == null || reasons.isEmpty()) return false;
+        Set<String> evidenceTokens = buildEvidenceTokens(quest, event, proofsUsed);
+        List<String> normalizedReasons = reasons.stream()
+                .map(reason -> reason == null ? "" : reason.toLowerCase(Locale.ROOT))
+                .toList();
+
+        for (String reason : normalizedReasons) {
+            for (String token : evidenceTokens) {
+                if (reason.contains(token)) return true;
+            }
+        }
+        return !looksGeneric(normalizedReasons);
+    }
+
+    private static boolean looksGeneric(List<String> normalizedReasons) {
+        int genericCount = 0;
+        for (String reason : normalizedReasons) {
+            String text = reason == null ? "" : reason.trim();
+            if (text.isBlank()) {
+                genericCount++;
+                continue;
+            }
+            boolean hasWeakPhrase = text.contains("looks relevant")
+                    || text.contains("seems relevant")
+                    || text.contains("appears relevant")
+                    || text.contains("matches the quest")
+                    || text.contains("aligned with")
+                    || text.contains("appropriate proof")
+                    || text.contains("sufficient evidence")
+                    || text.contains("likely completed")
+                    || text.contains("could indicate");
+            boolean hasConcreteMarker = text.contains("equation")
+                    || text.contains("worksheet")
+                    || text.contains("graph")
+                    || text.contains("map")
+                    || text.contains("code")
+                    || text.contains("chapter")
+                    || text.contains("minutes")
+                    || text.contains("pages")
+                    || text.contains("photo")
+                    || text.contains("screenshot")
+                    || text.contains("contains");
+            if (hasWeakPhrase && !hasConcreteMarker) genericCount++;
+        }
+        return genericCount == normalizedReasons.size();
+    }
+
+    private static Set<String> buildEvidenceTokens(QuestClient.QuestContext quest,
+                                                   SubmissionCreated event,
+                                                   List<ProofClient.ProofObject> proofsUsed) {
+        StringBuilder source = new StringBuilder();
+        if (quest != null) {
+            source.append(" ").append(quest.title()).append(" ").append(quest.description());
+        }
+        if (event != null && event.note() != null) {
+            source.append(" ").append(event.note());
+        }
+        if (proofsUsed != null) {
+            for (ProofClient.ProofObject proof : proofsUsed) {
+                if (proof != null && proof.key() != null) {
+                    source.append(" ").append(proof.key().replace('/', ' ').replace('-', ' ').replace('_', ' '));
+                }
+            }
+        }
+
+        Set<String> tokens = new HashSet<>();
+        Matcher matcher = TOKEN_PATTERN.matcher(source.toString().toLowerCase(Locale.ROOT));
+        while (matcher.find()) {
+            String token = matcher.group();
+            if (!STOPWORDS.contains(token) && !token.chars().allMatch(Character::isDigit)) {
+                tokens.add(token);
+            }
+        }
+
+        return tokens.stream()
+                .sorted(Comparator.comparingInt(String::length).reversed())
+                .limit(30)
+                .collect(HashSet::new, HashSet::add, HashSet::addAll);
+    }
+
+    private record FinalDecision(AiReviewRecommendation recommendation,
+                                 double confidence,
+                                 List<String> reasons,
+                                 String decisionNote) {}
 
     private record ParsedReview(AiReviewRecommendation recommendation, double confidence, List<String> reasons) {}
 

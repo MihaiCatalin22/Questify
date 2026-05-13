@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.SourceSetContainer
+
 plugins {
     id("org.springframework.boot") version "3.5.7"
     id("io.spring.dependency-management") version "1.1.6"
@@ -6,6 +8,7 @@ plugins {
 }
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(21)) } }
+val sourceSets = the<SourceSetContainer>()
 
 group = "com.questify"
 version = "1.0-SNAPSHOT"
@@ -33,8 +36,25 @@ dependencies {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags("ai-review-benchmark")
+    }
     finalizedBy(tasks.jacocoTestReport)
+}
+
+val aiReviewBenchmark by tasks.registering(Test::class) {
+    description = "Runs AI review benchmark corpus against candidate Ollama models"
+    group = "verification"
+    useJUnitPlatform {
+        includeTags("ai-review-benchmark")
+    }
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    shouldRunAfter(tasks.test)
+    testLogging {
+        events("passed", "failed", "skipped")
+        showStandardStreams = true
+    }
 }
 
 jacoco { toolVersion = "0.8.12" }

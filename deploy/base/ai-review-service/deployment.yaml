@@ -42,7 +42,7 @@ spec:
             - { name: PROOF_SERVICE_BASE, value: "http://proof-service" }
             - { name: SUBMISSION_SERVICE_BASE, value: "http://submission-service" }
             - { name: AI_REVIEW_RUNTIME_BASE_URL, value: "http://host.docker.internal:11434" }
-            - { name: AI_REVIEW_MODEL, value: "llava:7b" }
+            - { name: AI_REVIEW_MODEL, value: "qwen2.5vl:7b" }
             - { name: AI_REVIEW_TIMEOUT_MS, value: "90000" }
             - name: INTERNAL_TOKEN
               valueFrom: { secretKeyRef: { name: internal-token, key: token } }

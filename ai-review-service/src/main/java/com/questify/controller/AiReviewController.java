@@ -72,6 +72,7 @@ public class AiReviewController {
             String recommendation,
             double confidence,
             List<String> reasons,
+            String decisionNote,
             String modelName,
             boolean mediaSupported,
             Instant reviewedAt
@@ -84,6 +85,7 @@ public class AiReviewController {
                     result.getRecommendation().name(),
                     result.getConfidence(),
                     splitReasons(result.getReasons()),
+                    result.getDecisionNote(),
                     result.getModel(),
                     result.isMediaSupported(),
                     result.getReviewedAt()

@@ -39,6 +39,9 @@ public class AiReviewResult {
     @Column(nullable = false)
     private String reasons;
 
+    @Column(length = 500)
+    private String decisionNote;
+
     @Lob
     private String rawOutput;
 

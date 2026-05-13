@@ -154,4 +154,27 @@ class AiReviewServiceTest {
         assertThat(out.getUserId()).isEqualTo("u1");
         verify(attempts, atLeastOnce()).save(any());
     }
+
+    @Test
+    void reviewSubmission_downgrades_generic_likely_valid_to_unclear_with_decision_note() {
+        when(results.findBySubmissionId(21L)).thenReturn(Optional.empty());
+        when(quests.getQuest(9L)).thenReturn(new QuestClient.QuestContext(
+                "Solve 4 algebra equations",
+                "Upload your solved worksheet with four equations."
+        ));
+        when(proofs.getProofs(21L)).thenReturn(List.of(new ProofClient.ProofObject("proof/math.png", "image/png", "BASE64IMG")));
+        when(model.generate(any())).thenReturn("""
+                {"recommendation":"LIKELY_VALID","confidence":0.88,"reasons":["The proof appears relevant to the quest."],"mediaSupported":true}
+                """);
+        when(results.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        AiReviewResult out = service.reviewSubmission(new AiReviewService.SubmissionCreated(
+                21L, 9L, "u2", "Completed all algebra tasks.", Instant.parse("2026-05-02T10:00:00Z")
+        ));
+
+        assertThat(out.getRecommendation()).isEqualTo(AiReviewRecommendation.UNCLEAR);
+        assertThat(out.getConfidence()).isLessThanOrEqualTo(0.49);
+        assertThat(out.getDecisionNote()).contains("Downgraded to UNCLEAR");
+        assertThat(out.getReasons()).contains("Auto-policy");
+    }
 }

@@ -195,3 +195,8 @@ argocd.zip
 /frontend/output
 /docs
 /scripts
+!/docs/
+!/docs/ai-review-recovery/
+!/docs/ai-review-recovery/**
+docs/ai-review-recovery/README.md
+/docs
