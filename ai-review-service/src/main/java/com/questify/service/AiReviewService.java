@@ -13,6 +13,7 @@ import com.questify.provider.AiReviewPrompt;
 import com.questify.provider.ModelClient;
 import com.questify.repository.AiReviewAttemptRepository;
 import com.questify.repository.AiReviewResultRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+@Slf4j
 @Service
 public class AiReviewService {
     private final AiReviewResultRepository results;
@@ -72,8 +74,14 @@ public class AiReviewService {
     }
 
     private AiReviewResult runReview(SubmissionCreated event, AiReviewRunSource source, String triggeredBy, boolean force) {
+        log.info("AI review run started submissionId={} source={} triggeredBy={} force={} proofKeys={}",
+                event.submissionId(), source, triggeredBy, force,
+                event.proofKeys() == null ? 0 : event.proofKeys().size());
+
         var existing = results.findBySubmissionId(event.submissionId()).orElse(null);
         if (!force && existing != null) {
+            log.info("AI review skipped submissionId={} source={} reason=already_present recommendation={} confidence={}",
+                    event.submissionId(), source, existing.getRecommendation(), existing.getConfidence());
             recordAttempt(event.submissionId(), source, triggeredBy, "SKIPPED_ALREADY_PRESENT",
                     existing.getRecommendation(), existing.getConfidence(), "Result already present");
             return existing;
@@ -85,8 +93,12 @@ public class AiReviewService {
                     ? proofs.getProofs(event.submissionId())
                     : proofs.getProofsFromKeys(event.proofKeys());
             List<String> images = supportedImages(proofObjects);
+            log.info("AI review context prepared submissionId={} questId={} proofsFetched={} supportedImages={}",
+                    event.submissionId(), event.questId(), proofObjects == null ? 0 : proofObjects.size(), images.size());
 
             if (images.isEmpty()) {
+                log.warn("AI review unsupported media submissionId={} questId={} reason=no_supported_images",
+                        event.submissionId(), event.questId());
                 return saveAndRecord(existing, event, AiReviewRecommendation.UNSUPPORTED_MEDIA, 0.0,
                         "No supported image proof was available for AI review.", false, null,
                         source, triggeredBy, "UNSUPPORTED_MEDIA");
@@ -104,12 +116,18 @@ public class AiReviewService {
                     """.formatted(quest.title(), quest.description(), event.note() == null ? "" : event.note());
 
             String raw = model.generate(new AiReviewPrompt(prompt, images));
+            log.info("AI review model response received submissionId={} rawPreview={}",
+                    event.submissionId(), truncate(raw, 400));
             ParsedReview parsed = parse(raw);
+            log.info("AI review parsed submissionId={} recommendation={} confidence={}",
+                    event.submissionId(), parsed.recommendation(), parsed.confidence());
             return saveAndRecord(existing, event, parsed.recommendation(), parsed.confidence(),
                     String.join("\n", parsed.reasons()), true, raw, source, triggeredBy, "SUCCESS");
         } catch (Exception e) {
+            log.error("AI review failed submissionId={} source={} triggeredBy={} error={}",
+                    event.submissionId(), source, triggeredBy, e.toString(), e);
             return saveAndRecord(existing, event, AiReviewRecommendation.AI_FAILED, 0.0,
-                    "AI review failed; manual review is required.", true, e.toString(),
+                    "AI review failed; manual review is required. " + truncate(e.getMessage(), 300), true, e.toString(),
                     source, triggeredBy, "FAILED");
         }
     }

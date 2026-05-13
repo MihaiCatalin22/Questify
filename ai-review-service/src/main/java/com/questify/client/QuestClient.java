@@ -11,16 +11,27 @@ public class QuestClient {
     private final WebClient http;
     private final String internalToken;
 
+    private static String firstNonBlank(String... values) {
+        if (values == null) return "";
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value.trim();
+        }
+        return "";
+    }
+
     public QuestClient(@Value("${quest.service.base:http://quest-service}") String baseUrl,
-                       @Value("${internal.token:${INTERNAL_TOKEN:dev-internal-token}}") String internalToken) {
+                       @Value("${internal.token:}") String internalDotToken,
+                       @Value("${SECURITY_INTERNAL_TOKEN:}") String securityInternalToken,
+                       @Value("${INTERNAL_TOKEN:dev-internal-token}") String internalToken) {
         this.http = WebClient.builder().baseUrl(baseUrl).build();
-        this.internalToken = internalToken;
+        this.internalToken = firstNonBlank(internalDotToken, securityInternalToken, internalToken);
     }
 
     public QuestContext getQuest(Long questId) {
         var res = http.get()
                 .uri("/internal/quests/{id}/ai-review-context", questId)
                 .header("X-Internal-Token", internalToken)
+                .header("X-Security-Internal-Token", internalToken)
                 .retrieve()
                 .bodyToMono(QuestResponse.class)
                 .block(Duration.ofSeconds(5));

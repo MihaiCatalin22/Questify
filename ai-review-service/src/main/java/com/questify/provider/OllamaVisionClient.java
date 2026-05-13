@@ -1,5 +1,6 @@
 package com.questify.provider;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -8,6 +9,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Component
 public class OllamaVisionClient implements ModelClient {
     private final WebClient http;
@@ -25,6 +27,12 @@ public class OllamaVisionClient implements ModelClient {
     @Override
     @SuppressWarnings("unchecked")
     public String generate(AiReviewPrompt prompt) {
+        log.info("AI review model request model={} images={} promptChars={} timeoutMs={}",
+                model,
+                prompt.base64Images() == null ? 0 : prompt.base64Images().size(),
+                prompt.textPrompt() == null ? 0 : prompt.textPrompt().length(),
+                timeoutMs);
+
         Map<String, Object> body = Map.of(
                 "model", model,
                 "stream", false,
@@ -40,6 +48,8 @@ public class OllamaVisionClient implements ModelClient {
                 .retrieve()
                 .bodyToMono(Map.class)
                 .block(Duration.ofMillis(timeoutMs));
+        log.info("AI review model response model={} keys={}",
+                model, response == null ? 0 : response.keySet().size());
         Object message = response == null ? null : response.get("message");
         if (message instanceof Map<?, ?> map && map.get("content") != null) {
             return String.valueOf(map.get("content"));
