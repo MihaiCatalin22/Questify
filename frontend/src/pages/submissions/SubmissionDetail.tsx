@@ -58,6 +58,17 @@ function recommendationTone(value: AiReviewRecommendation): React.ComponentProps
   return undefined;
 }
 
+function parseSupportScore(reasons?: string[]): number | null {
+  if (!reasons || reasons.length === 0) return null;
+  const scoreLine = reasons.find((line) => /support score/i.test(line));
+  if (!scoreLine) return null;
+  const match = scoreLine.match(/([01](?:\.\d+)?)/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(1, value));
+}
+
 async function looksLikeImage(blob: Blob): Promise<boolean> {
   try {
     const head = await blob.slice(0, 16).arrayBuffer();
@@ -442,6 +453,14 @@ export default function SubmissionDetail() {
 
             {aiReview.data && (
               <div className="space-y-3">
+                <div className="rounded-md border border-[rgb(var(--border-soft))] bg-[rgb(var(--surface-2))] p-3 text-xs leading-6 text-[rgb(var(--muted))]">
+                  <div className="font-semibold text-[rgb(var(--text))]">How to read this</div>
+                  <div>AI review is advisory evidence only. Final decision is always the reviewer’s approve/reject action.</div>
+                  <div className="mt-1">
+                    Confidence/support scale: <span className="font-medium">0.00 to 1.00</span> (shown as 0% to 100%).
+                  </div>
+                </div>
+
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone={recommendationTone(aiReview.data.recommendation)}>
                     {recommendationLabel(aiReview.data.recommendation)}
@@ -449,6 +468,11 @@ export default function SubmissionDetail() {
                   <span className="text-sm text-[rgb(var(--muted))]">
                     Confidence {Math.round((aiReview.data.confidence ?? 0) * 100)}%
                   </span>
+                  {parseSupportScore(aiReview.data.reasons) !== null && (
+                    <span className="text-sm text-[rgb(var(--muted))]">
+                      Support {Math.round((parseSupportScore(aiReview.data.reasons) ?? 0) * 100)}%
+                    </span>
+                  )}
                 </div>
 
                 {aiReview.data.recommendation === 'UNSUPPORTED_MEDIA' && (
@@ -484,6 +508,13 @@ export default function SubmissionDetail() {
                     ))}
                   </ul>
                 )}
+
+                <div className="rounded-md border border-[rgb(var(--border-soft))] p-3 text-xs leading-6 text-[rgb(var(--muted))]">
+                  <div><span className="font-semibold text-[rgb(var(--text))]">Matched evidence:</span> Signals from quest policy that AI found in proof/text.</div>
+                  <div><span className="font-semibold text-[rgb(var(--text))]">Missing evidence:</span> Signals expected by policy but not found in proof/text.</div>
+                  <div><span className="font-semibold text-[rgb(var(--text))]">Disqualifiers:</span> Contradicting signals (for example unrelated/game-like content).</div>
+                  <div><span className="font-semibold text-[rgb(var(--text))]">OCR snippets:</span> Text extracted from the uploaded image and used as evidence.</div>
+                </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
