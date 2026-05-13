@@ -24,4 +24,9 @@ export const AiReviewsApi = {
     const { data } = await http.get<AiReviewDTO>(`/ai-reviews/submissions/${submissionId}`);
     return data;
   },
+
+  async runForSubmission(submissionId: string | number): Promise<AiReviewDTO> {
+    const { data } = await http.post<AiReviewDTO>(`/ai-reviews/submissions/${submissionId}/run`);
+    return data;
+  },
 };

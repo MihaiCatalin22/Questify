@@ -1,13 +1,13 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: user-service
+  name: submission-service
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/MihaiCatalin22/Questify.git
-    path: deploy/overlays/vm/user-service
+    path: deploy/overlays/vm/submission-service
     targetRevision: feat/CICD2
   destination:
     server: https://kubernetes.default.svc

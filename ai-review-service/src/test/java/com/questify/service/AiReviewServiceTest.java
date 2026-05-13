@@ -2,9 +2,12 @@ package com.questify.service;
 
 import com.questify.client.ProofClient;
 import com.questify.client.QuestClient;
+import com.questify.client.SubmissionClient;
+import com.questify.domain.AiReviewRunSource;
 import com.questify.domain.AiReviewRecommendation;
 import com.questify.domain.AiReviewResult;
 import com.questify.provider.ModelClient;
+import com.questify.repository.AiReviewAttemptRepository;
 import com.questify.repository.AiReviewResultRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,7 +29,9 @@ import static org.mockito.Mockito.*;
 class AiReviewServiceTest {
 
     @Mock AiReviewResultRepository results;
+    @Mock AiReviewAttemptRepository attempts;
     @Mock QuestClient quests;
+    @Mock SubmissionClient submissions;
     @Mock ProofClient proofs;
     @Mock ModelClient model;
 
@@ -34,8 +39,9 @@ class AiReviewServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AiReviewService(results, quests, proofs, model);
+        service = new AiReviewService(results, attempts, quests, submissions, proofs, model);
         ReflectionTestUtils.setField(service, "modelName", "llava:7b");
+        when(attempts.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     @Test
@@ -60,6 +66,7 @@ class AiReviewServiceTest {
         ArgumentCaptor<AiReviewResult> saved = ArgumentCaptor.forClass(AiReviewResult.class);
         verify(results).save(saved.capture());
         assertThat(saved.getValue().getSubmissionId()).isEqualTo(10L);
+        verify(attempts).save(any());
     }
 
     @Test
@@ -76,6 +83,7 @@ class AiReviewServiceTest {
         assertThat(out.getRecommendation()).isEqualTo(AiReviewRecommendation.UNSUPPORTED_MEDIA);
         assertThat(out.getReasons()).contains("No supported image proof was available for AI review.");
         verifyNoInteractions(model);
+        verify(attempts).save(any());
     }
 
     @Test
@@ -92,6 +100,7 @@ class AiReviewServiceTest {
 
         assertThat(out.getRecommendation()).isEqualTo(AiReviewRecommendation.AI_FAILED);
         assertThat(out.getReasons()).contains("AI review failed; manual review is required.");
+        verify(attempts).save(any());
     }
 
     @Test
@@ -107,5 +116,42 @@ class AiReviewServiceTest {
         assertThat(out.getRecommendation()).isEqualTo(AiReviewRecommendation.AI_FAILED);
         assertThat(out.getReasons()).contains("AI review failed; manual review is required.");
         verifyNoInteractions(model);
+        verify(attempts).save(any());
+    }
+
+    @Test
+    void rerunForSubmission_forces_overwrite_of_existing_result() {
+        AiReviewResult existing = AiReviewResult.builder()
+                .id(99L)
+                .submissionId(20L)
+                .questId(8L)
+                .userId("u-old")
+                .recommendation(AiReviewRecommendation.AI_FAILED)
+                .confidence(0.0)
+                .model("llava:7b")
+                .reasons("old")
+                .mediaSupported(true)
+                .reviewedAt(Instant.parse("2026-05-01T00:00:00Z"))
+                .build();
+
+        when(results.findBySubmissionId(20L)).thenReturn(Optional.of(existing));
+        when(submissions.getSubmissionContext(20L)).thenReturn(new SubmissionClient.SubmissionContext(
+                20L, 8L, "u1", "done", Instant.parse("2026-05-01T10:00:00Z"), List.of("proof/a.png")
+        ));
+        when(quests.getQuest(8L)).thenReturn(new QuestClient.QuestContext("Run", "Do a run"));
+        when(proofs.getProofsFromKeys(List.of("proof/a.png")))
+                .thenReturn(List.of(new ProofClient.ProofObject("proof/a.png", "image/png", "BASE64IMG")));
+        when(model.generate(any())).thenReturn("""
+                {"recommendation":"LIKELY_VALID","confidence":0.91,"reasons":["Good match"],"mediaSupported":true}
+                """);
+        when(results.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        AiReviewResult out = service.rerunForSubmission(20L, AiReviewRunSource.MANUAL, "reviewer-1");
+
+        assertThat(out.getId()).isEqualTo(99L);
+        assertThat(out.getRecommendation()).isEqualTo(AiReviewRecommendation.LIKELY_VALID);
+        assertThat(out.getConfidence()).isEqualTo(0.91);
+        assertThat(out.getUserId()).isEqualTo("u1");
+        verify(attempts, atLeastOnce()).save(any());
     }
 }

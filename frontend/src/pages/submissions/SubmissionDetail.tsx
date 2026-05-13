@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSubmission, useReviewSubmission } from '../../hooks/useSubmissions';
 import { useState, useEffect, useRef } from 'react';
 import { useAuthContext } from '../../contexts/useAuthContext';
@@ -216,6 +216,7 @@ export default function SubmissionDetail() {
   const auth = useAuthContext();
   const token = getBearer(auth);
   const { user } = auth;
+  const qc = useQueryClient();
 
   const [note, setNote] = useState('');
   const [displayUrls, setDisplayUrls] = useState<string[]>([]);
@@ -245,6 +246,20 @@ export default function SubmissionDetail() {
     enabled: Boolean(id && canReview),
     retry: false,
     refetchOnWindowFocus: false,
+  });
+
+  const runAiReview = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error('Missing submission id');
+      return AiReviewsApi.runForSubmission(id);
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['ai-review', id] });
+      toast.success('AI review refreshed');
+    },
+    onError: (e: unknown) => {
+      toast.error(getErrorMessage(e, 'Failed to run AI review'));
+    },
   });
 
   const status = submission?.reviewStatus ?? submission?.status ?? 'PENDING';
@@ -395,9 +410,18 @@ export default function SubmissionDetail() {
           <div className="card-body space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="section-title">AI review</h2>
-              {aiReview.data?.modelName && (
-                <Badge>{aiReview.data.modelName}</Badge>
-              )}
+              <div className="flex items-center gap-2">
+                {aiReview.data?.modelName && (
+                  <Badge>{aiReview.data.modelName}</Badge>
+                )}
+                <Button
+                  variant="ghost"
+                  onClick={() => runAiReview.mutate()}
+                  disabled={runAiReview.isPending || !id}
+                >
+                  {runAiReview.isPending ? 'Running AI review...' : 'Run AI Review'}
+                </Button>
+              </div>
             </div>
 
             {aiReview.isLoading && (
@@ -406,7 +430,7 @@ export default function SubmissionDetail() {
 
             {aiReview.isError && getResponseStatus(aiReview.error) === 404 && (
               <div className="text-sm text-[rgb(var(--muted))]">
-                AI review is not ready yet. Manual review is still available.
+                AI review is not ready yet. Use “Run AI Review” or continue manual review.
               </div>
             )}
 

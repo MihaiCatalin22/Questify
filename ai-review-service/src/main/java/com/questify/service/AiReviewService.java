@@ -4,10 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.questify.client.ProofClient;
 import com.questify.client.QuestClient;
+import com.questify.client.SubmissionClient;
+import com.questify.domain.AiReviewAttempt;
 import com.questify.domain.AiReviewRecommendation;
 import com.questify.domain.AiReviewResult;
+import com.questify.domain.AiReviewRunSource;
 import com.questify.provider.AiReviewPrompt;
 import com.questify.provider.ModelClient;
+import com.questify.repository.AiReviewAttemptRepository;
 import com.questify.repository.AiReviewResultRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -21,7 +25,9 @@ import java.util.Locale;
 @Service
 public class AiReviewService {
     private final AiReviewResultRepository results;
+    private final AiReviewAttemptRepository attempts;
     private final QuestClient quests;
+    private final SubmissionClient submissions;
     private final ProofClient proofs;
     private final ModelClient model;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -29,17 +35,49 @@ public class AiReviewService {
     @Value("${ai-review.model:llava:7b}")
     private String modelName;
 
-    public AiReviewService(AiReviewResultRepository results, QuestClient quests, ProofClient proofs, ModelClient model) {
+    public AiReviewService(AiReviewResultRepository results,
+                           AiReviewAttemptRepository attempts,
+                           QuestClient quests,
+                           SubmissionClient submissions,
+                           ProofClient proofs,
+                           ModelClient model) {
         this.results = results;
+        this.attempts = attempts;
         this.quests = quests;
+        this.submissions = submissions;
         this.proofs = proofs;
         this.model = model;
     }
 
     @Transactional
     public AiReviewResult reviewSubmission(SubmissionCreated event) {
+        return runReview(event, AiReviewRunSource.KAFKA, "kafka-listener", false);
+    }
+
+    @Transactional
+    public AiReviewResult rerunForSubmission(Long submissionId, AiReviewRunSource source, String triggeredBy) {
+        var context = submissions.getSubmissionContext(submissionId);
+        if (context == null || context.submissionId() == null || context.questId() == null || context.userId() == null) {
+            throw new IllegalArgumentException("Submission context missing required fields for id=" + submissionId);
+        }
+        SubmissionCreated event = new SubmissionCreated(
+                context.submissionId(),
+                context.questId(),
+                context.userId(),
+                context.note(),
+                context.submittedAt(),
+                context.proofKeys()
+        );
+        return runReview(event, source, triggeredBy == null ? source.name().toLowerCase(Locale.ROOT) : triggeredBy, true);
+    }
+
+    private AiReviewResult runReview(SubmissionCreated event, AiReviewRunSource source, String triggeredBy, boolean force) {
         var existing = results.findBySubmissionId(event.submissionId()).orElse(null);
-        if (existing != null) return existing;
+        if (!force && existing != null) {
+            recordAttempt(event.submissionId(), source, triggeredBy, "SKIPPED_ALREADY_PRESENT",
+                    existing.getRecommendation(), existing.getConfidence(), "Result already present");
+            return existing;
+        }
 
         try {
             QuestClient.QuestContext quest = quests.getQuest(event.questId());
@@ -49,8 +87,9 @@ public class AiReviewService {
             List<String> images = supportedImages(proofObjects);
 
             if (images.isEmpty()) {
-                return save(event, AiReviewRecommendation.UNSUPPORTED_MEDIA, 0.0,
-                        "No supported image proof was available for AI review.", false, null);
+                return saveAndRecord(existing, event, AiReviewRecommendation.UNSUPPORTED_MEDIA, 0.0,
+                        "No supported image proof was available for AI review.", false, null,
+                        source, triggeredBy, "UNSUPPORTED_MEDIA");
             }
 
             String prompt = """
@@ -66,10 +105,12 @@ public class AiReviewService {
 
             String raw = model.generate(new AiReviewPrompt(prompt, images));
             ParsedReview parsed = parse(raw);
-            return save(event, parsed.recommendation(), parsed.confidence(), String.join("\n", parsed.reasons()), true, raw);
+            return saveAndRecord(existing, event, parsed.recommendation(), parsed.confidence(),
+                    String.join("\n", parsed.reasons()), true, raw, source, triggeredBy, "SUCCESS");
         } catch (Exception e) {
-            return save(event, AiReviewRecommendation.AI_FAILED, 0.0,
-                    "AI review failed; manual review is required.", true, e.toString());
+            return saveAndRecord(existing, event, AiReviewRecommendation.AI_FAILED, 0.0,
+                    "AI review failed; manual review is required.", true, e.toString(),
+                    source, triggeredBy, "FAILED");
         }
     }
 
@@ -78,20 +119,55 @@ public class AiReviewService {
         return results.findBySubmissionId(submissionId).orElse(null);
     }
 
-    private AiReviewResult save(SubmissionCreated event, AiReviewRecommendation recommendation, double confidence,
-                                String reasons, boolean mediaSupported, String raw) {
-        return results.save(AiReviewResult.builder()
-                .submissionId(event.submissionId())
-                .questId(event.questId())
-                .userId(event.userId())
+    private AiReviewResult saveAndRecord(AiReviewResult existing,
+                                         SubmissionCreated event,
+                                         AiReviewRecommendation recommendation,
+                                         double confidence,
+                                         String reasons,
+                                         boolean mediaSupported,
+                                         String raw,
+                                         AiReviewRunSource source,
+                                         String triggeredBy,
+                                         String outcome) {
+        AiReviewResult target = existing == null ? new AiReviewResult() : existing;
+        target.setSubmissionId(event.submissionId());
+        target.setQuestId(event.questId());
+        target.setUserId(event.userId());
+        target.setRecommendation(recommendation);
+        target.setConfidence(Math.max(0.0, Math.min(1.0, confidence)));
+        target.setModel(modelName);
+        target.setReasons(reasons == null || reasons.isBlank() ? "Manual review is required." : reasons);
+        target.setRawOutput(raw);
+        target.setMediaSupported(mediaSupported);
+        target.setReviewedAt(Instant.now());
+        AiReviewResult saved = results.save(target);
+
+        recordAttempt(event.submissionId(), source, triggeredBy, outcome, recommendation, saved.getConfidence(), raw);
+        return saved;
+    }
+
+    private void recordAttempt(Long submissionId,
+                               AiReviewRunSource source,
+                               String triggeredBy,
+                               String outcome,
+                               AiReviewRecommendation recommendation,
+                               Double confidence,
+                               String detail) {
+        attempts.save(AiReviewAttempt.builder()
+                .submissionId(submissionId)
+                .runSource(source)
+                .triggeredBy(triggeredBy)
+                .outcome(outcome)
                 .recommendation(recommendation)
-                .confidence(Math.max(0.0, Math.min(1.0, confidence)))
-                .model(modelName)
-                .reasons(reasons == null || reasons.isBlank() ? "Manual review is required." : reasons)
-                .rawOutput(raw)
-                .mediaSupported(mediaSupported)
+                .confidence(confidence)
+                .detail(truncate(detail, 4000))
                 .reviewedAt(Instant.now())
                 .build());
+    }
+
+    private static String truncate(String value, int max) {
+        if (value == null || value.length() <= max) return value;
+        return value.substring(0, max);
     }
 
     private List<String> supportedImages(List<ProofClient.ProofObject> proofObjects) {

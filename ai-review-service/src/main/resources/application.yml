@@ -68,6 +68,10 @@ proof:
   service:
     base: ${PROOF_SERVICE_BASE:http://proof-service}
 
+submission:
+  service:
+    base: ${SUBMISSION_SERVICE_BASE:http://submission-service}
+
 internal:
   token: ${INTERNAL_TOKEN:dev-internal-token}
 

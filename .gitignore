@@ -193,3 +193,5 @@ argocd.zip
 /.gradle-test
 /portfolio-docs
 /frontend/output
+/docs
+/scripts
