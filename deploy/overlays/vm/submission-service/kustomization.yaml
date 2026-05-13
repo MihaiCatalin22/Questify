@@ -5,7 +5,7 @@ resources:
 - ../../../base/submission-service
 images:
 - name: ghcr.io/mihaicatalin22/questify-submission-service
-  newTag: origin-ai-review-streak-service-302234a
+  newTag: origin-ai-review-streak-service-36ae3c5
 patchesJson6902:
 - target:
     group: argoproj.io
