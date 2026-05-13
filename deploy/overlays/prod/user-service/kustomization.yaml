@@ -7,7 +7,7 @@ resources:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-user-service
-    newTag: origin-ai-review-streak-service-3439eb6
+    newTag: origin-ai-review-streak-service-9ea37b9
 
 patchesJson6902:
   - target:
