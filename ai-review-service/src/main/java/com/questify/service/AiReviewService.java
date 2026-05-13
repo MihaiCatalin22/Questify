@@ -346,13 +346,14 @@ public class AiReviewService {
             signalParts.add(observation.sceneType());
         }
         String signalBlob = String.join(" ", signalParts).toLowerCase(Locale.ROOT);
+        Set<String> signalTokens = extractTokens(signalBlob);
 
-        List<String> matchedRequired = matchSignals(policy.requiredEvidence(), signalBlob);
+        List<String> matchedRequired = matchSignals(policy.requiredEvidence(), signalBlob, signalTokens);
         List<String> missingRequired = policy.requiredEvidence().stream()
-                .filter(required -> !containsSignal(signalBlob, required))
+                .filter(required -> !matchesSignal(signalBlob, signalTokens, required))
                 .toList();
-        List<String> matchedOptional = matchSignals(policy.optionalEvidence(), signalBlob);
-        List<String> matchedDisqualifiers = matchSignals(policy.disqualifiers(), signalBlob);
+        List<String> matchedOptional = matchSignals(policy.optionalEvidence(), signalBlob, signalTokens);
+        List<String> matchedDisqualifiers = matchSignals(policy.disqualifiers(), signalBlob, signalTokens);
 
         List<String> uncertainty = observation.uncertaintyFlags().stream()
                 .filter(value -> value != null && !value.isBlank())
@@ -457,12 +458,29 @@ public class AiReviewService {
         return signals.stream().limit(20).toList();
     }
 
-    private static List<String> matchSignals(List<String> candidates, String signalBlob) {
+    private static List<String> matchSignals(List<String> candidates, String signalBlob, Set<String> signalTokens) {
         if (candidates == null || candidates.isEmpty()) return List.of();
         return candidates.stream()
-                .filter(candidate -> containsSignal(signalBlob, candidate))
+                .filter(candidate -> matchesSignal(signalBlob, signalTokens, candidate))
                 .distinct()
                 .toList();
+    }
+
+    private static boolean matchesSignal(String signalBlob, Set<String> signalTokens, String signal) {
+        if (signal == null || signal.isBlank()) return false;
+        if (containsSignal(signalBlob, signal)) return true;
+
+        Set<String> evidenceTokens = extractTokens(signal);
+        if (evidenceTokens.isEmpty()) return false;
+        long hits = evidenceTokens.stream().filter(signalTokens::contains).count();
+        int requiredHits = requiredTokenHits(evidenceTokens.size());
+        return hits >= requiredHits;
+    }
+
+    private static int requiredTokenHits(int tokenCount) {
+        if (tokenCount <= 1) return 1;
+        if (tokenCount <= 3) return tokenCount - 1;
+        return Math.max(2, (int) Math.ceil(tokenCount * 0.6));
     }
 
     private static boolean containsSignal(String signalBlob, String signal) {

@@ -156,4 +156,33 @@ class AiReviewServiceTest {
         assertThat(out.getUserId()).isEqualTo("u1");
         verify(attempts, atLeastOnce()).save(any());
     }
+
+    @Test
+    void reviewSubmission_phrase_required_evidence_matches_by_tokens_not_literal_substring() {
+        when(results.findBySubmissionId(30L)).thenReturn(Optional.empty());
+        when(quests.getQuest(9L)).thenReturn(new QuestClient.QuestContext(
+                "Code a simple web page",
+                "Create a web page and submit coding evidence.",
+                List.of("code a simple web page"),
+                List.of(),
+                List.of("game hud"),
+                0.75,
+                "generic"
+        ));
+        when(proofs.getProofs(30L)).thenReturn(List.of(new ProofClient.ProofObject("proof/code.png", "image/png", "BASE64")));
+        when(model.generate(any()))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"ocr_text\":[\"public class Example\"],\"quality\":\"HIGH\"}",
+                        "qwen2.5vl:3b", false, null))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"visible_objects\":[\"code editor\"],\"visible_text\":[\"public class Example\"],\"scene_type\":\"coding workspace\",\"activity_clues\":[\"web page code\"],\"uncertainty_flags\":[]}",
+                        "qwen2.5vl:3b", false, null));
+
+        AiReviewResult out = service.reviewSubmission(new AiReviewService.SubmissionCreated(
+                30L, 9L, "u1", "implemented", Instant.parse("2026-05-01T10:00:00Z")
+        ));
+
+        assertThat(out.getMatchedEvidence()).contains("code a simple web page");
+        assertThat(out.getDecisionPath()).isEqualTo("required_satisfied");
+    }
 }
