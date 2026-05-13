@@ -7,4 +7,4 @@ resources:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-streak-service
-    newTag: origin-ai-review-streak-service-c6ad700
+    newTag: origin-ai-review-streak-service-302234a
