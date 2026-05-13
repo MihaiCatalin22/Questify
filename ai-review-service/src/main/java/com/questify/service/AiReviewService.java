@@ -40,7 +40,8 @@ public class AiReviewService {
             "this", "that", "with", "from", "into", "your", "have", "been", "were", "will", "then", "than",
             "there", "their", "about", "quest", "proof", "image", "student", "comment", "submission",
             "manual", "review", "show", "shows", "showing", "activity", "valid", "match", "matches",
-            "relevant", "looks", "good", "appears", "photo", "screenshot"
+            "relevant", "looks", "good", "appears", "photo", "screenshot",
+            "key", "important", "most", "quick", "quickly", "simple", "basic", "memorize", "recall"
     );
     private static final List<String> DEFAULT_DISQUALIFIERS = List.of(
             "game", "video game", "hud", "ui overlay", "menu screen", "meme", "cartoon", "cinematic"
@@ -307,14 +308,14 @@ public class AiReviewService {
         }
 
         Set<String> baseTokens = extractTokens(quest.title() + " " + quest.description());
-        List<String> autoRequired = baseTokens.stream().limit(4).toList();
-        List<String> autoOptional = baseTokens.stream().skip(4).limit(6).toList();
+        List<String> autoRequired = List.of();
+        List<String> autoOptional = baseTokens.stream().limit(8).toList();
         List<String> autoDisqualifiers = new ArrayList<>(DEFAULT_DISQUALIFIERS);
         return new Policy(
                 autoRequired,
                 autoOptional,
                 autoDisqualifiers,
-                0.75,
+                0.45,
                 taskType == null || taskType.isBlank() ? "generic" : taskType,
                 true
         );
@@ -323,7 +324,13 @@ public class AiReviewService {
     private OcrExtraction parseOcrExtraction(String raw) {
         JsonNode node = parseJsonNode(raw);
         List<String> lines = readStringList(node.path("ocr_text"));
+        if (lines.isEmpty()) {
+            lines = fallbackLinesFromRaw(raw);
+        }
         String quality = node.path("quality").asText("LOW");
+        if ((quality == null || quality.isBlank()) && !lines.isEmpty()) {
+            quality = "MEDIUM";
+        }
         return new OcrExtraction(lines, quality);
     }
 
@@ -334,6 +341,13 @@ public class AiReviewService {
         String sceneType = node.path("scene_type").asText("");
         List<String> activityClues = readStringList(node.path("activity_clues"));
         List<String> uncertaintyFlags = readStringList(node.path("uncertainty_flags"));
+        if (visibleObjects.isEmpty() && visibleText.isEmpty() && activityClues.isEmpty()) {
+            List<String> fallback = fallbackLinesFromRaw(raw);
+            visibleText = dedupeConcat(visibleText, fallback);
+            if (!fallback.isEmpty()) {
+                activityClues = dedupeConcat(activityClues, List.of("textual study evidence"));
+            }
+        }
         return new Observation(visibleObjects, visibleText, sceneType, activityClues, uncertaintyFlags);
     }
 
@@ -387,14 +401,32 @@ public class AiReviewService {
                                          ModelClient.ModelResponse obsRaw) {
         AiReviewRecommendation recommendation;
         String decisionPath;
+        double confidence = scorecard.supportScore();
 
         boolean hasDisqualifier = !scorecard.matchedDisqualifiers().isEmpty();
         boolean hasRequired = !policy.requiredEvidence().isEmpty();
         boolean requiredSatisfied = hasRequired && scorecard.missingRequired().isEmpty();
         boolean strongSupport = scorecard.supportScore() >= policy.minSupportScore();
         boolean uncertaintyHeavy = scorecard.uncertaintyFlags().size() >= 2;
+        boolean hasObservedEvidence = !observation.visibleObjects().isEmpty()
+                || !observation.visibleText().isEmpty()
+                || !observation.activityClues().isEmpty();
 
-        if (hasDisqualifier && scorecard.supportScore() < 0.8) {
+        if (policy.generated()) {
+            if (hasDisqualifier && scorecard.supportScore() < 0.8) {
+                recommendation = AiReviewRecommendation.LIKELY_INVALID;
+                decisionPath = "generated_policy_disqualifier";
+                confidence = Math.max(scorecard.supportScore(), 0.6);
+            } else if (!scorecard.matchedOptional().isEmpty() && hasObservedEvidence && !uncertaintyHeavy) {
+                recommendation = AiReviewRecommendation.LIKELY_VALID;
+                decisionPath = "generated_policy_context_match";
+                confidence = Math.max(scorecard.supportScore(), 0.65);
+            } else {
+                recommendation = AiReviewRecommendation.UNCLEAR;
+                decisionPath = "generated_policy_insufficient_evidence";
+                confidence = Math.max(scorecard.supportScore(), 0.35);
+            }
+        } else if (hasDisqualifier && scorecard.supportScore() < 0.8) {
             recommendation = AiReviewRecommendation.LIKELY_INVALID;
             decisionPath = "disqualifier_hit";
         } else if (requiredSatisfied && strongSupport && !uncertaintyHeavy) {
@@ -408,15 +440,11 @@ public class AiReviewService {
             decisionPath = "insufficient_evidence";
         }
 
-        if (policy.generated() && recommendation == AiReviewRecommendation.LIKELY_VALID && scorecard.supportScore() < 0.9) {
-            recommendation = AiReviewRecommendation.UNCLEAR;
-            decisionPath = "generated_policy_conservative";
-        }
-
         List<String> reasons = new ArrayList<>();
         reasons.add("Support score: %.2f".formatted(scorecard.supportScore()));
         if (!scorecard.matchedRequired().isEmpty()) reasons.add("Matched required: " + String.join(", ", scorecard.matchedRequired()));
         if (!scorecard.missingRequired().isEmpty()) reasons.add("Missing required: " + String.join(", ", scorecard.missingRequired()));
+        if (!scorecard.matchedOptional().isEmpty()) reasons.add("Matched optional: " + String.join(", ", scorecard.matchedOptional()));
         if (!scorecard.matchedDisqualifiers().isEmpty()) reasons.add("Disqualifiers: " + String.join(", ", scorecard.matchedDisqualifiers()));
         if (reasons.size() > 4) reasons = reasons.subList(0, 4);
 
@@ -429,7 +457,7 @@ public class AiReviewService {
 
         return new BuildResult(
                 recommendation,
-                scorecard.supportScore(),
+                confidence,
                 reasons,
                 decisionNote,
                 true,
@@ -542,6 +570,26 @@ public class AiReviewService {
         int end = cleaned.lastIndexOf('}');
         if (start >= 0 && end > start) return cleaned.substring(start, end + 1);
         return cleaned;
+    }
+
+    private static List<String> fallbackLinesFromRaw(String raw) {
+        if (raw == null || raw.isBlank()) return List.of();
+        String cleaned = raw
+                .replace("```json", "")
+                .replace("```", "")
+                .replace("{", " ")
+                .replace("}", " ")
+                .replace("\"", " ")
+                .replace("[", " ")
+                .replace("]", " ");
+        return List.of(cleaned.split("\\r?\\n"))
+                .stream()
+                .map(String::trim)
+                .filter(line -> line.length() >= 3)
+                .filter(line -> !line.startsWith(":"))
+                .filter(line -> !line.equalsIgnoreCase("null"))
+                .limit(8)
+                .toList();
     }
 
     private static List<String> readStringList(JsonNode node) {
