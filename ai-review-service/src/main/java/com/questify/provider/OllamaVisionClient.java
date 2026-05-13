@@ -16,15 +16,21 @@ public class OllamaVisionClient implements ModelClient {
     private final String primaryModel;
     private final String fallbackModel;
     private final int timeoutMs;
+    private final String keepAlive;
+    private final int maxOutputTokens;
 
     public OllamaVisionClient(@Value("${ai-review.runtime-base-url:http://ollama:11434}") String baseUrl,
                               @Value("${ai-review.model-primary:${AI_REVIEW_MODEL:qwen2.5vl:3b}}") String primaryModel,
                               @Value("${ai-review.model-fallback:}") String fallbackModel,
-                              @Value("${ai-review.timeout-ms:45000}") int timeoutMs) {
+                              @Value("${ai-review.timeout-ms:120000}") int timeoutMs,
+                              @Value("${ai-review.keep-alive:10m}") String keepAlive,
+                              @Value("${ai-review.max-output-tokens:220}") int maxOutputTokens) {
         this.http = WebClient.builder().baseUrl(baseUrl).build();
         this.primaryModel = primaryModel;
         this.fallbackModel = fallbackModel;
         this.timeoutMs = timeoutMs;
+        this.keepAlive = keepAlive;
+        this.maxOutputTokens = maxOutputTokens;
     }
 
     @Override
@@ -67,11 +73,15 @@ public class OllamaVisionClient implements ModelClient {
                 "model", model,
                 "stream", false,
                 "format", "json",
+                "keep_alive", keepAlive,
                 "messages", List.of(
                         Map.of("role", "system", "content", "You are an advisory proof reviewer. Return only compact JSON."),
                         Map.of("role", "user", "content", prompt.textPrompt(), "images", prompt.base64Images())
                 ),
-                "options", Map.of("temperature", 0.1)
+                "options", Map.of(
+                        "temperature", 0.1,
+                        "num_predict", maxOutputTokens
+                )
         );
         Map<String, Object> response = http.post()
                 .uri("/api/chat")
