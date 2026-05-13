@@ -2,7 +2,6 @@ package com.questify.domain;
 
 import jakarta.persistence.*;
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -58,6 +57,31 @@ public class Quest {
     @Column(nullable = false, length = 16)
     @Builder.Default
     private QuestVisibility visibility = QuestVisibility.PRIVATE;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "quest_verification_required", joinColumns = @JoinColumn(name = "quest_id"))
+    @Column(name = "`signal`", nullable = false, length = 120)
+    @Builder.Default
+    private Set<String> verificationRequiredEvidence = new LinkedHashSet<>();
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "quest_verification_optional", joinColumns = @JoinColumn(name = "quest_id"))
+    @Column(name = "`signal`", nullable = false, length = 120)
+    @Builder.Default
+    private Set<String> verificationOptionalEvidence = new LinkedHashSet<>();
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "quest_verification_disqualifiers", joinColumns = @JoinColumn(name = "quest_id"))
+    @Column(name = "`signal`", nullable = false, length = 120)
+    @Builder.Default
+    private Set<String> verificationDisqualifiers = new LinkedHashSet<>();
+
+    @Column(name = "verification_min_support_score", nullable = false)
+    @Builder.Default
+    private double verificationMinSupportScore = 0.7;
+
+    @Column(name = "verification_task_type", length = 80)
+    private String verificationTaskType;
 
     @OneToMany(mappedBy = "quest", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default

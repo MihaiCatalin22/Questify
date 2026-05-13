@@ -1,9 +1,11 @@
 import { useParams, Link } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSubmission, useReviewSubmission } from '../../hooks/useSubmissions';
 import { useState, useEffect, useRef } from 'react';
 import { useAuthContext } from '../../contexts/useAuthContext';
 import { toast } from 'react-hot-toast';
 import http from '../../api/https';
+import { AiReviewsApi, type AiReviewRecommendation } from '../../api/aiReviews';
 import type { SubmissionDTO, SubmissionStatus } from '../../types/submission';
 import { getErrorMessage, getResponseStatus } from '../../utils/errors';
 import {
@@ -43,6 +45,17 @@ function hasReviewerRole(user?: { roles?: string[] } | null): boolean {
 function toSameOriginS3(url?: string | null): string | null {
   if (!url) return null;
   return url;
+}
+
+function recommendationLabel(value: AiReviewRecommendation) {
+  return value.replaceAll('_', ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+}
+
+function recommendationTone(value: AiReviewRecommendation): React.ComponentProps<typeof Badge>['tone'] {
+  if (value === 'LIKELY_VALID') return 'success';
+  if (value === 'LIKELY_INVALID' || value === 'AI_FAILED') return 'danger';
+  if (value === 'UNCLEAR' || value === 'UNSUPPORTED_MEDIA') return 'warning';
+  return undefined;
 }
 
 async function looksLikeImage(blob: Blob): Promise<boolean> {
@@ -203,6 +216,7 @@ export default function SubmissionDetail() {
   const auth = useAuthContext();
   const token = getBearer(auth);
   const { user } = auth;
+  const qc = useQueryClient();
 
   const [note, setNote] = useState('');
   const [displayUrls, setDisplayUrls] = useState<string[]>([]);
@@ -226,6 +240,27 @@ export default function SubmissionDetail() {
     return () => { alive = false; };
   }, [token]);
   const canReview = (mayReview ?? hasReviewerRole(user));
+  const aiReview = useQuery({
+    queryKey: ['ai-review', id],
+    queryFn: () => AiReviewsApi.getForSubmission(id ?? ''),
+    enabled: Boolean(id && canReview),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const runAiReview = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error('Missing submission id');
+      return AiReviewsApi.runForSubmission(id);
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['ai-review', id] });
+      toast.success('AI review refreshed');
+    },
+    onError: (e: unknown) => {
+      toast.error(getErrorMessage(e, 'Failed to run AI review'));
+    },
+  });
 
   const status = submission?.reviewStatus ?? submission?.status ?? 'PENDING';
   const existingNote = submission?.reviewNote;
@@ -369,6 +404,136 @@ export default function SubmissionDetail() {
           )}
         </div>
       </Panel>
+
+      {canReview && (
+        <Panel>
+          <div className="card-body space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="section-title">AI review</h2>
+              <div className="flex items-center gap-2">
+                {aiReview.data?.modelName && (
+                  <Badge>{aiReview.data.modelName}</Badge>
+                )}
+                <Button
+                  variant="ghost"
+                  onClick={() => runAiReview.mutate()}
+                  disabled={runAiReview.isPending || !id}
+                >
+                  {runAiReview.isPending ? 'Running AI review...' : 'Run AI Review'}
+                </Button>
+              </div>
+            </div>
+
+            {aiReview.isLoading && (
+              <div className="text-sm text-[rgb(var(--muted))]">AI review is running...</div>
+            )}
+
+            {aiReview.isError && getResponseStatus(aiReview.error) === 404 && (
+              <div className="text-sm text-[rgb(var(--muted))]">
+                AI review is not ready yet. Use “Run AI Review” or continue manual review.
+              </div>
+            )}
+
+            {aiReview.isError && getResponseStatus(aiReview.error) !== 404 && (
+              <div className="text-sm text-red-300">
+                Failed to load AI review. Manual review is still available.
+              </div>
+            )}
+
+            {aiReview.data && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={recommendationTone(aiReview.data.recommendation)}>
+                    {recommendationLabel(aiReview.data.recommendation)}
+                  </Badge>
+                  <span className="text-sm text-[rgb(var(--muted))]">
+                    Confidence {Math.round((aiReview.data.confidence ?? 0) * 100)}%
+                  </span>
+                </div>
+
+                {aiReview.data.recommendation === 'UNSUPPORTED_MEDIA' && (
+                  <div className="text-sm text-[rgb(var(--muted))]">
+                    This proof type needs manual review because the AI reviewer only checks image evidence in v1.
+                  </div>
+                )}
+
+                {aiReview.data.generatedPolicy && (
+                  <div className="text-sm text-amber-300">
+                    This recommendation used an auto-generated verification policy from quest text and is conservative.
+                  </div>
+                )}
+
+                {!!aiReview.data.decisionPath && (
+                  <div className="text-xs text-[rgb(var(--faint))]">
+                    Decision path: {aiReview.data.decisionPath}
+                  </div>
+                )}
+
+                {(aiReview.data.modelUsed || aiReview.data.fallbackUsed) && (
+                  <div className="text-xs text-[rgb(var(--faint))]">
+                    Model used: {aiReview.data.modelUsed || aiReview.data.modelName || 'n/a'}
+                    {aiReview.data.fallbackUsed ? ` (fallback)` : ''}
+                    {aiReview.data.fallbackReason ? ` — ${aiReview.data.fallbackReason}` : ''}
+                  </div>
+                )}
+
+                {!!aiReview.data.reasons?.length && (
+                  <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
+                    {aiReview.data.reasons.map((reason, idx) => (
+                      <li key={`${reason}-${idx}`}>{reason}</li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Matched evidence</div>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
+                      {(aiReview.data.matchedEvidence ?? []).map((item, idx) => (
+                        <li key={`match-${idx}`}>{item}</li>
+                      ))}
+                      {(aiReview.data.matchedEvidence ?? []).length === 0 && <li>None</li>}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Missing evidence</div>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
+                      {(aiReview.data.missingEvidence ?? []).map((item, idx) => (
+                        <li key={`missing-${idx}`}>{item}</li>
+                      ))}
+                      {(aiReview.data.missingEvidence ?? []).length === 0 && <li>None</li>}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Disqualifiers</div>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
+                      {(aiReview.data.matchedDisqualifiers ?? []).map((item, idx) => (
+                        <li key={`disq-${idx}`}>{item}</li>
+                      ))}
+                      {(aiReview.data.matchedDisqualifiers ?? []).length === 0 && <li>None</li>}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">OCR snippets</div>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
+                      {(aiReview.data.ocrSnippets ?? []).map((item, idx) => (
+                        <li key={`ocr-${idx}`}>{item}</li>
+                      ))}
+                      {(aiReview.data.ocrSnippets ?? []).length === 0 && <li>None</li>}
+                    </ul>
+                  </div>
+                </div>
+
+                {aiReview.data.reviewedAt && (
+                  <div className="text-xs text-[rgb(var(--faint))]">
+                    Reviewed: {new Date(aiReview.data.reviewedAt).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </Panel>
+      )}
 
       {canReview && status === 'PENDING' && (
         <Panel>

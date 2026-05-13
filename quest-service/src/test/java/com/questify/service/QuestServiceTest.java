@@ -86,7 +86,8 @@ class QuestServiceTest {
                 Instant.parse("2025-01-10T00:00:00Z"),
                 Instant.parse("2025-02-10T23:59:59Z"),
                 QuestVisibility.PRIVATE,
-                "u7"
+                "u7",
+                null
         );
 
         Quest out = service.create(req, "u7");
@@ -121,7 +122,7 @@ class QuestServiceTest {
         var req = new CreateQuestReq(
                 "A", "B", QuestCategory.OTHER,
                 Instant.now(), Instant.now().plusSeconds(3600),
-                QuestVisibility.PUBLIC, "u1"
+                QuestVisibility.PUBLIC, "u1", null
         );
 
         assertThatThrownBy(() -> service.create(req, null))
@@ -136,7 +137,7 @@ class QuestServiceTest {
         var req = new CreateQuestReq(
                 "A", "B", QuestCategory.OTHER,
                 Instant.now(), Instant.now().plusSeconds(3600),
-                QuestVisibility.PUBLIC, "u1"
+                QuestVisibility.PUBLIC, "u1", null
         );
 
         assertThatThrownBy(() -> service.create(req, "uX"))
@@ -180,7 +181,8 @@ class QuestServiceTest {
                 QuestCategory.OTHER,
                 Instant.parse("2025-01-02T00:00:00Z"),
                 Instant.parse("2025-12-30T23:59:59Z"),
-                QuestVisibility.PUBLIC
+                QuestVisibility.PUBLIC,
+                null
         );
 
         Quest out = service.update(10L, req, "u3");
@@ -214,7 +216,8 @@ class QuestServiceTest {
                 "T", "D", QuestCategory.OTHER,
                 Instant.parse("2025-01-01T00:00:00Z"),
                 Instant.parse("2025-01-02T00:00:00Z"),
-                QuestVisibility.PUBLIC
+                QuestVisibility.PUBLIC,
+                null
         );
 
         assertThatThrownBy(() -> service.update(10L, req, "other"))

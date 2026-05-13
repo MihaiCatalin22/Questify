@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuthContext } from '../../contexts/useAuthContext';
 import { QuestsApi } from '../../api/quests';
-import type { CreateQuestInput, QuestCategory, QuestVisibility } from '../../types/quest';
+import type { CreateQuestInput, QuestCategory, QuestVisibility, VerificationPolicyDTO } from '../../types/quest';
 import { getErrorMessage } from '../../utils/errors';
 import {
   Button,
@@ -37,6 +37,14 @@ function dayEndUtcISO(dateOnly: string): string {
   return new Date(`${dateOnly}T23:59:59.999Z`).toISOString();
 }
 
+function parseSignalLines(value: string): string[] {
+  return value
+    .split(/\r?\n|,/)
+    .map((line) => line.trim())
+    .filter((line) => line.length >= 2)
+    .slice(0, 20);
+}
+
 export default function QuestForm() {
   const { user } = useAuthContext();
   const navigate = useNavigate();
@@ -45,6 +53,11 @@ export default function QuestForm() {
   const [description, setDescription] = React.useState('');
   const [category, setCategory] = React.useState<QuestCategory>('OTHER');
   const [visibility, setVisibility] = React.useState<QuestVisibility>('PRIVATE');
+  const [taskType, setTaskType] = React.useState('generic');
+  const [minSupportScore, setMinSupportScore] = React.useState('0.75');
+  const [requiredEvidence, setRequiredEvidence] = React.useState('');
+  const [optionalEvidence, setOptionalEvidence] = React.useState('');
+  const [disqualifiers, setDisqualifiers] = React.useState('');
   const [startDate, setStartDate] = React.useState(''); // yyyy-MM-dd
   const [endDate, setEndDate] = React.useState('');     // yyyy-MM-dd
   const [saving, setSaving] = React.useState(false);
@@ -62,6 +75,18 @@ export default function QuestForm() {
     if (!CATEGORIES.includes(category)) next.category = 'Pick a category from the list.';
     if (!startDate) next.startDate = 'Start date is required.';
     if (!endDate) next.endDate = 'End date is required.';
+    const parsedRequired = parseSignalLines(requiredEvidence);
+    const parsedDisqualifiers = parseSignalLines(disqualifiers);
+    const minSupport = Number(minSupportScore);
+    if (!Number.isFinite(minSupport) || minSupport < 0 || minSupport > 1) {
+      next.verificationPolicy = 'Min support score must be between 0 and 1.';
+    }
+    if (parsedRequired.length === 0) {
+      next.verificationPolicy = 'Add at least one required evidence signal.';
+    }
+    if (parsedDisqualifiers.length === 0) {
+      next.verificationPolicy = 'Add at least one disqualifier signal.';
+    }
 
     const today = todayISODate();
     if (startDate && startDate < today) next.startDate = 'Start date cannot be earlier than today.';
@@ -82,6 +107,14 @@ export default function QuestForm() {
       return;
     }
 
+    const verificationPolicy: VerificationPolicyDTO = {
+      requiredEvidence: parseSignalLines(requiredEvidence),
+      optionalEvidence: parseSignalLines(optionalEvidence),
+      disqualifiers: parseSignalLines(disqualifiers),
+      minSupportScore: Number(minSupportScore),
+      taskType: taskType.trim() || 'generic',
+    };
+
     const payload: CreateQuestInput = {
       title: title.trim(),
       description: description.trim(),
@@ -90,6 +123,7 @@ export default function QuestForm() {
       endDate: dayEndUtcISO(endDate),
       createdByUserId: String(user.id),
       visibility, // NEW
+      verificationPolicy,
     };
 
     try {
@@ -203,6 +237,67 @@ export default function QuestForm() {
               <option value="PRIVATE">Private (only you)</option>
               <option value="PUBLIC">Public (others can discover & join)</option>
             </SelectInput>
+          </div>
+
+          <div className="space-y-3 border border-[rgb(var(--border-soft))] rounded-lg p-4">
+            <div className="text-sm font-medium">Verification policy</div>
+            <p className="text-xs text-[rgb(var(--faint))]">
+              Signals used by AI review to compare proof evidence against this quest.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <FieldLabel>Task type</FieldLabel>
+                <TextInput
+                  value={taskType}
+                  onChange={(e) => setTaskType(e.target.value)}
+                  placeholder="generic"
+                  maxLength={80}
+                />
+              </div>
+              <div>
+                <FieldLabel>Min support score (0-1)</FieldLabel>
+                <TextInput
+                  value={minSupportScore}
+                  onChange={(e) => setMinSupportScore(e.target.value)}
+                  placeholder="0.75"
+                />
+              </div>
+            </div>
+
+            <div>
+              <FieldLabel>Required evidence (one per line)</FieldLabel>
+              <TextArea
+                rows={3}
+                value={requiredEvidence}
+                onChange={(e) => setRequiredEvidence(e.target.value)}
+                placeholder={'worksheet\nalgebra equations\nworked steps'}
+              />
+            </div>
+
+            <div>
+              <FieldLabel>Optional evidence (one per line)</FieldLabel>
+              <TextArea
+                rows={3}
+                value={optionalEvidence}
+                onChange={(e) => setOptionalEvidence(e.target.value)}
+                placeholder={'student note\ntimestamp\ntopic keywords'}
+              />
+            </div>
+
+            <div>
+              <FieldLabel>Disqualifiers (one per line)</FieldLabel>
+              <TextArea
+                rows={3}
+                value={disqualifiers}
+                onChange={(e) => setDisqualifiers(e.target.value)}
+                placeholder={'game hud\nmeme\nunrelated object'}
+              />
+            </div>
+
+            {errors.verificationPolicy && (
+              <p className="text-xs text-red-300">{errors.verificationPolicy}</p>
+            )}
           </div>
 
           <div className="flex justify-end gap-3">

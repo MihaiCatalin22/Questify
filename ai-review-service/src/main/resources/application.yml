@@ -1,0 +1,87 @@
+spring:
+  application:
+    name: ai-review-service
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://mysql:3306/aireview?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER:https://questify.tail03c40b.ts.net/auth/realms/questify}
+          jwk-set-uri: ${OIDC_JWKS:http://keycloak:8080/auth/realms/questify/protocol/openid-connect/certs}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:questify-kafka-kafka-bootstrap.kafka.svc:9092}
+    consumer:
+      group-id: ${spring.application.name}
+      enable-auto-commit: false
+      auto-offset-reset: latest
+      key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: "com.questify.*,java.util,java.lang"
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: com.questify.kafka.EventEnvelope
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+    listener:
+      ack-mode: MANUAL
+      missing-topics-fatal: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+
+ai-review:
+  model-primary: ${AI_REVIEW_MODEL_PRIMARY:${AI_REVIEW_MODEL:qwen2.5vl:3b}}
+  model-fallback: ${AI_REVIEW_MODEL_FALLBACK:}
+  runtime-base-url: ${AI_REVIEW_RUNTIME_BASE_URL:http://ollama:11434}
+  timeout-ms: ${AI_REVIEW_TIMEOUT_MS:120000}
+  keep-alive: ${AI_REVIEW_KEEP_ALIVE:10m}
+  max-output-tokens: ${AI_REVIEW_MAX_OUTPUT_TOKENS:220}
+
+quest:
+  service:
+    base: ${QUEST_SERVICE_BASE:http://quest-service}
+
+proof:
+  service:
+    base: ${PROOF_SERVICE_BASE:http://proof-service}
+
+submission:
+  service:
+    base: ${SUBMISSION_SERVICE_BASE:http://submission-service}
+
+internal:
+  token: ${INTERNAL_TOKEN:dev-internal-token}
+
+app:
+  kafka:
+    prefix: ${APP_ENV:dev}.questify
+    topics:
+      submissions: ${app.kafka.prefix}.submissions
+    groups:
+      aiReview: ${spring.application.name}

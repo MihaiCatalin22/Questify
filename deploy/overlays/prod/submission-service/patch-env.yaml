@@ -13,6 +13,12 @@
 - op: add
   path: /spec/template/spec/containers/0/env/-
   value:
+    name: AI_REVIEW_SERVICE_BASE
+    value: http://ai-review-service
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
     name: INTERNAL_TOKEN
     valueFrom:
       secretKeyRef:

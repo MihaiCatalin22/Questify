@@ -41,17 +41,19 @@ class CompletionServiceTest {
      * ========================================================================================= */
 
     @Test
-    void upsertCompleted_creates_when_missing_sets_fields_and_emits() {
+    void upsertCompleted_creates_when_missing_sets_fields_and_emits_with_submittedAt() {
         when(completions.findByQuestIdAndUserId(5L, "u1")).thenReturn(Optional.empty());
         when(completions.save(any(QuestCompletion.class))).thenAnswer(inv -> inv.getArgument(0));
 
+        Instant submittedAt = Instant.parse("2026-05-01T10:15:00Z");
         Instant before = Instant.now();
-        QuestCompletion saved = service.upsertCompleted(5L, "u1", 99L);
+        QuestCompletion saved = service.upsertCompleted(5L, "u1", 99L, submittedAt);
         Instant after = Instant.now();
 
         assertThat(saved.getQuestId()).isEqualTo(5L);
         assertThat(saved.getUserId()).isEqualTo("u1");
         assertThat(saved.getSubmissionId()).isEqualTo(99L);
+        assertThat(saved.getSubmittedAt()).isEqualTo(submittedAt);
         assertThat(saved.getStatus()).isEqualTo(QuestStatus.COMPLETED);
         assertThat(saved.getCompletedAt()).isNotNull();
         assertThat(saved.getCompletedAt()).isAfterOrEqualTo(before).isBeforeOrEqualTo(after);
@@ -63,7 +65,26 @@ class CompletionServiceTest {
         assertThat(m.get("questId")).isEqualTo(5L);
         assertThat(m.get("userId")).isEqualTo("u1");
         assertThat(m.get("submissionId")).isEqualTo(99L);
+        assertThat(m.get("submittedAt")).isEqualTo(submittedAt);
         assertThat(m.get("completedAt")).isInstanceOf(Instant.class);
+    }
+
+    @Test
+    void upsertCompleted_does_not_publish_duplicate_for_already_completed_existing_record() {
+        QuestCompletion existing = QuestCompletion.builder()
+                .questId(5L).userId("u1").submissionId(111L)
+                .status(QuestStatus.COMPLETED)
+                .completedAt(Instant.parse("2025-01-01T00:00:00Z"))
+                .submittedAt(Instant.parse("2024-12-31T23:00:00Z"))
+                .build();
+
+        when(completions.findByQuestIdAndUserId(5L, "u1")).thenReturn(Optional.of(existing));
+
+        QuestCompletion out = service.upsertCompleted(5L, "u1", 222L, Instant.parse("2025-01-02T00:00:00Z"));
+
+        assertThat(out).isSameAs(existing);
+        verify(completions, never()).save(any());
+        verifyNoInteractions(events);
     }
 
     @Test

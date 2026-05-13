@@ -1,6 +1,7 @@
 package com.questify.service;
 
 import com.questify.client.ProofClient;
+import com.questify.client.AiReviewClient;
 import com.questify.client.QuestAccessClient;
 import com.questify.client.QuestProgressClient;
 import com.questify.consistency.ProcessedEventService;
@@ -35,6 +36,7 @@ public class SubmissionService {
     private final SubmissionProofRepository submissionProofs;
     private final QuestAccessClient questAccess;
     private final ProofClient proofClient;
+    private final AiReviewClient aiReviewClient;
     private final QuestProgressClient questProgress;
     private final EventPublisher events;
     private final ProcessedEventService processedEvents;
@@ -49,6 +51,7 @@ public class SubmissionService {
                              SubmissionProofRepository submissionProofs,
                              QuestAccessClient questAccess,
                              ProofClient proofClient,
+                             AiReviewClient aiReviewClient,
                              QuestProgressClient questProgress,
                              EventPublisher events,
                              ProcessedEventService processedEvents) {
@@ -56,6 +59,7 @@ public class SubmissionService {
         this.submissionProofs = submissionProofs;
         this.questAccess = questAccess;
         this.proofClient = proofClient;
+        this.aiReviewClient = aiReviewClient;
         this.questProgress = questProgress;
         this.events = events;
         this.processedEvents = processedEvents;
@@ -72,7 +76,7 @@ public class SubmissionService {
                 .userId(userId)
                 .proofKey(req.proofKey())
                 .note(req.note())
-                .status(ReviewStatus.SCANNING)
+                .status(ReviewStatus.PENDING)
                 .build();
 
         var saved = submissions.save(s);
@@ -84,7 +88,8 @@ public class SubmissionService {
                 .build());
 
         publishProofUploaded(saved, saved.getProofKey());
-        publishSubmissionCreated(saved);
+        publishSubmissionCreated(saved, List.of(saved.getProofKey()));
+        triggerAiReviewFallback(saved.getId());
 
         return saved;
     }
@@ -122,7 +127,7 @@ public class SubmissionService {
                     .userId(userId)
                     .proofKey(firstUp.key())
                     .note(note)
-                    .status(ReviewStatus.SCANNING)
+                    .status(ReviewStatus.PENDING)
                     .build();
 
             var saved = submissions.save(s);
@@ -147,7 +152,8 @@ public class SubmissionService {
                 publishProofUploaded(saved, up.key());
             }
 
-            publishSubmissionCreated(saved);
+            publishSubmissionCreated(saved, uploadedKeys);
+            triggerAiReviewFallback(saved.getId());
             return saved;
 
         } catch (ResponseStatusException e) {
@@ -189,14 +195,22 @@ public class SubmissionService {
         );
     }
 
-    private void publishSubmissionCreated(Submission saved) {
+    private void publishSubmissionCreated(Submission saved, List<String> proofKeys) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("submissionId", saved.getId());
         payload.put("questId", saved.getQuestId());
         payload.put("userId", saved.getUserId());
         payload.put("status", saved.getStatus().name());
+        payload.put("submittedAt", saved.getCreatedAt());
         if (notBlank(saved.getNote())) payload.put("note", saved.getNote());
         if (notBlank(saved.getProofKey())) payload.put("proofKey", saved.getProofKey()); // primary proof
+        List<String> sanitizedKeys = (proofKeys == null ? List.<String>of() : proofKeys).stream()
+                .filter(SubmissionService::notBlank)
+                .distinct()
+                .toList();
+        if (!sanitizedKeys.isEmpty()) {
+            payload.put("proofKeys", sanitizedKeys);
+        }
 
         events.publish(
                 submissionsTopic,
@@ -204,6 +218,14 @@ public class SubmissionService {
                 "SubmissionCreated", 1, "submission-service",
                 payload
         );
+    }
+
+    private void triggerAiReviewFallback(Long submissionId) {
+        try {
+            aiReviewClient.triggerReview(submissionId);
+        } catch (Exception e) {
+            log.warn("AI review fallback trigger threw unexpectedly for submissionId={} err={}", submissionId, e.toString());
+        }
     }
 
     public Submission get(Long id) {
@@ -235,13 +257,6 @@ public class SubmissionService {
     public Submission review(Long id, ReviewReq req, String reviewerUserId) {
         var s = get(id);
 
-        if (req.status() == ReviewStatus.APPROVED && s.getStatus() == ReviewStatus.SCANNING) {
-            throw new ResponseStatusException(
-                    org.springframework.http.HttpStatus.CONFLICT,
-                    "Cannot approve while proof is still scanning"
-            );
-        }
-
         s.setStatus(req.status());
         s.setReviewerUserId(reviewerUserId);
         s.setReviewedAt(Instant.now());
@@ -266,7 +281,7 @@ public class SubmissionService {
         );
 
         if (req.status() == ReviewStatus.APPROVED) {
-            questProgress.markCompleted(saved.getQuestId(), saved.getUserId(), saved.getId());
+            questProgress.markCompleted(saved.getQuestId(), saved.getUserId(), saved.getId(), saved.getCreatedAt());
         }
 
         return saved;

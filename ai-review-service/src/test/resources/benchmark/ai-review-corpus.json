@@ -1,0 +1,804 @@
+﻿{
+    "cases":  [
+                  {
+                      "id":  "invalid-001",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "I solved four algebra equations in my notebook.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-002",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Done, practiced scales and chords.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-003",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Finished 3km this evening.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-004",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Annotated mitochondria and cell membrane.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-005",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "I solved four algebra equations in my notebook.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-006",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Done, practiced scales and chords.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-007",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Finished 3km this evening.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-008",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Annotated mitochondria and cell membrane.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-009",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "I solved four algebra equations in my notebook.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-010",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Done, practiced scales and chords.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-011",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Finished 3km this evening.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-012",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Annotated mitochondria and cell membrane.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-013",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "I solved four algebra equations in my notebook.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-014",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Done, practiced scales and chords.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-015",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Finished 3km this evening.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-016",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Annotated mitochondria and cell membrane.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-017",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "I solved four algebra equations in my notebook.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-018",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Done, practiced scales and chords.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-019",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Finished 3km this evening.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-020",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Annotated mitochondria and cell membrane.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-021",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "I solved four algebra equations in my notebook.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-022",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Done, practiced scales and chords.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-023",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Finished 3km this evening.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-024",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Annotated mitochondria and cell membrane.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-025",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "I solved four algebra equations in my notebook.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-026",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Done, practiced scales and chords.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-027",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Finished 3km this evening.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-028",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Annotated mitochondria and cell membrane.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-029",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "I solved four algebra equations in my notebook.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-030",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Done, practiced scales and chords.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-031",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Finished 3km this evening.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-032",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Annotated mitochondria and cell membrane.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-033",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "I solved four algebra equations in my notebook.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-034",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Done, practiced scales and chords.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-035",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Finished 3km this evening.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-036",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Annotated mitochondria and cell membrane.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-037",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "I solved four algebra equations in my notebook.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-038",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Done, practiced scales and chords.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-039",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Finished 3km this evening.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "invalid-040",
+                      "label":  "INVALID_MISMATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Annotated mitochondria and cell membrane.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-001",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "Attached my worksheet with 4 solved equations and steps.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-002",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Here is my practice tracker and chords notes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-003",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Upload includes watch screen showing 3.1 km.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-004",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Diagram labels are visible in the upload.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-005",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "Attached my worksheet with 4 solved equations and steps.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-006",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Here is my practice tracker and chords notes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-007",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Upload includes watch screen showing 3.1 km.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-008",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Diagram labels are visible in the upload.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-009",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "Attached my worksheet with 4 solved equations and steps.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-010",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Here is my practice tracker and chords notes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-011",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Upload includes watch screen showing 3.1 km.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-012",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Diagram labels are visible in the upload.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-013",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "Attached my worksheet with 4 solved equations and steps.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-014",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Here is my practice tracker and chords notes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-015",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Upload includes watch screen showing 3.1 km.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-016",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Diagram labels are visible in the upload.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-017",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Solve 4 algebra equations",
+                      "questDescription":  "Upload clear proof showing four solved algebra equations.",
+                      "studentComment":  "Attached my worksheet with 4 solved equations and steps.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-018",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Practice guitar for 20 minutes",
+                      "questDescription":  "Upload a picture of your practice log or chords sheet.",
+                      "studentComment":  "Here is my practice tracker and chords notes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-019",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Run 3 kilometers",
+                      "questDescription":  "Upload screenshot or photo proving the run distance.",
+                      "studentComment":  "Upload includes watch screen showing 3.1 km.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "valid-020",
+                      "label":  "VALID_MATCH",
+                      "questTitle":  "Study biology diagrams",
+                      "questDescription":  "Upload annotated biology diagram from your notes.",
+                      "studentComment":  "Diagram labels are visible in the upload.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-001",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Study world geography for 30 minutes",
+                      "questDescription":  "Upload notes or textbook page proving your study session.",
+                      "studentComment":  "I studied geography and took some notes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-002",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Read chapter 5 and summarize",
+                      "questDescription":  "Upload summary notes or highlighted pages.",
+                      "studentComment":  "Read it and wrote a short summary.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-003",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Complete 10 coding exercises",
+                      "questDescription":  "Upload screenshot showing solved exercises.",
+                      "studentComment":  "Completed all 10 tasks.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-004",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Meditate for 15 minutes",
+                      "questDescription":  "Upload timer proof or reflection entry.",
+                      "studentComment":  "Meditated for 15 minutes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-005",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Study world geography for 30 minutes",
+                      "questDescription":  "Upload notes or textbook page proving your study session.",
+                      "studentComment":  "I studied geography and took some notes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-006",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Read chapter 5 and summarize",
+                      "questDescription":  "Upload summary notes or highlighted pages.",
+                      "studentComment":  "Read it and wrote a short summary.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-007",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Complete 10 coding exercises",
+                      "questDescription":  "Upload screenshot showing solved exercises.",
+                      "studentComment":  "Completed all 10 tasks.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-008",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Meditate for 15 minutes",
+                      "questDescription":  "Upload timer proof or reflection entry.",
+                      "studentComment":  "Meditated for 15 minutes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-009",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Study world geography for 30 minutes",
+                      "questDescription":  "Upload notes or textbook page proving your study session.",
+                      "studentComment":  "I studied geography and took some notes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-010",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Read chapter 5 and summarize",
+                      "questDescription":  "Upload summary notes or highlighted pages.",
+                      "studentComment":  "Read it and wrote a short summary.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-011",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Complete 10 coding exercises",
+                      "questDescription":  "Upload screenshot showing solved exercises.",
+                      "studentComment":  "Completed all 10 tasks.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-012",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Meditate for 15 minutes",
+                      "questDescription":  "Upload timer proof or reflection entry.",
+                      "studentComment":  "Meditated for 15 minutes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-013",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Study world geography for 30 minutes",
+                      "questDescription":  "Upload notes or textbook page proving your study session.",
+                      "studentComment":  "I studied geography and took some notes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-014",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Read chapter 5 and summarize",
+                      "questDescription":  "Upload summary notes or highlighted pages.",
+                      "studentComment":  "Read it and wrote a short summary.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-015",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Complete 10 coding exercises",
+                      "questDescription":  "Upload screenshot showing solved exercises.",
+                      "studentComment":  "Completed all 10 tasks.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-016",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Meditate for 15 minutes",
+                      "questDescription":  "Upload timer proof or reflection entry.",
+                      "studentComment":  "Meditated for 15 minutes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-017",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Study world geography for 30 minutes",
+                      "questDescription":  "Upload notes or textbook page proving your study session.",
+                      "studentComment":  "I studied geography and took some notes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-018",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Read chapter 5 and summarize",
+                      "questDescription":  "Upload summary notes or highlighted pages.",
+                      "studentComment":  "Read it and wrote a short summary.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-019",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Complete 10 coding exercises",
+                      "questDescription":  "Upload screenshot showing solved exercises.",
+                      "studentComment":  "Completed all 10 tasks.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  },
+                  {
+                      "id":  "ambiguous-020",
+                      "label":  "AMBIGUOUS",
+                      "questTitle":  "Meditate for 15 minutes",
+                      "questDescription":  "Upload timer proof or reflection entry.",
+                      "studentComment":  "Meditated for 15 minutes.",
+                      "imagesBase64":  [
+                                           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZP4sAAAAASUVORK5CYII="
+                                       ]
+                  }
+              ]
+}

@@ -1,6 +1,7 @@
 package com.questify.service;
 
 import com.questify.client.ProofClient;
+import com.questify.client.AiReviewClient;
 import com.questify.client.QuestAccessClient;
 import com.questify.client.QuestProgressClient;
 import com.questify.consistency.ProcessedEventService;
@@ -45,6 +46,7 @@ class SubmissionServiceTest {
     @Mock SubmissionProofRepository submissionProofs;
     @Mock QuestAccessClient questAccess;
     @Mock ProofClient proofClient;
+    @Mock AiReviewClient aiReviewClient;
     @Mock QuestProgressClient questProgress;
     @Mock EventPublisher events;
     @Mock ProcessedEventService processedEvents;
@@ -157,7 +159,7 @@ class SubmissionServiceTest {
     }
 
     @Test
-    void create_ok_saves_submission_scanning_saves_proof_and_emits_events_in_order() {
+    void create_ok_saves_submission_pending_saves_proof_and_emits_events_in_order() {
         CreateSubmissionReq req = new CreateSubmissionReq(7L, "proof/7", "hello-note");
         when(questAccess.allowed("u1", 7L)).thenReturn(true);
 
@@ -172,7 +174,7 @@ class SubmissionServiceTest {
         assertThat(saved.getId()).isEqualTo(77L);
         assertThat(saved.getQuestId()).isEqualTo(7L);
         assertThat(saved.getUserId()).isEqualTo("u1");
-        assertThat(saved.getStatus()).isEqualTo(ReviewStatus.SCANNING);
+        assertThat(saved.getStatus()).isEqualTo(ReviewStatus.PENDING);
         assertThat(saved.getProofKey()).isEqualTo("proof/7");
         assertThat(saved.getNote()).isEqualTo("hello-note");
 
@@ -203,9 +205,12 @@ class SubmissionServiceTest {
         assertThat(payload).containsEntry("submissionId", 77L);
         assertThat(payload).containsEntry("questId", 7L);
         assertThat(payload).containsEntry("userId", "u1");
-        assertThat(payload).containsEntry("status", "SCANNING");
+        assertThat(payload).containsEntry("status", "PENDING");
         assertThat(payload).containsEntry("note", "hello-note");
         assertThat(payload).containsEntry("proofKey", "proof/7");
+        assertThat(payload).containsEntry("proofKeys", List.of("proof/7"));
+        assertThat(payload).containsKey("submittedAt");
+        verify(aiReviewClient).triggerReview(77L);
     }
 
     @Test
@@ -226,8 +231,29 @@ class SubmissionServiceTest {
                 eq("SubmissionCreated"), eq(1), eq("submission-service"), cap.capture());
 
         Map<String, Object> payload = cap.getValue();
-        assertThat(payload).containsKeys("submissionId", "questId", "userId", "status", "proofKey");
+        assertThat(payload).containsKeys("submissionId", "questId", "userId", "status", "proofKey", "proofKeys");
         assertThat(payload).doesNotContainKey("note");
+        verify(aiReviewClient).triggerReview(901L);
+    }
+
+    @Test
+    void create_when_ai_review_fallback_trigger_throws_submission_still_succeeds() {
+        CreateSubmissionReq req = new CreateSubmissionReq(10L, "proof/10", "note");
+        when(questAccess.allowed("u10", 10L)).thenReturn(true);
+        when(submissions.save(any())).thenAnswer(inv -> {
+            Submission s = inv.getArgument(0);
+            s.setId(1000L);
+            return s;
+        });
+        doThrow(new RuntimeException("downstream unavailable")).when(aiReviewClient).triggerReview(1000L);
+
+        Submission saved = service.create("u10", req);
+
+        assertThat(saved.getId()).isEqualTo(1000L);
+        assertThat(saved.getStatus()).isEqualTo(ReviewStatus.PENDING);
+        verify(events).publish(eq(SUBMISSIONS_TOPIC), eq("10"),
+                eq("SubmissionCreated"), eq(1), eq("submission-service"), anyMap());
+        verify(aiReviewClient).triggerReview(1000L);
     }
 
     /* ---------------------------- createFromMultipart / createFromMultipartMany ---------------------------- */
@@ -354,7 +380,7 @@ class SubmissionServiceTest {
         assertThat(saved.getId()).isEqualTo(100L);
         assertThat(saved.getQuestId()).isEqualTo(5L);
         assertThat(saved.getUserId()).isEqualTo("u1");
-        assertThat(saved.getStatus()).isEqualTo(ReviewStatus.SCANNING);
+        assertThat(saved.getStatus()).isEqualTo(ReviewStatus.PENDING);
         assertThat(saved.getProofKey()).isEqualTo("k1");
 
         verify(proofClient, times(3)).upload(any(MultipartFile.class), eq("Bearer t"));
@@ -363,7 +389,10 @@ class SubmissionServiceTest {
         // ProofUploaded 3x + SubmissionCreated 1x
         verify(events, times(4)).publish(anyString(), anyString(), anyString(), anyInt(), anyString(), anyMap());
         verify(events, times(3)).publish(eq(PROOFS_TOPIC), anyString(), eq("ProofUploaded"), eq(1), eq("submission-service"), anyMap());
-        verify(events).publish(eq(SUBMISSIONS_TOPIC), eq("5"), eq("SubmissionCreated"), eq(1), eq("submission-service"), anyMap());
+        ArgumentCaptor<Map<String, Object>> submissionCreatedPayload = ArgumentCaptor.forClass(Map.class);
+        verify(events).publish(eq(SUBMISSIONS_TOPIC), eq("5"), eq("SubmissionCreated"), eq(1), eq("submission-service"), submissionCreatedPayload.capture());
+        assertThat(submissionCreatedPayload.getValue()).containsEntry("proofKeys", List.of("k1", "k2", "k3"));
+        verify(aiReviewClient).triggerReview(100L);
     }
 
     @Test
@@ -391,6 +420,7 @@ class SubmissionServiceTest {
 
         verify(proofClient).deleteInternalObject("k1");
         verify(events, never()).publish(eq(SUBMISSIONS_TOPIC), eq("5"), eq("SubmissionCreated"), anyInt(), anyString(), anyMap());
+        verify(aiReviewClient, never()).triggerReview(anyLong());
     }
 
     /* ---------------------------- get ---------------------------- */
@@ -484,7 +514,7 @@ class SubmissionServiceTest {
         assertThat(payload).containsEntry("reviewStatus", "APPROVED");
         assertThat(payload).containsEntry("reviewerId", "rev1");
 
-        verify(questProgress).markCompleted(9L, "u9", 33L);
+        verify(questProgress).markCompleted(9L, "u9", 33L, existing.getCreatedAt());
     }
 
     @Test
@@ -501,7 +531,7 @@ class SubmissionServiceTest {
         assertThat(out.getStatus()).isEqualTo(ReviewStatus.REJECTED);
         assertThat(out.getNote()).isEqualTo("keep-me");
 
-        verify(questProgress, never()).markCompleted(anyLong(), anyString(), anyLong());
+        verify(questProgress, never()).markCompleted(anyLong(), anyString(), anyLong(), any());
 
         ArgumentCaptor<Map<String, Object>> cap = ArgumentCaptor.forClass(Map.class);
         verify(events).publish(eq(SUBMISSIONS_TOPIC), eq("12"),
@@ -512,20 +542,18 @@ class SubmissionServiceTest {
     }
 
     @Test
-    void review_409_if_trying_to_approve_while_still_scanning() {
+    void review_allows_approval_even_if_legacy_submission_is_still_scanning() {
         Submission existing = sub(55L, 99L, "u99", ReviewStatus.SCANNING);
         when(submissions.findById(55L)).thenReturn(Optional.of(existing));
+        when(submissions.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ReviewReq req = new ReviewReq(ReviewStatus.APPROVED, "ok");
 
-        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> service.review(55L, req, "revX"));
+        Submission out = service.review(55L, req, "revX");
 
-        assertThat(ex.getStatusCode().value()).isEqualTo(409);
-
-        verify(submissions, never()).save(any());
-        verify(events, never()).publish(eq(SUBMISSIONS_TOPIC), anyString(), eq("SubmissionReviewed"), anyInt(), anyString(), anyMap());
-        verify(questProgress, never()).markCompleted(anyLong(), anyString(), anyLong());
+        assertThat(out.getStatus()).isEqualTo(ReviewStatus.APPROVED);
+        verify(submissions).save(existing);
+        verify(questProgress).markCompleted(99L, "u99", 55L, existing.getCreatedAt());
     }
 
     /* ---------------------------- proof scan idempotency + aggregation ---------------------------- */

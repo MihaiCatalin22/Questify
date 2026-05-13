@@ -28,6 +28,11 @@ public class CompletionService {
 
     @Transactional
     public QuestCompletion upsertCompleted(Long questId, String userId, Long submissionId) {
+        return upsertCompleted(questId, userId, submissionId, null);
+    }
+
+    @Transactional
+    public QuestCompletion upsertCompleted(Long questId, String userId, Long submissionId, Instant submittedAt) {
         var existing = completions.findByQuestIdAndUserId(questId, userId).orElse(null);
         QuestCompletion saved;
 
@@ -36,14 +41,21 @@ public class CompletionService {
                     .questId(questId)
                     .userId(userId)
                     .submissionId(submissionId)
+                    .submittedAt(submittedAt)
                     .status(QuestStatus.COMPLETED)
                     .completedAt(Instant.now())
                     .build();
             saved = completions.save(c);
         } else {
+            if (existing.getStatus() == QuestStatus.COMPLETED) {
+                return existing;
+            }
             existing.setStatus(QuestStatus.COMPLETED);
             if (submissionId != null) {
                 existing.setSubmissionId(submissionId);
+            }
+            if (submittedAt != null) {
+                existing.setSubmittedAt(submittedAt);
             }
             if (existing.getCompletedAt() == null) {
                 existing.setCompletedAt(Instant.now());
@@ -55,6 +67,7 @@ public class CompletionService {
         payload.put("questId", saved.getQuestId());
         payload.put("userId", saved.getUserId());
         payload.put("submissionId", saved.getSubmissionId());
+        payload.put("submittedAt", saved.getSubmittedAt());
         payload.put("completedAt", saved.getCompletedAt());
 
         events.publish(

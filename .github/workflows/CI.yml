@@ -202,6 +202,90 @@ jobs:
           if-no-files-found: ignore
 
   # ───────────────────────────
+  # AI Review Service
+  # ───────────────────────────
+  ai-review-service:
+    name: AI Review Service • Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.10.2
+
+      - name: Build & Test
+        run: |
+          gradle --no-daemon -p ai-review-service clean test
+          if gradle -q -p ai-review-service tasks --all | grep -q '^jacocoTestReport'; then
+            gradle --no-daemon -p ai-review-service jacocoTestReport
+          else
+            echo "JaCoCo not configured in ai-review-service"
+          fi
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-review-tests
+          path: ai-review-service/build/reports/tests/test/**
+          if-no-files-found: ignore
+
+      - name: Upload JaCoCo XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-review-jacoco-xml
+          path: ai-review-service/build/reports/jacoco/test/jacocoTestReport.xml
+          if-no-files-found: ignore
+
+  # ───────────────────────────
+  # Streak Service
+  # ───────────────────────────
+  streak-service:
+    name: Streak Service • Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.10.2
+
+      - name: Build & Test
+        run: |
+          gradle --no-daemon -p streak-service clean test
+          if gradle -q -p streak-service tasks --all | grep -q '^jacocoTestReport'; then
+            gradle --no-daemon -p streak-service jacocoTestReport
+          else
+            echo "JaCoCo not configured in streak-service"
+          fi
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: streak-tests
+          path: streak-service/build/reports/tests/test/**
+          if-no-files-found: ignore
+
+      - name: Upload JaCoCo XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: streak-jacoco-xml
+          path: streak-service/build/reports/jacoco/test/jacocoTestReport.xml
+          if-no-files-found: ignore
+
+  # ───────────────────────────
   # User Service
   # ───────────────────────────
   user-service:

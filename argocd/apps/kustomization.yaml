@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ai-review-service.yaml
+  - coach-service.yaml
+  - frontend.yaml
+  - proof-service.yaml
+  - quest-service.yaml
+  - streak-service.yaml
+  - submission-service.yaml
+  - user-service.yaml

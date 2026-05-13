@@ -61,6 +61,15 @@ public class S3ProofStorageService implements ProofStorageService {
     }
 
     @Override
+    public byte[] getBytes(String objectKey) {
+        var req = GetObjectRequest.builder()
+                .bucket(props.getBucket())
+                .key(objectKey)
+                .build();
+        return s3.getObjectAsBytes(req).asByteArray();
+    }
+
+    @Override
     public void delete(String objectKey) {
         s3.deleteObject(DeleteObjectRequest.builder()
                 .bucket(props.getBucket())

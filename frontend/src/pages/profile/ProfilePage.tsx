@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import { useAuth } from "react-oidc-context";
 import { Link } from "react-router-dom";
-import { Bot, Download, ShieldAlert, UserRound } from "lucide-react";
+import { Bot, Download, Flame, ShieldAlert, Trophy, UserRound } from "lucide-react";
 
 import { useDeleteMe, useMe, useUpdateMe } from "../../hooks/useUsers";
 import { QuestsApi } from "../../api/quests";
 import { SubmissionsApi } from "../../api/submissions";
+import { StreaksApi, type StreakSummary } from "../../api/streaks";
 import { UsersApi, type ExportJobDTO, type ExportJobStatus, type UpdateMeInput } from "../../api/users";
 import {
   Badge,
@@ -119,6 +120,7 @@ export default function ProfilePage() {
     questsTotal: number;
     questsCompleted: number;
     submissionsTotal: number;
+    streak: StreakSummary | null;
   } | null>(null);
 
   const [exportJob, setExportJob] = useState<ExportJobDTO | null>(null);
@@ -348,10 +350,11 @@ export default function ProfilePage() {
     try {
       setLoadingSummary(true);
 
-      const [active, archived, subs] = await Promise.all([
+      const [active, archived, subs, streak] = await Promise.all([
         QuestsApi.mineOrParticipatingSummary(false),
         QuestsApi.mineOrParticipatingSummary(true),
         SubmissionsApi.mineSummary(),
+        StreaksApi.mine().catch(() => null),
       ]);
 
       setSummary({
@@ -359,6 +362,7 @@ export default function ProfilePage() {
         questsTotal: Number(active.questsTotal ?? 0) + Number(archived.questsTotal ?? 0),
         questsCompleted: Number(active.questsCompleted ?? 0) + Number(archived.questsCompleted ?? 0),
         submissionsTotal: Number(subs.submissionsTotal ?? 0),
+        streak,
       });
     } catch (error: unknown) {
       toast.error(extractApiMessage(error, "Failed to load summary"));
@@ -537,6 +541,28 @@ export default function ProfilePage() {
                 <div className="text-lg">{summary.submissionsTotal}</div>
               </div>
             </div>
+            {summary.streak && (
+              <div className="mt-4 grid grid-cols-1 gap-3 border-t border-[rgb(var(--border-soft))] pt-4 text-sm sm:grid-cols-3">
+                <div>
+                  <div className="flex items-center gap-1 text-xs text-[rgb(var(--faint))]">
+                    <Flame className="h-3.5 w-3.5 text-[rgb(var(--accent))]" />
+                    Current streak
+                  </div>
+                  <div className="text-lg">{summary.streak.currentStreak} day(s)</div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-1 text-xs text-[rgb(var(--faint))]">
+                    <Trophy className="h-3.5 w-3.5 text-[rgb(var(--accent-2))]" />
+                    Level
+                  </div>
+                  <div className="text-lg">Level {summary.streak.level}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-[rgb(var(--faint))]">XP</div>
+                  <div className="text-lg">{summary.streak.totalXp}</div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Panel>
