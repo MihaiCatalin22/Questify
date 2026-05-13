@@ -5,7 +5,7 @@ resources:
 - ../../../base/quest-service
 images:
 - name: ghcr.io/mihaicatalin22/questify-quest-service
-  newTag: origin-ai-review-streak-service-f441a8d
+  newTag: origin-ai-review-streak-service-ee03246
 patchesJson6902:
 - target:
     group: argoproj.io
