@@ -7,7 +7,7 @@ resources:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-submission-service
-    newTag: main-bc6cee3
+    newTag: main-0bed079
 
 patchesJson6902:
   - target:
