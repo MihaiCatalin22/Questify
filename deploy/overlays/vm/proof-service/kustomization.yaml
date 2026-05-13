@@ -5,7 +5,7 @@ resources:
 - ../../../base/proof-service
 images:
 - name: ghcr.io/mihaicatalin22/questify-proof-service
-  newTag: origin-ai-review-streak-service-51a83a2
+  newTag: origin-ai-review-streak-service-b13f624
 patchesJson6902:
 - target:
     group: argoproj.io
