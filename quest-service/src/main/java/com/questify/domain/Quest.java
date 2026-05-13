@@ -58,19 +58,19 @@ public class Quest {
     @Builder.Default
     private QuestVisibility visibility = QuestVisibility.PRIVATE;
 
-    @ElementCollection(fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "quest_verification_required", joinColumns = @JoinColumn(name = "quest_id"))
     @Column(name = "signal", nullable = false, length = 120)
     @Builder.Default
     private Set<String> verificationRequiredEvidence = new LinkedHashSet<>();
 
-    @ElementCollection(fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "quest_verification_optional", joinColumns = @JoinColumn(name = "quest_id"))
     @Column(name = "signal", nullable = false, length = 120)
     @Builder.Default
     private Set<String> verificationOptionalEvidence = new LinkedHashSet<>();
 
-    @ElementCollection(fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "quest_verification_disqualifiers", joinColumns = @JoinColumn(name = "quest_id"))
     @Column(name = "signal", nullable = false, length = 120)
     @Builder.Default
