@@ -36,6 +36,7 @@ public class OllamaVisionClient implements ModelClient {
         Map<String, Object> body = Map.of(
                 "model", model,
                 "stream", false,
+                "format", "json",
                 "messages", List.of(
                         Map.of("role", "system", "content", "You are an advisory proof reviewer. Return only compact JSON."),
                         Map.of("role", "user", "content", prompt.textPrompt(), "images", prompt.base64Images())
