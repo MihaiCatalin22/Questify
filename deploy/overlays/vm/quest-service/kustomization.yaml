@@ -5,7 +5,7 @@ resources:
 - ../../../base/quest-service
 images:
 - name: ghcr.io/mihaicatalin22/questify-quest-service
-  newTag: main-b50103e
+  newTag: main-f1e0c03
 patchesJson6902:
 - target:
     group: argoproj.io
