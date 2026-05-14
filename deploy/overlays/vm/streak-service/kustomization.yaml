@@ -7,4 +7,4 @@ resources:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-streak-service
-    newTag: main-3b0a28d
+    newTag: main-b50103e
