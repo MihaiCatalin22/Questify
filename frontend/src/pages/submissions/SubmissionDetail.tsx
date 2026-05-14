@@ -51,22 +51,20 @@ function recommendationLabel(value: AiReviewRecommendation) {
   return value.replaceAll('_', ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 }
 
-function recommendationTone(value: AiReviewRecommendation): React.ComponentProps<typeof Badge>['tone'] {
-  if (value === 'LIKELY_VALID') return 'success';
-  if (value === 'LIKELY_INVALID' || value === 'AI_FAILED') return 'danger';
-  if (value === 'UNCLEAR' || value === 'UNSUPPORTED_MEDIA') return 'warning';
-  return undefined;
+function recommendationBadgeClass(value: AiReviewRecommendation): string {
+  if (value === 'LIKELY_VALID') return 'border-emerald-500/60 bg-emerald-900/25 text-emerald-100';
+  if (value === 'LIKELY_INVALID' || value === 'AI_FAILED') return 'border-rose-500/65 bg-rose-900/25 text-rose-100';
+  if (value === 'UNCLEAR') return 'border-amber-500/60 bg-amber-900/25 text-amber-100';
+  if (value === 'UNSUPPORTED_MEDIA') return 'border-slate-500/60 bg-slate-800/50 text-slate-100';
+  return 'border-[rgb(var(--border))] text-[rgb(var(--muted))]';
 }
 
-function parseSupportScore(reasons?: string[]): number | null {
-  if (!reasons || reasons.length === 0) return null;
-  const scoreLine = reasons.find((line) => /support score|evidence support/i.test(line));
-  if (!scoreLine) return null;
-  const match = scoreLine.match(/([01](?:\.\d+)?)/);
-  if (!match) return null;
-  const value = Number(match[1]);
-  if (!Number.isFinite(value)) return null;
-  return Math.max(0, Math.min(1, value));
+function aiReviewStatusBadgeClass(status?: string | null): string {
+  const value = (status ?? '').toUpperCase();
+  if (value === 'COMPLETED') return 'border-emerald-700/75 bg-emerald-950/55 text-emerald-200';
+  if (value === 'FAILED') return 'border-rose-700/75 bg-rose-950/55 text-rose-200';
+  if (value === 'PENDING' || value === 'RUNNING') return 'border-amber-600/70 bg-amber-950/45 text-amber-100';
+  return 'border-[rgb(var(--border))] text-[rgb(var(--muted))]';
 }
 
 function isRunInFlight(status?: string | null): boolean {
@@ -431,18 +429,13 @@ export default function SubmissionDetail() {
           <div className="card-body space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="section-title">AI review</h2>
-              <div className="flex items-center gap-2">
-                {aiReview.data?.modelName && (
-                  <Badge>{aiReview.data.modelName}</Badge>
-                )}
-                <Button
-                  variant="ghost"
-                  onClick={() => runAiReview.mutate()}
-                  disabled={runAiReview.isPending || !id || isRunInFlight(aiReview.data?.status)}
-                >
-                  {runAiReview.isPending || isRunInFlight(aiReview.data?.status) ? 'Running AI review...' : 'Run AI Review'}
-                </Button>
-              </div>
+              <Button
+                variant="ghost"
+                onClick={() => runAiReview.mutate()}
+                disabled={runAiReview.isPending || !id || isRunInFlight(aiReview.data?.status)}
+              >
+                {runAiReview.isPending || isRunInFlight(aiReview.data?.status) ? 'Running AI review...' : 'Run AI Review'}
+              </Button>
             </div>
 
             {aiReview.isLoading && (
@@ -466,24 +459,15 @@ export default function SubmissionDetail() {
                 <div className="rounded-md border border-[rgb(var(--border-soft))] bg-[rgb(var(--surface-2))] p-3 text-xs leading-6 text-[rgb(var(--muted))]">
                   <div className="font-semibold text-[rgb(var(--text))]">How to read this</div>
                   <div>AI review is advisory evidence only. Final decision is always the reviewer’s approve/reject action.</div>
-                  <div className="mt-1">
-                    Evidence confidence reflects how strongly the proof appears tied to this quest.
-                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge>{aiReview.data.status}</Badge>
-                  <Badge tone={recommendationTone(aiReview.data.recommendation)}>
+                  <Badge className={aiReviewStatusBadgeClass(aiReview.data.status)}>
+                    {aiReview.data.status}
+                  </Badge>
+                  <Badge className={recommendationBadgeClass(aiReview.data.recommendation)}>
                     {recommendationLabel(aiReview.data.recommendation)}
                   </Badge>
-                  <span className="text-sm text-[rgb(var(--muted))]">
-                    Evidence confidence {Math.round((aiReview.data.confidence ?? 0) * 100)}%
-                  </span>
-                  {(aiReview.data.supportScore !== undefined || parseSupportScore(aiReview.data.reasons) !== null) && (
-                    <span className="text-sm text-[rgb(var(--muted))]">
-                      Support {Math.round(((aiReview.data.supportScore ?? parseSupportScore(aiReview.data.reasons) ?? 0) as number) * 100)}%
-                    </span>
-                  )}
                 </div>
 
                 {isRunInFlight(aiReview.data.status) && (
@@ -496,22 +480,6 @@ export default function SubmissionDetail() {
                   <div className="text-sm text-[rgb(var(--muted))]">
                     This proof type needs manual review because the AI reviewer only checks image evidence in v1.
                   </div>
-                )}
-
-                {(aiReview.data.modelUsed || aiReview.data.fallbackUsed) && (
-                  <div className="text-xs text-[rgb(var(--faint))]">
-                    Model used: {aiReview.data.modelUsed || aiReview.data.modelName || 'n/a'}
-                    {aiReview.data.fallbackUsed ? ` (fallback)` : ''}
-                    {aiReview.data.fallbackReason ? ` — ${aiReview.data.fallbackReason}` : ''}
-                  </div>
-                )}
-
-                {!!aiReview.data.reasons?.length && (
-                  <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
-                    {aiReview.data.reasons.map((reason, idx) => (
-                      <li key={`${reason}-${idx}`}>{reason}</li>
-                    ))}
-                  </ul>
                 )}
 
                 <div className="rounded-md border border-[rgb(var(--border-soft))] p-3 text-xs leading-6 text-[rgb(var(--muted))]">
