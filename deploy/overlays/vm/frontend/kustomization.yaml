@@ -20,4 +20,4 @@ generatorOptions:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-frontend
-    newTag: main-0bed079
+    newTag: main-5cdf71d
