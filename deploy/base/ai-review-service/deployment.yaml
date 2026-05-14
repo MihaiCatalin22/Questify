@@ -43,6 +43,7 @@ spec:
             - { name: SUBMISSION_SERVICE_BASE, value: "http://submission-service" }
             - { name: AI_REVIEW_RUNTIME_BASE_URL, value: "http://host.docker.internal:11434" }
             - { name: AI_REVIEW_MODEL_PRIMARY, value: "qwen2.5vl:3b" }
+            - { name: AI_REVIEW_MODEL_CLAIM_CHECK, value: "qwen2.5vl:7b" }
             - { name: AI_REVIEW_MODEL_FALLBACK, value: "" }
             - { name: AI_REVIEW_TIMEOUT_MS, value: "120000" }
             - { name: AI_REVIEW_KEEP_ALIVE, value: "10m" }

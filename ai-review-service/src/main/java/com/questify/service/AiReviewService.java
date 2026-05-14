@@ -44,7 +44,8 @@ public class AiReviewService {
             "there", "their", "about", "quest", "proof", "image", "student", "comment", "submission",
             "manual", "review", "show", "shows", "showing", "activity", "valid", "match", "matches",
             "relevant", "looks", "good", "appears", "photo", "screenshot",
-            "key", "important", "most", "quick", "quickly", "simple", "basic", "memorize", "recall"
+            "key", "important", "most", "quick", "quickly", "simple", "basic", "memorize", "recall",
+            "work", "worked", "steps", "step", "written", "result", "upload", "proofs"
     );
     private static final List<String> DEFAULT_DISQUALIFIERS = List.of(
             "game", "video game", "hud", "ui overlay", "menu screen", "meme", "cartoon", "cinematic"
@@ -195,17 +196,23 @@ public class AiReviewService {
             Policy policy = toPolicy(quest);
             Set<String> questTokens = buildQuestTokens(quest, policy);
 
-            ModelClient.ModelResponse ocrRaw = model.generate(new AiReviewPrompt(buildOcrPrompt(quest, event), images));
+            ModelClient.ModelResponse ocrRaw = model.generate(new AiReviewPrompt(
+                    buildOcrPrompt(quest, event),
+                    images,
+                    AiReviewPrompt.Stage.OCR
+            ));
             OcrExtraction ocrExtraction = parseOcrExtraction(ocrRaw.content());
 
             ModelClient.ModelResponse observationRaw = model.generate(new AiReviewPrompt(
                     buildObservationPrompt(quest, event, ocrExtraction),
-                    images
+                    images,
+                    AiReviewPrompt.Stage.OBSERVATION
             ));
             Observation observation = parseObservation(observationRaw.content(), ocrExtraction);
             ModelClient.ModelResponse claimRaw = model.generate(new AiReviewPrompt(
                     buildClaimCheckPrompt(quest, event, policy, observation),
-                    List.of()
+                    List.of(),
+                    AiReviewPrompt.Stage.CLAIM_CHECK
             ));
             ClaimCheck claimCheck = parseClaimCheck(claimRaw.content());
 
@@ -424,6 +431,8 @@ public class AiReviewService {
                 - The student comment can explain intent, but it cannot prove completion without visible evidence.
                 - If the image is an unrelated object, unrelated product, unrelated app screen, meme, or generic screenshot, use low scores.
                 - If the visible work/output is clearly tied to the requested task, use high scores even when OCR is imperfect.
+                - Do not mark disqualifier_hits unless the disqualifier is visibly present in the image evidence.
+                - Optional evidence can increase support, but missing optional cues should not force low support when topic relevance is clearly strong.
                 - Keep all evidence strings concrete and directly observable.
                 """.formatted(
                 quest.title(),
@@ -549,41 +558,28 @@ public class AiReviewService {
                 40
         );
 
-        List<String> matchedRequired = matchSignals(policy.requiredEvidence(), signalBlob, signalTokens);
+        List<String> matchedRequiredObserved = matchSignals(policy.requiredEvidence(), signalBlob, signalTokens);
+        List<String> matchedRequiredFromClaims = matchSignals(
+                policy.requiredEvidence(),
+                String.join(" ", claimCheck.matchedClaims()),
+                extractTokens(String.join(" ", claimCheck.matchedClaims()))
+        );
+        List<String> matchedRequired = dedupeConcat(matchedRequiredObserved, matchedRequiredFromClaims);
+        Set<String> matchedRequiredSet = new LinkedHashSet<>(matchedRequired);
         List<String> missingRequired = policy.requiredEvidence().stream()
-                .filter(required -> !matchesSignal(signalBlob, signalTokens, required))
+                .filter(required -> !matchedRequiredSet.contains(required))
                 .toList();
         List<String> matchedOptional = matchSignals(policy.optionalEvidence(), signalBlob, signalTokens);
         List<String> matchedDisqualifiersObserved = matchSignals(policy.disqualifiers(), signalBlob, signalTokens);
-        matchedRequired = dedupeConcat(matchedRequired, matchSignals(policy.requiredEvidence(), String.join(" ", claimCheck.matchedClaims()), extractTokens(String.join(" ", claimCheck.matchedClaims()))));
         List<String> matchedDisqualifiersModel = matchSignals(
                 policy.disqualifiers(),
                 String.join(" ", claimCheck.disqualifierHits()),
                 extractTokens(String.join(" ", claimCheck.disqualifierHits()))
         );
-        Set<String> matchedRequiredSet = new LinkedHashSet<>(matchedRequired);
-        missingRequired = policy.requiredEvidence().stream()
-                .filter(required -> !matchedRequiredSet.contains(required))
+        List<String> matchedDisqualifiersModelCorroborated = matchedDisqualifiersModel.stream()
+                .filter(disqualifier -> matchesSignal(signalBlob, signalTokens, disqualifier))
                 .toList();
-        List<String> modelMissingEvidence = normalizeSignals(claimCheck.missingEvidence());
-        List<String> missingEvidence = dedupeConcat(missingRequired, modelMissingEvidence);
-        List<String> unrelatedEvidence = normalizeSignals(claimCheck.unrelatedEvidence());
-        List<String> contradictions = normalizeSignals(claimCheck.contradictions());
-        boolean trustModelDisqualifiers = !matchedDisqualifiersModel.isEmpty()
-                && (
-                !unrelatedEvidence.isEmpty()
-                        || !contradictions.isEmpty()
-                        || tokenLikeLowRelevance(signalBlob, matchedRequired)
-                        || matchedRequired.isEmpty()
-        );
-        List<String> matchedDisqualifiers = trustModelDisqualifiers
-                ? dedupeConcat(matchedDisqualifiersObserved, matchedDisqualifiersModel)
-                : matchedDisqualifiersObserved;
-
-        List<String> uncertainty = observation.uncertaintyFlags().stream()
-                .filter(value -> value != null && !value.isBlank())
-                .map(String::trim)
-                .toList();
+        List<String> matchedDisqualifiers = dedupeConcat(matchedDisqualifiersObserved, matchedDisqualifiersModelCorroborated);
 
         double requiredRatio = policy.requiredEvidence().isEmpty()
                 ? 0.0
@@ -591,31 +587,55 @@ public class AiReviewService {
         double optionalRatio = policy.optionalEvidence().isEmpty()
                 ? 0.0
                 : ((double) matchedOptional.size() / (double) policy.optionalEvidence().size());
-        double disqualifierPenalty = matchedDisqualifiers.isEmpty() ? 0.0 : Math.min(1.0, matchedDisqualifiers.size() * 0.35);
-        double contradictionPenalty = contradictions.isEmpty() ? 0.0 : Math.min(0.8, contradictions.size() * 0.22);
-        double unrelatedPenalty = unrelatedEvidence.isEmpty() ? 0.0 : Math.min(0.7, unrelatedEvidence.size() * 0.22);
-        double uncertaintyPenalty = uncertainty.isEmpty() ? 0.0 : Math.min(0.35, uncertainty.size() * 0.1);
+
+        List<String> modelMissingEvidence = normalizeSignals(claimCheck.missingEvidence());
+        List<String> missingEvidence = requiredRatio < 0.65
+                ? dedupeConcat(missingRequired, modelMissingEvidence)
+                : missingRequired;
+        List<String> unrelatedEvidence = corroboratedModelSignals(
+                normalizeSignals(claimCheck.unrelatedEvidence()),
+                signalBlob,
+                signalTokens
+        );
+        List<String> contradictions = corroboratedModelSignals(
+                normalizeSignals(claimCheck.contradictions()),
+                signalBlob,
+                signalTokens
+        );
+
+        List<String> uncertainty = observation.uncertaintyFlags().stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(String::trim)
+                .toList();
+
+        double disqualifierPenalty = matchedDisqualifiers.isEmpty() ? 0.0 : Math.min(1.0, matchedDisqualifiers.size() * 0.30);
+        double contradictionPenalty = contradictions.isEmpty() ? 0.0 : Math.min(0.6, contradictions.size() * 0.18);
+        double unrelatedPenalty = unrelatedEvidence.isEmpty() ? 0.0 : Math.min(0.65, unrelatedEvidence.size() * 0.20);
+        double uncertaintyPenalty = uncertainty.isEmpty() ? 0.0 : Math.min(0.30, uncertainty.size() * 0.08);
         double strengthBonus = switch (claimCheck.evidenceStrength()) {
             case "HIGH" -> 0.08;
             case "MEDIUM" -> 0.03;
             default -> 0.0;
         };
+        double claimMatchBonus = claimCheck.matchedClaims().isEmpty() ? 0.0 : 0.06;
         double tokenQuestRelevance = overlapRatio(questTokens, relevanceSignalTokens);
         double questRelevance = claimCheck.relevanceScore() >= 0.0
-                ? clamp01((claimCheck.relevanceScore() * 0.82) + (tokenQuestRelevance * 0.18))
+                ? clamp01((claimCheck.relevanceScore() * 0.78) + (tokenQuestRelevance * 0.22))
                 : tokenQuestRelevance;
 
-        double fallbackSupport = clamp01((requiredRatio * 0.72) + (optionalRatio * 0.18) + strengthBonus
+        double contextRelevanceScore = clamp01((requiredRatio * 0.58) + (questRelevance * 0.32) + strengthBonus + claimMatchBonus
                 - disqualifierPenalty - contradictionPenalty - uncertaintyPenalty - unrelatedPenalty);
+        double completionCueScore = optionalRatio;
+        double fallbackSupport = clamp01((contextRelevanceScore * 0.88) + (completionCueScore * 0.12));
         double supportScore = claimCheck.supportScore() >= 0.0
-                ? clamp01((claimCheck.supportScore() * 0.60) + (fallbackSupport * 0.25) + (questRelevance * 0.15))
+                ? clamp01((claimCheck.supportScore() * 0.45) + (fallbackSupport * 0.40) + (questRelevance * 0.15))
                 : fallbackSupport;
-        boolean highRelevanceRequiredMatch = requiredRatio >= 0.95 && questRelevance >= 0.60
+        boolean highContextMatch = requiredRatio >= 0.70 && questRelevance >= 0.58
                 && matchedDisqualifiers.isEmpty()
                 && unrelatedEvidence.isEmpty()
                 && contradictions.isEmpty();
-        if (highRelevanceRequiredMatch) {
-            supportScore = Math.max(supportScore, fallbackSupport);
+        if (highContextMatch) {
+            supportScore = Math.max(supportScore, clamp01((contextRelevanceScore * 0.90) + (completionCueScore * 0.10)));
         }
         return new Scorecard(
                 matchedRequired,
@@ -628,6 +648,8 @@ public class AiReviewService {
                 contradictions,
                 questRelevance,
                 requiredRatio,
+                contextRelevanceScore,
+                completionCueScore,
                 supportScore
         );
     }
@@ -646,38 +668,55 @@ public class AiReviewService {
         boolean hasDisqualifier = !scorecard.matchedDisqualifiers().isEmpty();
         boolean hasUnrelatedEvidence = !scorecard.unrelatedEvidence().isEmpty();
         boolean hasRequired = !policy.requiredEvidence().isEmpty();
+        boolean requiredMatchedSome = !scorecard.matchedRequired().isEmpty();
         boolean requiredSatisfied = hasRequired && scorecard.missingRequired().isEmpty();
-        double validSupportThreshold = Math.max(0.55, policy.minSupportScore() - 0.15);
+        double validSupportThreshold = Math.max(0.50, policy.minSupportScore() - 0.20);
         boolean strongSupport = scorecard.supportScore() >= validSupportThreshold;
         boolean uncertaintyHeavy = scorecard.uncertaintyFlags().size() >= 2;
         boolean hasContradiction = !scorecard.contradictions().isEmpty();
+        boolean corroboratedNegative = hasDisqualifier || hasUnrelatedEvidence || hasContradiction;
         boolean contradictionsStrong = scorecard.contradictions().size() >= 2;
         boolean modelScoredRelevance = claimCheck.relevanceScore() >= 0.0;
-        double lowRelevanceThreshold = modelScoredRelevance ? 0.20 : 0.15;
-        double strongRelevanceThreshold = modelScoredRelevance ? 0.55 : 0.22;
+        double lowRelevanceThreshold = modelScoredRelevance ? 0.25 : 0.18;
+        double strongRelevanceThreshold = modelScoredRelevance ? 0.54 : 0.30;
         boolean lowQuestRelevance = scorecard.questRelevance() < lowRelevanceThreshold;
         boolean strongQuestRelevance = scorecard.questRelevance() >= strongRelevanceThreshold;
+        boolean contextStrong = scorecard.contextRelevanceScore() >= 0.62
+                || (strongQuestRelevance && scorecard.requiredCoverage() >= 0.60);
+        boolean contextStrongWithoutKeywordHit = scorecard.contextRelevanceScore() >= 0.70
+                && scorecard.questRelevance() >= 0.62;
         boolean lowSupport = scorecard.supportScore() < 0.35;
         boolean veryLowSupport = scorecard.supportScore() < 0.20;
         boolean hasObservedEvidence = !observation.visibleObjects().isEmpty()
                 || !observation.visibleText().isEmpty()
                 || !observation.activityClues().isEmpty();
 
-        if ((hasUnrelatedEvidence || hasDisqualifier) && lowSupport && scorecard.questRelevance() < 0.45) {
+        if (corroboratedNegative && lowSupport
+                && (lowQuestRelevance || scorecard.contextRelevanceScore() < 0.45)) {
             recommendation = AiReviewRecommendation.LIKELY_INVALID;
-            decisionPath = hasUnrelatedEvidence ? "unrelated_evidence" : "disqualifier_hit";
-        } else if ((hasDisqualifier || contradictionsStrong) && scorecard.supportScore() < 0.65) {
-            recommendation = AiReviewRecommendation.LIKELY_INVALID;
-            decisionPath = hasDisqualifier ? "disqualifier_hit" : "contradiction_hit";
-        } else if (requiredSatisfied && strongSupport && !uncertaintyHeavy && !hasDisqualifier && !contradictionsStrong && strongQuestRelevance) {
-            recommendation = AiReviewRecommendation.LIKELY_VALID;
-            decisionPath = "required_satisfied";
-        } else if (strongSupport && hasObservedEvidence && !uncertaintyHeavy && !hasDisqualifier && !hasContradiction && !hasUnrelatedEvidence && strongQuestRelevance) {
-            recommendation = AiReviewRecommendation.LIKELY_VALID;
-            decisionPath = policy.generated() ? "generated_policy_context_match" : "semantic_support_satisfied";
-        } else if (hasRequired && scorecard.matchedRequired().isEmpty() && lowSupport && lowQuestRelevance) {
+            decisionPath = "corroborated_negative_low_context";
+        } else if (hasRequired && !requiredMatchedSome && lowSupport && lowQuestRelevance) {
             recommendation = AiReviewRecommendation.LIKELY_INVALID;
             decisionPath = "required_missing";
+        } else if (contextStrong && strongQuestRelevance
+                && !corroboratedNegative
+                && hasObservedEvidence
+                && (!hasRequired || requiredMatchedSome || contextStrongWithoutKeywordHit)
+                && !uncertaintyHeavy) {
+            recommendation = AiReviewRecommendation.LIKELY_VALID;
+            decisionPath = "context_match";
+        } else if (strongSupport && strongQuestRelevance
+                && !corroboratedNegative
+                && hasObservedEvidence
+                && !uncertaintyHeavy) {
+            recommendation = AiReviewRecommendation.LIKELY_VALID;
+            decisionPath = "semantic_support_satisfied";
+        } else if (requiredSatisfied && strongSupport && !uncertaintyHeavy && !corroboratedNegative && !contradictionsStrong && strongQuestRelevance) {
+            recommendation = AiReviewRecommendation.LIKELY_VALID;
+            decisionPath = "required_satisfied";
+        } else if (corroboratedNegative && scorecard.supportScore() < 0.55) {
+            recommendation = AiReviewRecommendation.LIKELY_INVALID;
+            decisionPath = hasDisqualifier ? "disqualifier_hit" : (hasContradiction ? "contradiction_hit" : "unrelated_evidence");
         } else if (hasObservedEvidence && veryLowSupport && lowQuestRelevance) {
             recommendation = AiReviewRecommendation.LIKELY_INVALID;
             decisionPath = "low_relevance";
@@ -690,6 +729,7 @@ public class AiReviewService {
         List<String> reasons = new ArrayList<>();
         reasons.add("Evidence support: %.2f".formatted(scorecard.supportScore()));
         reasons.add("Quest relevance: %.2f".formatted(scorecard.questRelevance()));
+        reasons.add("Context relevance: %.2f".formatted(scorecard.contextRelevanceScore()));
         if (!scorecard.matchedRequired().isEmpty()) reasons.add("Matched required: " + String.join(", ", scorecard.matchedRequired()));
         if (!scorecard.missingEvidence().isEmpty()) reasons.add("Missing evidence: " + String.join(", ", scorecard.missingEvidence()));
         if (!scorecard.matchedOptional().isEmpty()) reasons.add("Matched optional: " + String.join(", ", scorecard.matchedOptional()));
@@ -713,9 +753,9 @@ public class AiReviewService {
                 reasons,
                 decisionNote,
                 true,
-                obsRaw.modelUsed(),
-                ocrRaw.fallbackUsed() || obsRaw.fallbackUsed(),
-                firstNonBlank(obsRaw.fallbackReason(), ocrRaw.fallbackReason()),
+                firstNonBlank(claimRaw.modelUsed(), obsRaw.modelUsed()),
+                ocrRaw.fallbackUsed() || obsRaw.fallbackUsed() || claimRaw.fallbackUsed(),
+                firstNonBlank(claimRaw.fallbackReason(), firstNonBlank(obsRaw.fallbackReason(), ocrRaw.fallbackReason())),
                 policy.generated(),
                 dedupeConcat(scorecard.matchedRequired(), normalizeSignals(claimCheck.matchedClaims())),
                 scorecard.missingEvidence(),
@@ -775,10 +815,22 @@ public class AiReviewService {
         return Math.max(2, (int) Math.ceil(tokenCount * 0.6));
     }
 
-    private static boolean tokenLikeLowRelevance(String signalBlob, List<String> matchedRequired) {
-        if (matchedRequired == null || matchedRequired.isEmpty()) return true;
-        Set<String> tokens = extractTokens(signalBlob);
-        return tokens.size() <= 2;
+    private static List<String> corroboratedModelSignals(List<String> modelSignals,
+                                                         String signalBlob,
+                                                         Set<String> signalTokens) {
+        if (modelSignals == null || modelSignals.isEmpty()) return List.of();
+        return modelSignals.stream()
+                .filter(value -> {
+                    if (value == null || value.isBlank()) return false;
+                    if (matchesSignal(signalBlob, signalTokens, value)) return true;
+                    Set<String> narrativeTokens = extractAllTokens(value, 20);
+                    if (narrativeTokens.isEmpty()) return false;
+                    long hits = narrativeTokens.stream().filter(signalTokens::contains).count();
+                    int minHits = Math.min(2, narrativeTokens.size());
+                    return hits >= minHits;
+                })
+                .distinct()
+                .toList();
     }
 
     private static double overlapRatio(Set<String> questTokens, Set<String> signalTokens) {
@@ -966,6 +1018,8 @@ public class AiReviewService {
             List<String> contradictions,
             double questRelevance,
             double requiredCoverage,
+            double contextRelevanceScore,
+            double completionCueScore,
             double supportScore
     ) {}
 

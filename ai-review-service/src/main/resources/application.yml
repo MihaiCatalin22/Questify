@@ -57,6 +57,7 @@ server:
 
 ai-review:
   model-primary: ${AI_REVIEW_MODEL_PRIMARY:${AI_REVIEW_MODEL:qwen2.5vl:3b}}
+  model-claim-check: ${AI_REVIEW_MODEL_CLAIM_CHECK:}
   model-fallback: ${AI_REVIEW_MODEL_FALLBACK:}
   runtime-base-url: ${AI_REVIEW_RUNTIME_BASE_URL:http://ollama:11434}
   timeout-ms: ${AI_REVIEW_TIMEOUT_MS:120000}

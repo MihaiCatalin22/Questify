@@ -36,25 +36,32 @@ const STOPWORDS = new Set([
   "practice", "build", "make", "create", "simple", "basic", "quick", "quickly", "daily", "weekly"
 ]);
 
+const GENERIC_POLICY_TOKENS = new Set([
+  "work", "proof", "upload", "image", "photo", "picture", "screenshot", "result", "results",
+  "written", "write", "notes", "steps", "step", "show", "showing", "task", "done", "submission", "submit"
+]);
+
 function extractKeywords(text: string): string[] {
   const matches = (text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])
-    .filter((token) => !STOPWORDS.has(token));
+    .filter((token) => !STOPWORDS.has(token) && !GENERIC_POLICY_TOKENS.has(token));
   return Array.from(new Set(matches)).slice(0, 4);
 }
 
 function defaultPolicyFromSuggestion(title: string, description: string): VerificationPolicyDTO {
-  const keywords = extractKeywords(`${title} ${description}`);
-  const primary = keywords[0] ?? "task";
-  const secondary = keywords[1] ?? keywords[0] ?? "evidence";
+  const titleKeywords = extractKeywords(title);
+  const descriptionKeywords = extractKeywords(description);
+  const keywords = Array.from(new Set([...titleKeywords, ...descriptionKeywords]));
+  const primary = keywords[0] ?? "topic";
+  const secondary = keywords[1] ?? "context";
   return {
     requiredEvidence: [
       primary,
       secondary,
     ],
     optionalEvidence: [
-      "worked steps",
-      "written notes",
-      "result screenshot",
+      "clear topic text",
+      "task-related output",
+      "supporting context clues",
     ],
     disqualifiers: [
       "video game interface",

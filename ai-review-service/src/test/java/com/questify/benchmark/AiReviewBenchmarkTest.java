@@ -38,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AiReviewBenchmarkTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Pattern TOKEN_PATTERN = Pattern.compile("[a-z0-9]{4,}");
+    private static final int MIN_REAL_IMAGE_BYTES = 4096;
     private static final Set<String> STOPWORDS = Set.of(
             "this", "that", "with", "from", "into", "your", "have", "been", "were", "will",
             "then", "than", "there", "their", "about", "quest", "proof", "image", "student",
@@ -48,8 +49,14 @@ class AiReviewBenchmarkTest {
 
     @Test
     void runBenchmarkAndProduceReport() throws Exception {
-        BenchmarkCorpus corpus = loadCorpus();
-        validateCorpusComposition(corpus.cases());
+        BenchmarkCorpusLoad corpus = loadCorpus();
+        boolean requireRealCorpus = boolEnv("AI_REVIEW_BENCHMARK_REQUIRE_REAL_CORPUS", true);
+        if (requireRealCorpus && !corpus.external()) {
+            throw new IllegalStateException(
+                    "Real corpus is required. Set AI_REVIEW_BENCHMARK_CORPUS_PATH to a labeled corpus with real images.");
+        }
+        validateCorpusComposition(corpus);
+        validateRealImageCorpus(corpus.cases(), requireRealCorpus || corpus.external());
 
         String runtimeBase = env("AI_REVIEW_RUNTIME_BASE_URL", "http://localhost:11434");
         List<String> models = parseModels(env("AI_REVIEW_BENCHMARK_MODELS", DEFAULT_MODELS));
@@ -68,10 +75,10 @@ class AiReviewBenchmarkTest {
             List<MeasuredRun> runs = new ArrayList<>();
             for (BenchmarkCase testCase : corpus.cases()) {
                 for (int i = 0; i < warmupPasses; i++) {
-                    callModel(http, runtimeBase, model, testCase, true);
+                    callModel(http, runtimeBase, model, testCase, true, requireRealCorpus || corpus.external());
                 }
                 for (int pass = 1; pass <= measuredPasses; pass++) {
-                    MeasuredRun run = callModel(http, runtimeBase, model, testCase, false);
+                    MeasuredRun run = callModel(http, runtimeBase, model, testCase, false, requireRealCorpus || corpus.external());
                     runs.add(run);
                     Files.writeString(requestLog, MAPPER.writeValueAsString(run) + System.lineSeparator(),
                             java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
@@ -80,7 +87,7 @@ class AiReviewBenchmarkTest {
             summaries.add(summarize(model, runs));
         }
 
-        writeReports(reportDir, summaries, models, runtimeBase, warmupPasses, measuredPasses);
+        writeReports(reportDir, summaries, models, runtimeBase, warmupPasses, measuredPasses, corpus);
 
         assertFalse(summaries.isEmpty(), "No benchmark summaries were produced.");
         if (enforceGates) {
@@ -89,29 +96,41 @@ class AiReviewBenchmarkTest {
         }
     }
 
-    private static void validateCorpusComposition(List<BenchmarkCase> cases) {
-        assertEquals(80, cases.size(), "Corpus must contain exactly 80 cases by default.");
+    private static void validateCorpusComposition(BenchmarkCorpusLoad corpus) {
+        List<BenchmarkCase> cases = corpus.cases();
+        if (corpus.external()) {
+            assertTrue(cases.size() >= 30, "External corpus must include at least 30 labeled cases.");
+            long invalid = cases.stream().filter(c -> c.label() == CaseLabel.INVALID_MISMATCH).count();
+            long valid = cases.stream().filter(c -> c.label() == CaseLabel.VALID_MATCH).count();
+            long ambiguous = cases.stream().filter(c -> c.label() == CaseLabel.AMBIGUOUS).count();
+            assertTrue(invalid > 0, "External corpus must include INVALID_MISMATCH cases.");
+            assertTrue(valid > 0, "External corpus must include VALID_MATCH cases.");
+            assertTrue(ambiguous > 0, "External corpus must include AMBIGUOUS cases.");
+            return;
+        }
+
+        assertEquals(80, cases.size(), "Bundled smoke corpus must contain exactly 80 cases.");
         long invalid = cases.stream().filter(c -> c.label() == CaseLabel.INVALID_MISMATCH).count();
         long valid = cases.stream().filter(c -> c.label() == CaseLabel.VALID_MATCH).count();
         long ambiguous = cases.stream().filter(c -> c.label() == CaseLabel.AMBIGUOUS).count();
-        assertEquals(40L, invalid, "Corpus must include 40 INVALID_MISMATCH cases.");
-        assertEquals(20L, valid, "Corpus must include 20 VALID_MATCH cases.");
-        assertEquals(20L, ambiguous, "Corpus must include 20 AMBIGUOUS cases.");
+        assertEquals(40L, invalid, "Bundled smoke corpus must include 40 INVALID_MISMATCH cases.");
+        assertEquals(20L, valid, "Bundled smoke corpus must include 20 VALID_MATCH cases.");
+        assertEquals(20L, ambiguous, "Bundled smoke corpus must include 20 AMBIGUOUS cases.");
     }
 
-    private static BenchmarkCorpus loadCorpus() throws IOException {
+    private static BenchmarkCorpusLoad loadCorpus() throws IOException {
         String externalCorpusPath = System.getenv("AI_REVIEW_BENCHMARK_CORPUS_PATH");
         if (externalCorpusPath != null && !externalCorpusPath.isBlank()) {
             JsonNode root = MAPPER.readTree(Path.of(externalCorpusPath.trim()).toFile());
             List<BenchmarkCase> cases = MAPPER.convertValue(root.path("cases"), new TypeReference<>() {});
-            return new BenchmarkCorpus(cases);
+            return new BenchmarkCorpusLoad(cases, true, externalCorpusPath.trim());
         }
 
         try (var in = AiReviewBenchmarkTest.class.getResourceAsStream("/benchmark/ai-review-corpus.json")) {
             if (in == null) throw new IllegalStateException("Missing benchmark corpus resource: /benchmark/ai-review-corpus.json");
             JsonNode root = MAPPER.readTree(in);
             List<BenchmarkCase> cases = MAPPER.convertValue(root.path("cases"), new TypeReference<>() {});
-            return new BenchmarkCorpus(cases);
+            return new BenchmarkCorpusLoad(cases, false, "classpath:/benchmark/ai-review-corpus.json");
         }
     }
 
@@ -119,7 +138,8 @@ class AiReviewBenchmarkTest {
                                          String baseUrl,
                                          String model,
                                          BenchmarkCase testCase,
-                                         boolean warmup) {
+                                         boolean warmup,
+                                         boolean strictImages) {
         long started = System.nanoTime();
         String raw = "";
         AiReviewRecommendation recommendation;
@@ -154,7 +174,7 @@ class AiReviewBenchmarkTest {
                     Map.of(
                             "role", "user",
                             "content", prompt,
-                            "images", resolveImages(testCase)
+                            "images", resolveImages(testCase, strictImages)
                     )
             ));
             request.put("options", Map.of("temperature", 0.1));
@@ -382,7 +402,8 @@ class AiReviewBenchmarkTest {
                                      List<String> models,
                                      String runtimeBase,
                                      int warmupPasses,
-                                     int measuredPasses) throws IOException {
+                                     int measuredPasses,
+                                     BenchmarkCorpusLoad corpus) throws IOException {
         Files.createDirectories(reportDir);
         Files.writeString(reportDir.resolve("summary.json"), MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(summaries));
 
@@ -391,6 +412,8 @@ class AiReviewBenchmarkTest {
         md.append("- Generated at: ").append(Instant.now()).append("\n");
         md.append("- Runtime base URL: ").append(runtimeBase).append("\n");
         md.append("- Models: ").append(String.join(", ", models)).append("\n");
+        md.append("- Corpus source: ").append(corpus.source()).append("\n");
+        md.append("- External corpus: ").append(corpus.external()).append("\n");
         md.append("- Passes: warmup=").append(warmupPasses).append(", measured=").append(measuredPasses).append("\n\n");
         md.append("## Gates\n");
         md.append("- False-approve rate on INVALID_MISMATCH <= 5%\n");
@@ -483,28 +506,53 @@ class AiReviewBenchmarkTest {
         return value.substring(0, max);
     }
 
-    private static List<String> resolveImages(BenchmarkCase testCase) {
-        if (testCase.imagesBase64() != null && !testCase.imagesBase64().isEmpty()) {
-            return testCase.imagesBase64();
+    private static void validateRealImageCorpus(List<BenchmarkCase> cases, boolean strict) {
+        if (!strict) return;
+        for (BenchmarkCase testCase : cases) {
+            List<byte[]> images = resolveImageBytes(testCase, true);
+            assertFalse(images.isEmpty(), "Case " + testCase.id() + " has no usable image bytes.");
+            boolean hasLargeEnough = images.stream().anyMatch(bytes -> bytes != null && bytes.length >= MIN_REAL_IMAGE_BYTES);
+            assertTrue(hasLargeEnough, "Case " + testCase.id() + " appears to use tiny/synthetic image bytes.");
         }
-        if (testCase.imagePaths() == null || testCase.imagePaths().isEmpty()) {
-            return List.of();
-        }
-
-        List<String> encoded = new ArrayList<>();
-        for (String imagePath : testCase.imagePaths()) {
-            if (imagePath == null || imagePath.isBlank()) continue;
-            try {
-                byte[] bytes = Files.readAllBytes(Path.of(imagePath));
-                encoded.add(Base64.getEncoder().encodeToString(bytes));
-            } catch (Exception ignored) {
-                // Missing images in corpus are treated as no-image for this case.
-            }
-        }
-        return encoded;
     }
 
-    private record BenchmarkCorpus(List<BenchmarkCase> cases) {}
+    private static List<String> resolveImages(BenchmarkCase testCase, boolean strict) {
+        List<byte[]> images = resolveImageBytes(testCase, strict);
+        return images.stream()
+                .map(bytes -> Base64.getEncoder().encodeToString(bytes))
+                .toList();
+    }
+
+    private static List<byte[]> resolveImageBytes(BenchmarkCase testCase, boolean strict) {
+        List<byte[]> bytes = new ArrayList<>();
+        if (testCase.imagesBase64() != null && !testCase.imagesBase64().isEmpty()) {
+            for (String encoded : testCase.imagesBase64()) {
+                if (encoded == null || encoded.isBlank()) continue;
+                try {
+                    bytes.add(Base64.getDecoder().decode(encoded.trim()));
+                } catch (IllegalArgumentException ex) {
+                    if (strict) {
+                        throw new IllegalStateException("Invalid base64 image for case " + testCase.id(), ex);
+                    }
+                }
+            }
+        }
+        if (testCase.imagePaths() != null && !testCase.imagePaths().isEmpty()) {
+            for (String imagePath : testCase.imagePaths()) {
+                if (imagePath == null || imagePath.isBlank()) continue;
+                try {
+                    bytes.add(Files.readAllBytes(Path.of(imagePath)));
+                } catch (Exception ex) {
+                    if (strict) {
+                        throw new IllegalStateException("Missing/unreadable image path for case " + testCase.id() + ": " + imagePath, ex);
+                    }
+                }
+            }
+        }
+        return bytes;
+    }
+
+    private record BenchmarkCorpusLoad(List<BenchmarkCase> cases, boolean external, String source) {}
 
     private record BenchmarkCase(
             String id,

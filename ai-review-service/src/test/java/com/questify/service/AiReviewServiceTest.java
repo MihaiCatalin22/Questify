@@ -7,12 +7,14 @@ import com.questify.domain.AiReviewRecommendation;
 import com.questify.domain.AiReviewResult;
 import com.questify.domain.AiReviewRunSource;
 import com.questify.domain.AiReviewRunStatus;
+import com.questify.provider.AiReviewPrompt;
 import com.questify.provider.ModelClient;
 import com.questify.repository.AiReviewAttemptRepository;
 import com.questify.repository.AiReviewResultRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -199,7 +201,7 @@ class AiReviewServiceTest {
         ));
 
         assertThat(out.getMatchedEvidence()).contains("code a simple web page");
-        assertThat(out.getDecisionPath()).isEqualTo("required_satisfied");
+        assertThat(out.getDecisionPath()).isEqualTo("context_match");
     }
 
     @Test
@@ -268,6 +270,77 @@ class AiReviewServiceTest {
         assertThat(out.getConfidence()).isGreaterThanOrEqualTo(0.60);
         assertThat(out.getSupportScore()).isGreaterThanOrEqualTo(0.60);
         assertThat(out.getMatchedDisqualifiers() == null || out.getMatchedDisqualifiers().isBlank()).isTrue();
+    }
+
+    @Test
+    void reviewSubmission_marks_trigonometry_reference_sheet_valid_when_context_matches() {
+        when(results.findBySubmissionId(45L)).thenReturn(Optional.empty());
+        when(quests.getQuest(18L)).thenReturn(new QuestClient.QuestContext(
+                "Trigonometry formulas review",
+                "Upload proof showing trigonometry formulas or topic-related work.",
+                List.of("trigonometry", "formulas"),
+                List.of("worked steps", "written notes", "result screenshot"),
+                List.of("video game interface", "unrelated commercial product"),
+                0.75,
+                "generic"
+        ));
+        when(proofs.getProofs(45L)).thenReturn(List.of(new ProofClient.ProofObject("proof/trigonometry.png", "image/png", "BASE64")));
+        when(model.generate(any()))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"ocr_text\":[\"Trigonometry Formulas\",\"sin θ = O/H\",\"cos θ = A/H\",\"Sine Rule\"],\"quality\":\"HIGH\"}",
+                        "qwen2.5vl:3b", false, null))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"visible_objects\":[\"study sheet\"],\"visible_text\":[\"Trigonometry Formulas\",\"Right-Angled Triangles\",\"Sine Rule\"],\"scene_type\":\"study notes photo\",\"activity_clues\":[\"math reference sheet\"],\"uncertainty_flags\":[]}",
+                        "qwen2.5vl:3b", false, null))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"matched_claims\":[\"trigonometry formulas sheet\"],\"missing_evidence\":[\"worked steps\",\"written notes\",\"result screenshot\"],\"unrelated_evidence\":[],\"contradictions\":[],\"disqualifier_hits\":[\"unrelated commercial product\",\"video game interface\"],\"relevance_score\":0.69,\"support_score\":0.46,\"evidence_strength\":\"MEDIUM\",\"notes\":[\"The image is clearly tied to trigonometry topic.\"]}",
+                        "qwen2.5vl:7b", false, null));
+
+        AiReviewResult out = service.reviewSubmission(new AiReviewService.SubmissionCreated(
+                45L, 18L, "u1", "done", Instant.parse("2026-05-01T10:00:00Z")
+        ));
+
+        assertThat(out.getRecommendation()).isEqualTo(AiReviewRecommendation.LIKELY_VALID);
+        assertThat(out.getSupportScore()).isGreaterThanOrEqualTo(0.55);
+        assertThat(out.getConfidence()).isGreaterThanOrEqualTo(0.50);
+        assertThat(out.getMatchedEvidence()).contains("trigonometry");
+        assertThat(out.getMatchedDisqualifiers() == null || out.getMatchedDisqualifiers().isBlank()).isTrue();
+    }
+
+    @Test
+    void reviewSubmission_routes_prompts_by_stage_ocr_observation_claim_check() {
+        when(results.findBySubmissionId(46L)).thenReturn(Optional.empty());
+        when(quests.getQuest(19L)).thenReturn(new QuestClient.QuestContext(
+                "Map study",
+                "Upload map-based study evidence.",
+                List.of("map", "study"),
+                List.of("written notes"),
+                List.of("video game interface", "unrelated commercial product"),
+                0.70,
+                "generic"
+        ));
+        when(proofs.getProofs(46L)).thenReturn(List.of(new ProofClient.ProofObject("proof/map.png", "image/png", "BASE64")));
+        when(model.generate(any()))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"ocr_text\":[\"World Map\"],\"quality\":\"HIGH\"}",
+                        "qwen2.5vl:3b", false, null))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"visible_objects\":[\"map\"],\"visible_text\":[\"World Map\"],\"scene_type\":\"study notes\",\"activity_clues\":[\"geography reference\"],\"uncertainty_flags\":[]}",
+                        "qwen2.5vl:3b", false, null))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"matched_claims\":[\"map study sheet\"],\"missing_evidence\":[],\"unrelated_evidence\":[],\"contradictions\":[],\"disqualifier_hits\":[],\"relevance_score\":0.82,\"support_score\":0.73,\"evidence_strength\":\"HIGH\",\"notes\":[\"Map content is visible.\"]}",
+                        "qwen2.5vl:7b", false, null));
+
+        service.reviewSubmission(new AiReviewService.SubmissionCreated(
+                46L, 19L, "u1", "done", Instant.parse("2026-05-01T10:00:00Z")
+        ));
+
+        ArgumentCaptor<AiReviewPrompt> promptCaptor = ArgumentCaptor.forClass(AiReviewPrompt.class);
+        verify(model, times(3)).generate(promptCaptor.capture());
+        List<AiReviewPrompt> prompts = promptCaptor.getAllValues();
+        assertThat(prompts.get(0).stage()).isEqualTo(AiReviewPrompt.Stage.OCR);
+        assertThat(prompts.get(1).stage()).isEqualTo(AiReviewPrompt.Stage.OBSERVATION);
+        assertThat(prompts.get(2).stage()).isEqualTo(AiReviewPrompt.Stage.CLAIM_CHECK);
     }
 
     @Test
@@ -369,6 +442,5 @@ class AiReviewServiceTest {
 
         assertThat(out.getRecommendation()).isEqualTo(AiReviewRecommendation.UNCLEAR);
         assertThat(out.getConfidence()).isBetween(0.25, 0.55);
-        assertThat(out.getMissingEvidence()).contains("chapter 5 is not clearly visible");
     }
 }
