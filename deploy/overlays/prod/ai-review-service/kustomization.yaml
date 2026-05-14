@@ -7,4 +7,4 @@ resources:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-ai-review-service
-    newTag: main-5aa8b14
+    newTag: main-e05e248
