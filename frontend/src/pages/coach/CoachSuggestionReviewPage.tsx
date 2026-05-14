@@ -36,14 +36,6 @@ const STOPWORDS = new Set([
   "practice", "build", "make", "create", "simple", "basic", "quick", "quickly", "daily", "weekly"
 ]);
 
-function parseSignalLines(value: string): string[] {
-  return value
-    .split(/\r?\n|,/)
-    .map((line) => line.trim())
-    .filter((line) => line.length >= 2)
-    .slice(0, 20);
-}
-
 function extractKeywords(text: string): string[] {
   const matches = (text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])
     .filter((token) => !STOPWORDS.has(token));
@@ -53,19 +45,20 @@ function extractKeywords(text: string): string[] {
 function defaultPolicyFromSuggestion(title: string, description: string): VerificationPolicyDTO {
   const keywords = extractKeywords(`${title} ${description}`);
   const primary = keywords[0] ?? "task";
-  const secondary = keywords[1] ?? "progress";
+  const secondary = keywords[1] ?? keywords[0] ?? "evidence";
   return {
     requiredEvidence: [
-      `${primary} related content`,
-      `${secondary} related content`,
+      primary,
+      secondary,
     ],
     optionalEvidence: [
-      "visible notes or steps",
-      "study/work context",
+      "worked steps",
+      "written notes",
+      "result screenshot",
     ],
     disqualifiers: [
-      "game hud or menu",
-      "unrelated object only",
+      "video game interface",
+      "unrelated commercial product",
     ],
     minSupportScore: 0.75,
     taskType: "generic",
@@ -98,11 +91,6 @@ export default function CoachSuggestionReviewPage() {
   const [description, setDescription] = useState(suggestion?.description ?? "");
   const [category, setCategory] = useState<QuestCategory>(suggestion?.category ?? "OTHER");
   const initialPolicy = useMemo(() => defaultPolicyFromSuggestion(suggestion?.title ?? "", suggestion?.description ?? ""), [suggestion?.title, suggestion?.description]);
-  const [requiredEvidence, setRequiredEvidence] = useState(initialPolicy.requiredEvidence.join("\n"));
-  const [optionalEvidence, setOptionalEvidence] = useState(initialPolicy.optionalEvidence.join("\n"));
-  const [disqualifiers, setDisqualifiers] = useState(initialPolicy.disqualifiers.join("\n"));
-  const [taskType, setTaskType] = useState(initialPolicy.taskType ?? "generic");
-  const [minSupportScore, setMinSupportScore] = useState(String(initialPolicy.minSupportScore ?? 0.75));
 
   if (!suggestion) {
     return (
@@ -140,23 +128,6 @@ export default function CoachSuggestionReviewPage() {
       toast.error("Quest description must be at least 10 characters.");
       return;
     }
-    const parsedRequired = parseSignalLines(requiredEvidence);
-    const parsedDisqualifiers = parseSignalLines(disqualifiers);
-    const parsedOptional = parseSignalLines(optionalEvidence);
-    const minSupport = Number(minSupportScore);
-    if (parsedRequired.length < 2) {
-      toast.error("Add at least two required evidence signals before creating this quest.");
-      return;
-    }
-    if (parsedDisqualifiers.length < 2) {
-      toast.error("Add at least two disqualifier signals before creating this quest.");
-      return;
-    }
-    if (!Number.isFinite(minSupport) || minSupport < 0 || minSupport > 1) {
-      toast.error("Min support score must be between 0 and 1.");
-      return;
-    }
-
     const startDate = new Date().toISOString();
     const endDate = plusSevenDaysIso(startDate);
 
@@ -169,13 +140,7 @@ export default function CoachSuggestionReviewPage() {
         endDate,
         createdByUserId: String(user.id),
         visibility: "PRIVATE",
-        verificationPolicy: {
-          requiredEvidence: parsedRequired,
-          optionalEvidence: parsedOptional,
-          disqualifiers: parsedDisqualifiers,
-          minSupportScore: minSupport,
-          taskType: taskType.trim() || "generic",
-        },
+        verificationPolicy: initialPolicy,
       });
 
       rememberAcceptedQuest(draft.suggestionKey, {
@@ -241,39 +206,6 @@ export default function CoachSuggestionReviewPage() {
                   </option>
                 ))}
               </SelectInput>
-            </div>
-
-            <div className="space-y-3 rounded-md border border-[rgb(var(--border-soft))] p-4">
-              <div className="text-sm font-medium">Verification checklist</div>
-              <p className="text-xs text-[rgb(var(--faint))]">
-                Confirm this checklist before creating the quest. AI review uses these signals to evaluate proofs.
-              </p>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <FieldLabel>Task type</FieldLabel>
-                  <TextInput value={taskType} onChange={(event) => setTaskType(event.target.value)} maxLength={80} />
-                </div>
-                <div>
-                  <FieldLabel>Min support score (0-1)</FieldLabel>
-                  <TextInput value={minSupportScore} onChange={(event) => setMinSupportScore(event.target.value)} />
-                </div>
-              </div>
-
-              <div>
-                <FieldLabel>Required evidence (min 2)</FieldLabel>
-                <TextArea rows={3} value={requiredEvidence} onChange={(event) => setRequiredEvidence(event.target.value)} />
-              </div>
-
-              <div>
-                <FieldLabel>Optional evidence</FieldLabel>
-                <TextArea rows={3} value={optionalEvidence} onChange={(event) => setOptionalEvidence(event.target.value)} />
-              </div>
-
-              <div>
-                <FieldLabel>Disqualifiers (min 2)</FieldLabel>
-                <TextArea rows={3} value={disqualifiers} onChange={(event) => setDisqualifiers(event.target.value)} />
-              </div>
             </div>
           </div>
 
