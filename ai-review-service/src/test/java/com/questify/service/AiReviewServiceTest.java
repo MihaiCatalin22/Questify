@@ -231,9 +231,43 @@ class AiReviewServiceTest {
         ));
 
         assertThat(out.getRecommendation()).isEqualTo(AiReviewRecommendation.LIKELY_VALID);
-        assertThat(out.getConfidence()).isGreaterThanOrEqualTo(0.75);
-        assertThat(out.getSupportScore()).isGreaterThanOrEqualTo(0.75);
+        assertThat(out.getConfidence()).isGreaterThanOrEqualTo(0.60);
+        assertThat(out.getSupportScore()).isGreaterThanOrEqualTo(0.60);
         assertThat(out.getObservedSignals()).contains("visible handwritten equations with answers");
+    }
+
+    @Test
+    void reviewSubmission_ignores_uncorroborated_disqualifier_hallucinations_for_relevant_algebra_proof() {
+        when(results.findBySubmissionId(44L)).thenReturn(Optional.empty());
+        when(quests.getQuest(17L)).thenReturn(new QuestClient.QuestContext(
+                "Learn algebraic identities",
+                "Upload clear proof showing algebraic identities.",
+                List.of("algebraic", "identities"),
+                List.of("worked steps", "written notes", "result screenshot"),
+                List.of("video game interface", "unrelated commercial product"),
+                0.75,
+                "generic"
+        ));
+        when(proofs.getProofs(44L)).thenReturn(List.of(new ProofClient.ProofObject("proof/identities.png", "image/png", "BASE64")));
+        when(model.generate(any()))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"ocr_text\":[\"Algebraic Identities\",\"(a + b)^2 = a^2 + 2ab + b^2\",\"(a - b)^2 = a^2 - 2ab + b^2\"],\"quality\":\"HIGH\"}",
+                        "qwen2.5vl:3b", false, null))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"visible_objects\":[\"math worksheet\"],\"visible_text\":[\"Algebraic Identities\",\"(a + b)^2 = a^2 + 2ab + b^2\"],\"scene_type\":\"study notes\",\"activity_clues\":[\"formula list\"],\"uncertainty_flags\":[]}",
+                        "qwen2.5vl:3b", false, null))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"matched_claims\":[\"algebraic identities list\"],\"missing_evidence\":[\"worked steps\",\"result screenshot\",\"written notes\"],\"unrelated_evidence\":[],\"contradictions\":[],\"disqualifier_hits\":[\"unrelated commercial product\",\"video game interface\"],\"relevance_score\":0.74,\"support_score\":0.0,\"evidence_strength\":\"LOW\",\"notes\":[\"The image includes algebra identities.\"]}",
+                        "qwen2.5vl:3b", false, null));
+
+        AiReviewResult out = service.reviewSubmission(new AiReviewService.SubmissionCreated(
+                44L, 17L, "u1", "done", Instant.parse("2026-05-01T10:00:00Z")
+        ));
+
+        assertThat(out.getRecommendation()).isEqualTo(AiReviewRecommendation.LIKELY_VALID);
+        assertThat(out.getConfidence()).isGreaterThanOrEqualTo(0.60);
+        assertThat(out.getSupportScore()).isGreaterThanOrEqualTo(0.60);
+        assertThat(out.getMatchedDisqualifiers() == null || out.getMatchedDisqualifiers().isBlank()).isTrue();
     }
 
     @Test

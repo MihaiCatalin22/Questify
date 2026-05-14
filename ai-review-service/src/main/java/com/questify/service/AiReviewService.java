@@ -554,9 +554,13 @@ public class AiReviewService {
                 .filter(required -> !matchesSignal(signalBlob, signalTokens, required))
                 .toList();
         List<String> matchedOptional = matchSignals(policy.optionalEvidence(), signalBlob, signalTokens);
-        List<String> matchedDisqualifiers = matchSignals(policy.disqualifiers(), signalBlob, signalTokens);
+        List<String> matchedDisqualifiersObserved = matchSignals(policy.disqualifiers(), signalBlob, signalTokens);
         matchedRequired = dedupeConcat(matchedRequired, matchSignals(policy.requiredEvidence(), String.join(" ", claimCheck.matchedClaims()), extractTokens(String.join(" ", claimCheck.matchedClaims()))));
-        matchedDisqualifiers = dedupeConcat(matchedDisqualifiers, matchSignals(policy.disqualifiers(), String.join(" ", claimCheck.disqualifierHits()), extractTokens(String.join(" ", claimCheck.disqualifierHits()))));
+        List<String> matchedDisqualifiersModel = matchSignals(
+                policy.disqualifiers(),
+                String.join(" ", claimCheck.disqualifierHits()),
+                extractTokens(String.join(" ", claimCheck.disqualifierHits()))
+        );
         Set<String> matchedRequiredSet = new LinkedHashSet<>(matchedRequired);
         missingRequired = policy.requiredEvidence().stream()
                 .filter(required -> !matchedRequiredSet.contains(required))
@@ -565,6 +569,16 @@ public class AiReviewService {
         List<String> missingEvidence = dedupeConcat(missingRequired, modelMissingEvidence);
         List<String> unrelatedEvidence = normalizeSignals(claimCheck.unrelatedEvidence());
         List<String> contradictions = normalizeSignals(claimCheck.contradictions());
+        boolean trustModelDisqualifiers = !matchedDisqualifiersModel.isEmpty()
+                && (
+                !unrelatedEvidence.isEmpty()
+                        || !contradictions.isEmpty()
+                        || tokenLikeLowRelevance(signalBlob, matchedRequired)
+                        || matchedRequired.isEmpty()
+        );
+        List<String> matchedDisqualifiers = trustModelDisqualifiers
+                ? dedupeConcat(matchedDisqualifiersObserved, matchedDisqualifiersModel)
+                : matchedDisqualifiersObserved;
 
         List<String> uncertainty = observation.uncertaintyFlags().stream()
                 .filter(value -> value != null && !value.isBlank())
@@ -594,16 +608,15 @@ public class AiReviewService {
         double fallbackSupport = clamp01((requiredRatio * 0.72) + (optionalRatio * 0.18) + strengthBonus
                 - disqualifierPenalty - contradictionPenalty - uncertaintyPenalty - unrelatedPenalty);
         double supportScore = claimCheck.supportScore() >= 0.0
-                ? clamp01((claimCheck.supportScore() * 0.68)
-                + (questRelevance * 0.18)
-                + (requiredRatio * 0.08)
-                + (optionalRatio * 0.03)
-                + strengthBonus
-                - disqualifierPenalty
-                - contradictionPenalty
-                - uncertaintyPenalty
-                - unrelatedPenalty)
+                ? clamp01((claimCheck.supportScore() * 0.60) + (fallbackSupport * 0.25) + (questRelevance * 0.15))
                 : fallbackSupport;
+        boolean highRelevanceRequiredMatch = requiredRatio >= 0.95 && questRelevance >= 0.60
+                && matchedDisqualifiers.isEmpty()
+                && unrelatedEvidence.isEmpty()
+                && contradictions.isEmpty();
+        if (highRelevanceRequiredMatch) {
+            supportScore = Math.max(supportScore, fallbackSupport);
+        }
         return new Scorecard(
                 matchedRequired,
                 missingRequired,
@@ -634,7 +647,8 @@ public class AiReviewService {
         boolean hasUnrelatedEvidence = !scorecard.unrelatedEvidence().isEmpty();
         boolean hasRequired = !policy.requiredEvidence().isEmpty();
         boolean requiredSatisfied = hasRequired && scorecard.missingRequired().isEmpty();
-        boolean strongSupport = scorecard.supportScore() >= policy.minSupportScore();
+        double validSupportThreshold = Math.max(0.55, policy.minSupportScore() - 0.15);
+        boolean strongSupport = scorecard.supportScore() >= validSupportThreshold;
         boolean uncertaintyHeavy = scorecard.uncertaintyFlags().size() >= 2;
         boolean hasContradiction = !scorecard.contradictions().isEmpty();
         boolean contradictionsStrong = scorecard.contradictions().size() >= 2;
@@ -759,6 +773,12 @@ public class AiReviewService {
         if (tokenCount <= 1) return 1;
         if (tokenCount <= 3) return tokenCount - 1;
         return Math.max(2, (int) Math.ceil(tokenCount * 0.6));
+    }
+
+    private static boolean tokenLikeLowRelevance(String signalBlob, List<String> matchedRequired) {
+        if (matchedRequired == null || matchedRequired.isEmpty()) return true;
+        Set<String> tokens = extractTokens(signalBlob);
+        return tokens.size() <= 2;
     }
 
     private static double overlapRatio(Set<String> questTokens, Set<String> signalTokens) {
