@@ -45,7 +45,7 @@ export interface CreateQuestInput {
   endDate: string;               // ISO instant
   createdByUserId: string;
   visibility: QuestVisibility;
-  verificationPolicy?: VerificationPolicyDTO | null;
+  verificationPolicy: VerificationPolicyDTO;
 }
 
 
@@ -56,5 +56,5 @@ export interface UpdateQuestInput {
   startDate?: string;            // ISO instant
   endDate?: string;              // ISO instant
   visibility: QuestVisibility;
-  verificationPolicy?: VerificationPolicyDTO | null;
+  verificationPolicy: VerificationPolicyDTO;
 }

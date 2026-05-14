@@ -9,6 +9,7 @@ import com.questify.domain.AiReviewAttempt;
 import com.questify.domain.AiReviewRecommendation;
 import com.questify.domain.AiReviewResult;
 import com.questify.domain.AiReviewRunSource;
+import com.questify.domain.AiReviewRunStatus;
 import com.questify.provider.AiReviewPrompt;
 import com.questify.provider.ModelClient;
 import com.questify.repository.AiReviewAttemptRepository;
@@ -16,6 +17,7 @@ import com.questify.repository.AiReviewResultRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -31,6 +33,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Service
@@ -53,21 +56,25 @@ public class AiReviewService {
     private final SubmissionClient submissions;
     private final ProofClient proofs;
     private final ModelClient model;
+    private final TaskExecutor taskExecutor;
     private final ObjectMapper mapper = new ObjectMapper();
     private final ConcurrentHashMap<Long, ReentrantLock> submissionLocks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, AtomicBoolean> inFlight = new ConcurrentHashMap<>();
 
     public AiReviewService(AiReviewResultRepository results,
                            AiReviewAttemptRepository attempts,
                            QuestClient quests,
                            SubmissionClient submissions,
                            ProofClient proofs,
-                           ModelClient model) {
+                           ModelClient model,
+                           TaskExecutor taskExecutor) {
         this.results = results;
         this.attempts = attempts;
         this.quests = quests;
         this.submissions = submissions;
         this.proofs = proofs;
         this.model = model;
+        this.taskExecutor = taskExecutor;
     }
 
     @Transactional
@@ -76,19 +83,12 @@ public class AiReviewService {
     }
 
     @Transactional
-    public AiReviewResult rerunForSubmission(Long submissionId, AiReviewRunSource source, String triggeredBy) {
-        AiReviewResult existing = results.findBySubmissionId(submissionId).orElse(null);
+    public AiReviewResult queueRerunForSubmission(Long submissionId, AiReviewRunSource source, String triggeredBy) {
         var context = submissions.getSubmissionContext(submissionId);
         if (context == null || context.submissionId() == null || context.questId() == null || context.userId() == null) {
-            if (existing != null) {
-                log.warn("AI review rerun context unavailable, returning existing result submissionId={} source={}",
-                        submissionId, source);
-                recordAttempt(submissionId, source, triggeredBy, "SKIPPED_CONTEXT_UNAVAILABLE",
-                        existing.getRecommendation(), existing.getConfidence(), "Context unavailable, returned existing result");
-                return existing;
-            }
             throw new IllegalArgumentException("Submission context missing required fields for id=" + submissionId);
         }
+
         SubmissionCreated event = new SubmissionCreated(
                 context.submissionId(),
                 context.questId(),
@@ -97,11 +97,72 @@ public class AiReviewService {
                 context.submittedAt(),
                 context.proofKeys()
         );
-        return runReview(event, source, triggeredBy == null ? source.name().toLowerCase(Locale.ROOT) : triggeredBy, true);
+
+        AiReviewResult queued = markQueued(event, source, triggeredBy == null ? source.name().toLowerCase(Locale.ROOT) : triggeredBy);
+        startBackgroundRun(event, source, triggeredBy == null ? source.name().toLowerCase(Locale.ROOT) : triggeredBy);
+        return queued;
+    }
+
+    @Transactional
+    public AiReviewResult rerunForSubmission(Long submissionId, AiReviewRunSource source, String triggeredBy) {
+        AiReviewResult queued = queueRerunForSubmission(submissionId, source, triggeredBy);
+        return queued;
     }
 
     private AiReviewResult runReview(SubmissionCreated event, AiReviewRunSource source, String triggeredBy, boolean force) {
         return withSubmissionLock(event.submissionId(), () -> runReviewLocked(event, source, triggeredBy, force));
+    }
+
+    private void startBackgroundRun(SubmissionCreated event, AiReviewRunSource source, String triggeredBy) {
+        AtomicBoolean marker = inFlight.computeIfAbsent(event.submissionId(), ignored -> new AtomicBoolean(false));
+        if (!marker.compareAndSet(false, true)) {
+            log.info("AI review rerun already in-flight submissionId={} source={}", event.submissionId(), source);
+            return;
+        }
+
+        taskExecutor.execute(() -> {
+            try {
+                runReview(event, source, triggeredBy, true);
+            } catch (Exception e) {
+                log.error("AI review background execution crashed submissionId={} source={} err={}",
+                        event.submissionId(), source, e.toString(), e);
+            } finally {
+                marker.set(false);
+                inFlight.remove(event.submissionId(), marker);
+            }
+        });
+    }
+
+    private AiReviewResult markQueued(SubmissionCreated event, AiReviewRunSource source, String triggeredBy) {
+        AiReviewResult existing = results.findBySubmissionId(event.submissionId()).orElse(null);
+        AiReviewResult queued = existing == null ? new AiReviewResult() : existing;
+        queued.setSubmissionId(event.submissionId());
+        queued.setQuestId(event.questId());
+        queued.setUserId(event.userId());
+        queued.setStatus(AiReviewRunStatus.PENDING);
+        queued.setRecommendation(existing == null ? AiReviewRecommendation.UNCLEAR : existing.getRecommendation());
+        queued.setConfidence(existing == null ? 0.0 : clamp01(existing.getConfidence()));
+        queued.setSupportScore(existing == null ? 0.0 : clamp01(existing.getSupportScore()));
+        queued.setModel(existing == null ? "n/a" : firstNonBlank(existing.getModel(), "n/a"));
+        queued.setModelUsed(existing == null ? null : existing.getModelUsed());
+        queued.setFallbackUsed(existing != null && existing.isFallbackUsed());
+        queued.setFallbackReason(existing == null ? null : truncate(existing.getFallbackReason(), 500));
+        queued.setReasons(existing == null ? "AI review queued." : firstNonBlank(existing.getReasons(), "AI review queued."));
+        queued.setDecisionNote("AI review queued and running in background.");
+        queued.setGeneratedPolicy(existing != null && existing.isGeneratedPolicy());
+        queued.setMatchedEvidence(existing == null ? null : existing.getMatchedEvidence());
+        queued.setMissingEvidence(existing == null ? null : existing.getMissingEvidence());
+        queued.setMatchedDisqualifiers(existing == null ? null : existing.getMatchedDisqualifiers());
+        queued.setOcrSnippets(existing == null ? null : existing.getOcrSnippets());
+        queued.setObservedSignals(existing == null ? null : existing.getObservedSignals());
+        queued.setDecisionPath("queued");
+        queued.setRawOutput(existing == null ? null : existing.getRawOutput());
+        queued.setMediaSupported(existing == null || existing.isMediaSupported());
+        queued.setReviewedAt(Instant.now());
+
+        AiReviewResult saved = results.saveAndFlush(queued);
+        recordAttempt(saved.getSubmissionId(), source, triggeredBy, "QUEUED", saved.getRecommendation(), saved.getConfidence(), "Queued for async rerun");
+        return saved;
     }
 
     private AiReviewResult runReviewLocked(SubmissionCreated event, AiReviewRunSource source, String triggeredBy, boolean force) {
@@ -117,6 +178,9 @@ public class AiReviewService {
                     existing.getRecommendation(), existing.getConfidence(), "Result already present");
             return existing;
         }
+
+        markRunning(existing, event);
+        existing = results.findBySubmissionId(event.submissionId()).orElse(existing);
 
         try {
             QuestClient.QuestContext quest = quests.getQuest(event.questId());
@@ -138,9 +202,14 @@ public class AiReviewService {
                     images
             ));
             Observation observation = parseObservation(observationRaw.content(), ocrExtraction);
+            ModelClient.ModelResponse claimRaw = model.generate(new AiReviewPrompt(
+                    buildClaimCheckPrompt(quest, event, policy, observation),
+                    List.of()
+            ));
+            ClaimCheck claimCheck = parseClaimCheck(claimRaw.content());
 
-            Scorecard scorecard = evaluate(policy, observation);
-            BuildResult review = finalizeDecision(policy, scorecard, observation, ocrRaw, observationRaw);
+            Scorecard scorecard = evaluate(policy, observation, claimCheck);
+            BuildResult review = finalizeDecision(policy, scorecard, observation, claimCheck, ocrRaw, observationRaw, claimRaw);
             return saveAndRecord(existing, event, review, source, triggeredBy, "SUCCESS");
         } catch (Exception e) {
             log.error("AI review failed submissionId={} source={} triggeredBy={} error={}",
@@ -168,6 +237,23 @@ public class AiReviewService {
         return results.findBySubmissionId(submissionId).orElse(null);
     }
 
+    private void markRunning(AiReviewResult existing, SubmissionCreated event) {
+        AiReviewResult target = existing == null ? new AiReviewResult() : existing;
+        target.setSubmissionId(event.submissionId());
+        target.setQuestId(event.questId());
+        target.setUserId(event.userId());
+        target.setStatus(AiReviewRunStatus.RUNNING);
+        if (target.getRecommendation() == null) target.setRecommendation(AiReviewRecommendation.UNCLEAR);
+        target.setConfidence(clamp01(target.getConfidence()));
+        target.setSupportScore(clamp01(target.getSupportScore()));
+        if (target.getModel() == null || target.getModel().isBlank()) target.setModel("n/a");
+        if (target.getReasons() == null || target.getReasons().isBlank()) target.setReasons("AI review running.");
+        target.setDecisionNote("AI review running in background.");
+        target.setDecisionPath("running");
+        target.setReviewedAt(Instant.now());
+        results.saveAndFlush(target);
+    }
+
     private AiReviewResult saveAndRecord(AiReviewResult existing,
                                          SubmissionCreated event,
                                          BuildResult build,
@@ -178,8 +264,10 @@ public class AiReviewService {
         target.setSubmissionId(event.submissionId());
         target.setQuestId(event.questId());
         target.setUserId(event.userId());
+        target.setStatus(build.recommendation() == AiReviewRecommendation.AI_FAILED ? AiReviewRunStatus.FAILED : AiReviewRunStatus.COMPLETED);
         target.setRecommendation(build.recommendation());
         target.setConfidence(clamp01(build.confidence()));
+        target.setSupportScore(clamp01(build.supportScore()));
         target.setModel(build.modelUsed() == null ? "n/a" : build.modelUsed());
         target.setModelUsed(build.modelUsed());
         target.setFallbackUsed(build.fallbackUsed());
@@ -205,8 +293,10 @@ public class AiReviewService {
             AiReviewResult current = results.findBySubmissionId(event.submissionId()).orElseThrow(() -> race);
             current.setQuestId(target.getQuestId());
             current.setUserId(target.getUserId());
+            current.setStatus(target.getStatus());
             current.setRecommendation(target.getRecommendation());
             current.setConfidence(target.getConfidence());
+            current.setSupportScore(target.getSupportScore());
             current.setModel(target.getModel());
             current.setModelUsed(target.getModelUsed());
             current.setFallbackUsed(target.isFallbackUsed());
@@ -295,6 +385,48 @@ public class AiReviewService {
         );
     }
 
+    private String buildClaimCheckPrompt(QuestClient.QuestContext quest,
+                                         SubmissionCreated event,
+                                         Policy policy,
+                                         Observation observation) {
+        return """
+                You are a contradiction and claim checker for proof review.
+                Quest title: %s
+                Quest description: %s
+                Student comment: %s
+                Required evidence: %s
+                Optional evidence: %s
+                Disqualifiers: %s
+
+                Observed objects: %s
+                Observed text: %s
+                Scene type: %s
+                Activity clues: %s
+                Uncertainty flags: %s
+
+                Return only JSON:
+                {
+                  "matched_claims":["..."],
+                  "contradictions":["..."],
+                  "disqualifier_hits":["..."],
+                  "evidence_strength":"LOW|MEDIUM|HIGH",
+                  "notes":["..."]
+                }
+                """.formatted(
+                quest.title(),
+                quest.description(),
+                event.note() == null ? "" : event.note(),
+                policy.requiredEvidence(),
+                policy.optionalEvidence(),
+                policy.disqualifiers(),
+                observation.visibleObjects(),
+                observation.visibleText(),
+                observation.sceneType() == null ? "" : observation.sceneType(),
+                observation.activityClues(),
+                observation.uncertaintyFlags()
+        );
+    }
+
     private Policy toPolicy(QuestClient.QuestContext quest) {
         List<String> required = normalizeSignals(quest.requiredEvidence());
         List<String> optional = normalizeSignals(quest.optionalEvidence());
@@ -307,15 +439,14 @@ public class AiReviewService {
             return new Policy(required, optional, disqualifiers, minSupport, taskType, false);
         }
 
-        Set<String> baseTokens = extractTokens(quest.title() + " " + quest.description());
-        List<String> autoRequired = List.of();
-        List<String> autoOptional = baseTokens.stream().limit(8).toList();
+        List<String> autoRequired = List.of("task-relevant evidence", "clear completion artifact");
+        List<String> autoOptional = List.of("study/work context", "handwritten or typed notes");
         List<String> autoDisqualifiers = new ArrayList<>(DEFAULT_DISQUALIFIERS);
         return new Policy(
                 autoRequired,
                 autoOptional,
                 autoDisqualifiers,
-                0.45,
+                0.7,
                 taskType == null || taskType.isBlank() ? "generic" : taskType,
                 true
         );
@@ -351,7 +482,20 @@ public class AiReviewService {
         return new Observation(visibleObjects, visibleText, sceneType, activityClues, uncertaintyFlags);
     }
 
-    private Scorecard evaluate(Policy policy, Observation observation) {
+    private ClaimCheck parseClaimCheck(String raw) {
+        JsonNode node = parseJsonNode(raw);
+        List<String> matchedClaims = readStringList(node.path("matched_claims"));
+        List<String> contradictions = readStringList(node.path("contradictions"));
+        List<String> disqualifierHits = readStringList(node.path("disqualifier_hits"));
+        List<String> notes = readStringList(node.path("notes"));
+        String evidenceStrength = node.path("evidence_strength").asText("LOW");
+        if (evidenceStrength == null || evidenceStrength.isBlank()) {
+            evidenceStrength = "LOW";
+        }
+        return new ClaimCheck(matchedClaims, contradictions, disqualifierHits, notes, evidenceStrength.trim().toUpperCase(Locale.ROOT));
+    }
+
+    private Scorecard evaluate(Policy policy, Observation observation, ClaimCheck claimCheck) {
         List<String> signalParts = new ArrayList<>();
         signalParts.addAll(observation.visibleObjects());
         signalParts.addAll(observation.visibleText());
@@ -368,6 +512,12 @@ public class AiReviewService {
                 .toList();
         List<String> matchedOptional = matchSignals(policy.optionalEvidence(), signalBlob, signalTokens);
         List<String> matchedDisqualifiers = matchSignals(policy.disqualifiers(), signalBlob, signalTokens);
+        matchedRequired = dedupeConcat(matchedRequired, matchSignals(policy.requiredEvidence(), String.join(" ", claimCheck.matchedClaims()), extractTokens(String.join(" ", claimCheck.matchedClaims()))));
+        matchedDisqualifiers = dedupeConcat(matchedDisqualifiers, matchSignals(policy.disqualifiers(), String.join(" ", claimCheck.disqualifierHits()), extractTokens(String.join(" ", claimCheck.disqualifierHits()))));
+        Set<String> matchedRequiredSet = new LinkedHashSet<>(matchedRequired);
+        missingRequired = policy.requiredEvidence().stream()
+                .filter(required -> !matchedRequiredSet.contains(required))
+                .toList();
 
         List<String> uncertainty = observation.uncertaintyFlags().stream()
                 .filter(value -> value != null && !value.isBlank())
@@ -381,15 +531,22 @@ public class AiReviewService {
                 ? 0.0
                 : ((double) matchedOptional.size() / (double) policy.optionalEvidence().size());
         double disqualifierPenalty = matchedDisqualifiers.isEmpty() ? 0.0 : Math.min(1.0, matchedDisqualifiers.size() * 0.35);
+        double contradictionPenalty = claimCheck.contradictions().isEmpty() ? 0.0 : Math.min(0.8, claimCheck.contradictions().size() * 0.25);
         double uncertaintyPenalty = uncertainty.isEmpty() ? 0.0 : Math.min(0.35, uncertainty.size() * 0.1);
+        double strengthBonus = switch (claimCheck.evidenceStrength()) {
+            case "HIGH" -> 0.08;
+            case "MEDIUM" -> 0.03;
+            default -> 0.0;
+        };
 
-        double supportScore = clamp01((requiredRatio * 0.75) + (optionalRatio * 0.25) - disqualifierPenalty - uncertaintyPenalty);
+        double supportScore = clamp01((requiredRatio * 0.72) + (optionalRatio * 0.18) + strengthBonus - disqualifierPenalty - contradictionPenalty - uncertaintyPenalty);
         return new Scorecard(
                 matchedRequired,
                 missingRequired,
                 matchedOptional,
                 matchedDisqualifiers,
                 uncertainty,
+                claimCheck.contradictions(),
                 supportScore
         );
     }
@@ -397,39 +554,39 @@ public class AiReviewService {
     private BuildResult finalizeDecision(Policy policy,
                                          Scorecard scorecard,
                                          Observation observation,
+                                         ClaimCheck claimCheck,
                                          ModelClient.ModelResponse ocrRaw,
-                                         ModelClient.ModelResponse obsRaw) {
+                                         ModelClient.ModelResponse obsRaw,
+                                         ModelClient.ModelResponse claimRaw) {
         AiReviewRecommendation recommendation;
         String decisionPath;
-        double confidence = scorecard.supportScore();
+        double confidence;
 
         boolean hasDisqualifier = !scorecard.matchedDisqualifiers().isEmpty();
         boolean hasRequired = !policy.requiredEvidence().isEmpty();
         boolean requiredSatisfied = hasRequired && scorecard.missingRequired().isEmpty();
         boolean strongSupport = scorecard.supportScore() >= policy.minSupportScore();
         boolean uncertaintyHeavy = scorecard.uncertaintyFlags().size() >= 2;
+        boolean contradictionsStrong = scorecard.contradictions().size() >= 2;
         boolean hasObservedEvidence = !observation.visibleObjects().isEmpty()
                 || !observation.visibleText().isEmpty()
                 || !observation.activityClues().isEmpty();
 
         if (policy.generated()) {
-            if (hasDisqualifier && scorecard.supportScore() < 0.8) {
+            if ((hasDisqualifier || contradictionsStrong) && scorecard.supportScore() < 0.8) {
                 recommendation = AiReviewRecommendation.LIKELY_INVALID;
                 decisionPath = "generated_policy_disqualifier";
-                confidence = Math.max(scorecard.supportScore(), 0.6);
-            } else if (!scorecard.matchedOptional().isEmpty() && hasObservedEvidence && !uncertaintyHeavy) {
+            } else if (!scorecard.matchedOptional().isEmpty() && hasObservedEvidence && !uncertaintyHeavy && !contradictionsStrong) {
                 recommendation = AiReviewRecommendation.LIKELY_VALID;
                 decisionPath = "generated_policy_context_match";
-                confidence = Math.max(scorecard.supportScore(), 0.65);
             } else {
                 recommendation = AiReviewRecommendation.UNCLEAR;
                 decisionPath = "generated_policy_insufficient_evidence";
-                confidence = Math.max(scorecard.supportScore(), 0.35);
             }
-        } else if (hasDisqualifier && scorecard.supportScore() < 0.8) {
+        } else if ((hasDisqualifier || contradictionsStrong) && scorecard.supportScore() < 0.8) {
             recommendation = AiReviewRecommendation.LIKELY_INVALID;
             decisionPath = "disqualifier_hit";
-        } else if (requiredSatisfied && strongSupport && !uncertaintyHeavy) {
+        } else if (requiredSatisfied && strongSupport && !uncertaintyHeavy && !contradictionsStrong) {
             recommendation = AiReviewRecommendation.LIKELY_VALID;
             decisionPath = "required_satisfied";
         } else if (hasRequired && scorecard.matchedRequired().isEmpty() && scorecard.supportScore() < 0.35) {
@@ -439,6 +596,7 @@ public class AiReviewService {
             recommendation = AiReviewRecommendation.UNCLEAR;
             decisionPath = "insufficient_evidence";
         }
+        confidence = calibratedConfidence(recommendation, scorecard.supportScore());
 
         List<String> reasons = new ArrayList<>();
         reasons.add("Support score: %.2f".formatted(scorecard.supportScore()));
@@ -446,6 +604,7 @@ public class AiReviewService {
         if (!scorecard.missingRequired().isEmpty()) reasons.add("Missing required: " + String.join(", ", scorecard.missingRequired()));
         if (!scorecard.matchedOptional().isEmpty()) reasons.add("Matched optional: " + String.join(", ", scorecard.matchedOptional()));
         if (!scorecard.matchedDisqualifiers().isEmpty()) reasons.add("Disqualifiers: " + String.join(", ", scorecard.matchedDisqualifiers()));
+        if (!scorecard.contradictions().isEmpty()) reasons.add("Contradictions: " + String.join(", ", scorecard.contradictions()));
         if (reasons.size() > 4) reasons = reasons.subList(0, 4);
 
         String decisionNote = policy.generated()
@@ -453,11 +612,13 @@ public class AiReviewService {
                 : null;
 
         String rawCombined = "OCR_MODEL=" + ocrRaw.modelUsed() + "\nOCR_RAW=" + truncate(ocrRaw.content(), 4000) +
-                "\nOBS_MODEL=" + obsRaw.modelUsed() + "\nOBS_RAW=" + truncate(obsRaw.content(), 6000);
+                "\nOBS_MODEL=" + obsRaw.modelUsed() + "\nOBS_RAW=" + truncate(obsRaw.content(), 6000) +
+                "\nCLAIM_MODEL=" + claimRaw.modelUsed() + "\nCLAIM_RAW=" + truncate(claimRaw.content(), 4000);
 
         return new BuildResult(
                 recommendation,
                 confidence,
+                scorecard.supportScore(),
                 reasons,
                 decisionNote,
                 true,
@@ -469,21 +630,46 @@ public class AiReviewService {
                 scorecard.missingRequired(),
                 scorecard.matchedDisqualifiers(),
                 observation.visibleText().stream().limit(8).toList(),
-                buildObservedSignals(observation),
+                buildObservedSignals(observation, claimCheck),
                 decisionPath,
                 rawCombined
         );
     }
 
-    private List<String> buildObservedSignals(Observation observation) {
+    private List<String> buildObservedSignals(Observation observation, ClaimCheck claimCheck) {
         LinkedHashSet<String> signals = new LinkedHashSet<>();
         signals.addAll(normalizeSignals(observation.visibleObjects()));
         signals.addAll(normalizeSignals(observation.activityClues()));
         signals.addAll(normalizeSignals(observation.visibleText()));
+        signals.addAll(normalizeSignals(claimCheck.matchedClaims()));
+        signals.addAll(normalizeSignals(claimCheck.notes()));
         if (observation.sceneType() != null && !observation.sceneType().isBlank()) {
             signals.add(observation.sceneType().trim());
         }
         return signals.stream().limit(20).toList();
+    }
+
+    private static double calibratedConfidence(AiReviewRecommendation recommendation, double supportScore) {
+        double score = clamp01(supportScore);
+        return switch (recommendation) {
+            case LIKELY_VALID -> {
+                if (score >= 0.85) yield 0.92;
+                if (score >= 0.70) yield 0.88;
+                if (score >= 0.55) yield 0.80;
+                yield 0.72;
+            }
+            case LIKELY_INVALID -> {
+                if (score <= 0.15) yield 0.90;
+                if (score <= 0.30) yield 0.84;
+                yield 0.76;
+            }
+            case UNCLEAR -> {
+                if (score < 0.25) yield 0.42;
+                if (score > 0.75) yield 0.55;
+                yield 0.48;
+            }
+            case UNSUPPORTED_MEDIA, AI_FAILED -> 0.0;
+        };
     }
 
     private static List<String> matchSignals(List<String> candidates, String signalBlob, Set<String> signalTokens) {
@@ -657,12 +843,22 @@ public class AiReviewService {
             List<String> matchedOptional,
             List<String> matchedDisqualifiers,
             List<String> uncertaintyFlags,
+            List<String> contradictions,
             double supportScore
+    ) {}
+
+    private record ClaimCheck(
+            List<String> matchedClaims,
+            List<String> contradictions,
+            List<String> disqualifierHits,
+            List<String> notes,
+            String evidenceStrength
     ) {}
 
     private record BuildResult(
             AiReviewRecommendation recommendation,
             double confidence,
+            double supportScore,
             List<String> reasons,
             String decisionNote,
             boolean mediaSupported,
@@ -681,6 +877,7 @@ public class AiReviewService {
         static BuildResult unsupportedMedia() {
             return new BuildResult(
                     AiReviewRecommendation.UNSUPPORTED_MEDIA,
+                    0.0,
                     0.0,
                     List.of("No supported image proof was available for AI review."),
                     null,
@@ -702,6 +899,7 @@ public class AiReviewService {
         static BuildResult failed(String reason) {
             return new BuildResult(
                     AiReviewRecommendation.AI_FAILED,
+                    0.0,
                     0.0,
                     List.of(reason == null ? "AI review failed; manual review is required." : reason),
                     "Model/runtime failure; manual review required.",

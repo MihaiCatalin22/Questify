@@ -3,6 +3,7 @@ package com.questify.controller;
 import com.questify.domain.AiReviewResult;
 import com.questify.domain.AiReviewRunSource;
 import com.questify.service.AiReviewService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -33,23 +34,41 @@ public class AiReviewController {
         return AiReviewRes.from(result);
     }
 
+    @GetMapping("/submissions/{submissionId}/status")
+    @PreAuthorize("hasAnyRole('REVIEWER','ADMIN')")
+    public RunStatusRes statusBySubmission(@PathVariable Long submissionId) {
+        AiReviewResult result = reviews.getForSubmission(submissionId);
+        if (result == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "AI review is not ready yet");
+        }
+        return new RunStatusRes(
+                result.getSubmissionId(),
+                result.getStatus() == null ? "COMPLETED" : result.getStatus().name(),
+                result.getReviewedAt()
+        );
+    }
+
     @PostMapping("/submissions/{submissionId}/run")
     @PreAuthorize("hasAnyRole('REVIEWER','ADMIN')")
-    public AiReviewRes runForSubmission(@PathVariable Long submissionId, Authentication auth) {
+    public ResponseEntity<RunAcceptedRes> runForSubmission(@PathVariable Long submissionId, Authentication auth) {
         try {
-            AiReviewResult result = reviews.rerunForSubmission(
+            AiReviewResult result = reviews.queueRerunForSubmission(
                     submissionId,
                     AiReviewRunSource.MANUAL,
                     authUserId(auth)
             );
-            return AiReviewRes.from(result);
+            return ResponseEntity.accepted().body(new RunAcceptedRes(
+                    result.getSubmissionId(),
+                    result.getStatus().name(),
+                    "/ai-reviews/submissions/%d".formatted(result.getSubmissionId())
+            ));
         } catch (IllegalArgumentException notFound) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, notFound.getMessage(), notFound);
-        } catch (Exception runError) {
+        } catch (Exception queueError) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
                     "AI review rerun failed. Please retry shortly; manual review remains available.",
-                    runError
+                    queueError
             );
         }
     }
@@ -70,7 +89,9 @@ public class AiReviewController {
             Long questId,
             String userId,
             String recommendation,
+            String status,
             double confidence,
+            double supportScore,
             List<String> reasons,
             String decisionNote,
             List<String> matchedEvidence,
@@ -93,7 +114,9 @@ public class AiReviewController {
                     result.getQuestId(),
                     result.getUserId(),
                     result.getRecommendation().name(),
+                    result.getStatus() == null ? "COMPLETED" : result.getStatus().name(),
                     result.getConfidence(),
+                    result.getSupportScore(),
                     splitReasons(result.getReasons()),
                     result.getDecisionNote(),
                     splitReasons(result.getMatchedEvidence()),
@@ -122,4 +145,16 @@ public class AiReviewController {
                     .toList();
         }
     }
+
+    public record RunAcceptedRes(
+            Long submissionId,
+            String status,
+            String resultEndpoint
+    ) {}
+
+    public record RunStatusRes(
+            Long submissionId,
+            String status,
+            Instant reviewedAt
+    ) {}
 }

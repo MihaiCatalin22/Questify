@@ -69,6 +69,11 @@ function parseSupportScore(reasons?: string[]): number | null {
   return Math.max(0, Math.min(1, value));
 }
 
+function isRunInFlight(status?: string | null): boolean {
+  if (!status) return false;
+  return status === 'PENDING' || status === 'RUNNING';
+}
+
 async function looksLikeImage(blob: Blob): Promise<boolean> {
   try {
     const head = await blob.slice(0, 16).arrayBuffer();
@@ -251,25 +256,30 @@ export default function SubmissionDetail() {
     return () => { alive = false; };
   }, [token]);
   const canReview = (mayReview ?? hasReviewerRole(user));
-  const aiReview = useQuery({
-    queryKey: ['ai-review', id],
-    queryFn: () => AiReviewsApi.getForSubmission(id ?? ''),
-    enabled: Boolean(id && canReview),
-    retry: false,
-    refetchOnWindowFocus: false,
-  });
-
   const runAiReview = useMutation({
     mutationFn: async () => {
       if (!id) throw new Error('Missing submission id');
       return AiReviewsApi.runForSubmission(id);
     },
     onSuccess: async () => {
+      toast.success('AI review queued');
       await qc.invalidateQueries({ queryKey: ['ai-review', id] });
-      toast.success('AI review refreshed');
     },
     onError: (e: unknown) => {
       toast.error(getErrorMessage(e, 'Failed to run AI review'));
+    },
+  });
+
+  const aiReview = useQuery({
+    queryKey: ['ai-review', id],
+    queryFn: () => AiReviewsApi.getForSubmission(id ?? ''),
+    enabled: Boolean(id && canReview),
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      return isRunInFlight(data.status) ? 2500 : false;
     },
   });
 
@@ -428,9 +438,9 @@ export default function SubmissionDetail() {
                 <Button
                   variant="ghost"
                   onClick={() => runAiReview.mutate()}
-                  disabled={runAiReview.isPending || !id}
+                  disabled={runAiReview.isPending || !id || isRunInFlight(aiReview.data?.status)}
                 >
-                  {runAiReview.isPending ? 'Running AI review...' : 'Run AI Review'}
+                  {runAiReview.isPending || isRunInFlight(aiReview.data?.status) ? 'Running AI review...' : 'Run AI Review'}
                 </Button>
               </div>
             </div>
@@ -462,18 +472,25 @@ export default function SubmissionDetail() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  <Badge>{aiReview.data.status}</Badge>
                   <Badge tone={recommendationTone(aiReview.data.recommendation)}>
                     {recommendationLabel(aiReview.data.recommendation)}
                   </Badge>
                   <span className="text-sm text-[rgb(var(--muted))]">
                     Confidence {Math.round((aiReview.data.confidence ?? 0) * 100)}%
                   </span>
-                  {parseSupportScore(aiReview.data.reasons) !== null && (
+                  {(aiReview.data.supportScore !== undefined || parseSupportScore(aiReview.data.reasons) !== null) && (
                     <span className="text-sm text-[rgb(var(--muted))]">
-                      Support {Math.round((parseSupportScore(aiReview.data.reasons) ?? 0) * 100)}%
+                      Support {Math.round(((aiReview.data.supportScore ?? parseSupportScore(aiReview.data.reasons) ?? 0) as number) * 100)}%
                     </span>
                   )}
                 </div>
+
+                {isRunInFlight(aiReview.data.status) && (
+                  <div className="text-sm text-[rgb(var(--muted))]">
+                    AI review is processing in background. This panel updates automatically.
+                  </div>
+                )}
 
                 {aiReview.data.recommendation === 'UNSUPPORTED_MEDIA' && (
                   <div className="text-sm text-[rgb(var(--muted))]">

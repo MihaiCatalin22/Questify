@@ -19,12 +19,12 @@ public class InternalAiReviewController {
     @PostMapping("/submissions/{submissionId}/run")
     public Ack runForSubmission(@PathVariable Long submissionId) {
         try {
-            reviews.rerunForSubmission(submissionId, AiReviewRunSource.FALLBACK_API, "submission-service");
-            return new Ack("accepted");
+            var queued = reviews.queueRerunForSubmission(submissionId, AiReviewRunSource.FALLBACK_API, "submission-service");
+            return new Ack("accepted", queued.getStatus().name(), queued.getSubmissionId());
         } catch (IllegalArgumentException notFound) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, notFound.getMessage(), notFound);
         }
     }
 
-    public record Ack(String status) {}
+    public record Ack(String status, String runStatus, Long submissionId) {}
 }

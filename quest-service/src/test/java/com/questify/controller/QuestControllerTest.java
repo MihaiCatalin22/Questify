@@ -181,7 +181,7 @@ class QuestControllerTest {
                 Instant.parse("2025-01-02T00:00:00Z"),
                 QuestVisibility.PUBLIC,
                 createdBy,
-                null
+                validPolicy()
         );
     }
 
@@ -193,7 +193,17 @@ class QuestControllerTest {
                 Instant.parse("2025-01-01T00:00:00Z"),
                 Instant.parse("2025-01-02T00:00:00Z"),
                 QuestVisibility.PUBLIC,
-                null
+                validPolicy()
+        );
+    }
+
+    private QuestDtos.VerificationPolicyDto validPolicy() {
+        return new QuestDtos.VerificationPolicyDto(
+                List.of("worksheet", "worked solution"),
+                List.of("date visible"),
+                List.of("game hud", "unrelated product"),
+                0.75,
+                "generic"
         );
     }
 

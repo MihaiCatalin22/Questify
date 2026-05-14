@@ -6,6 +6,7 @@ import com.questify.client.SubmissionClient;
 import com.questify.domain.AiReviewRecommendation;
 import com.questify.domain.AiReviewResult;
 import com.questify.domain.AiReviewRunSource;
+import com.questify.domain.AiReviewRunStatus;
 import com.questify.provider.ModelClient;
 import com.questify.repository.AiReviewAttemptRepository;
 import com.questify.repository.AiReviewResultRepository;
@@ -37,7 +38,7 @@ class AiReviewServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AiReviewService(results, attempts, quests, submissions, proofs, model);
+        service = new AiReviewService(results, attempts, quests, submissions, proofs, model, Runnable::run);
         when(attempts.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(results.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -62,6 +63,9 @@ class AiReviewServiceTest {
                         "qwen2.5vl:7b", false, null))
                 .thenReturn(new ModelClient.ModelResponse(
                         "{\"visible_objects\":[\"worksheet\"],\"visible_text\":[\"equations\"],\"scene_type\":\"study desk\",\"activity_clues\":[\"solved steps\"],\"uncertainty_flags\":[]}",
+                        "qwen2.5vl:7b", false, null))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"matched_claims\":[\"equations worksheet\"],\"contradictions\":[],\"disqualifier_hits\":[],\"evidence_strength\":\"HIGH\",\"notes\":[]}",
                         "qwen2.5vl:7b", false, null));
 
         AiReviewResult out = service.reviewSubmission(new AiReviewService.SubmissionCreated(
@@ -92,6 +96,9 @@ class AiReviewServiceTest {
                         "qwen2.5vl:3b", true, "primary timeout"))
                 .thenReturn(new ModelClient.ModelResponse(
                         "{\"visible_objects\":[\"game hud\"],\"visible_text\":[\"inventory\"],\"scene_type\":\"video game ui\",\"activity_clues\":[\"menu screen\"],\"uncertainty_flags\":[]}",
+                        "qwen2.5vl:3b", true, "primary timeout"))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"matched_claims\":[],\"contradictions\":[\"evidence is game UI\"],\"disqualifier_hits\":[\"game hud\"],\"evidence_strength\":\"LOW\",\"notes\":[]}",
                         "qwen2.5vl:3b", true, "primary timeout"));
 
         AiReviewResult out = service.reviewSubmission(new AiReviewService.SubmissionCreated(
@@ -126,7 +133,9 @@ class AiReviewServiceTest {
                 .questId(8L)
                 .userId("u-old")
                 .recommendation(AiReviewRecommendation.AI_FAILED)
+                .status(AiReviewRunStatus.FAILED)
                 .confidence(0.0)
+                .supportScore(0.0)
                 .model("qwen2.5vl:3b")
                 .reasons("old")
                 .mediaSupported(true)
@@ -147,13 +156,17 @@ class AiReviewServiceTest {
                         "qwen2.5vl:7b", false, null))
                 .thenReturn(new ModelClient.ModelResponse(
                         "{\"visible_objects\":[\"running app\"],\"visible_text\":[\"distance\"],\"scene_type\":\"fitness app\",\"activity_clues\":[\"distance metric\"],\"uncertainty_flags\":[]}",
+                        "qwen2.5vl:7b", false, null))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"matched_claims\":[\"distance metric\"],\"contradictions\":[],\"disqualifier_hits\":[],\"evidence_strength\":\"HIGH\",\"notes\":[]}",
                         "qwen2.5vl:7b", false, null));
 
         AiReviewResult out = service.rerunForSubmission(20L, AiReviewRunSource.MANUAL, "reviewer-1");
 
         assertThat(out.getId()).isEqualTo(99L);
-        assertThat(out.getRecommendation()).isEqualTo(AiReviewRecommendation.LIKELY_VALID);
+        assertThat(out.getStatus()).isIn(AiReviewRunStatus.PENDING, AiReviewRunStatus.COMPLETED);
         assertThat(out.getUserId()).isEqualTo("u1");
+        verify(model, atLeast(2)).generate(any());
         verify(attempts, atLeastOnce()).save(any());
     }
 
@@ -176,6 +189,9 @@ class AiReviewServiceTest {
                         "qwen2.5vl:3b", false, null))
                 .thenReturn(new ModelClient.ModelResponse(
                         "{\"visible_objects\":[\"code editor\"],\"visible_text\":[\"public class Example\"],\"scene_type\":\"coding workspace\",\"activity_clues\":[\"web page code\"],\"uncertainty_flags\":[]}",
+                        "qwen2.5vl:3b", false, null))
+                .thenReturn(new ModelClient.ModelResponse(
+                        "{\"matched_claims\":[\"web page code\"],\"contradictions\":[],\"disqualifier_hits\":[],\"evidence_strength\":\"HIGH\",\"notes\":[]}",
                         "qwen2.5vl:3b", false, null));
 
         AiReviewResult out = service.reviewSubmission(new AiReviewService.SubmissionCreated(

@@ -81,11 +81,11 @@ export default function QuestForm() {
     if (!Number.isFinite(minSupport) || minSupport < 0 || minSupport > 1) {
       next.verificationPolicy = 'Min support score must be between 0 and 1.';
     }
-    if (parsedRequired.length === 0) {
-      next.verificationPolicy = 'Add at least one required evidence signal.';
+    if (parsedRequired.length < 2) {
+      next.verificationPolicy = 'Add at least two required evidence signals.';
     }
-    if (parsedDisqualifiers.length === 0) {
-      next.verificationPolicy = 'Add at least one disqualifier signal.';
+    if (parsedDisqualifiers.length < 2) {
+      next.verificationPolicy = 'Add at least two disqualifier signals.';
     }
 
     const today = todayISODate();
@@ -242,7 +242,7 @@ export default function QuestForm() {
           <div className="space-y-3 border border-[rgb(var(--border-soft))] rounded-lg p-4">
             <div className="text-sm font-medium">Verification policy</div>
             <p className="text-xs text-[rgb(var(--faint))]">
-              Signals used by AI review to compare proof evidence against this quest.
+              Signals used by AI review to compare proof evidence against this quest. Required/disqualifiers need at least two items each.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

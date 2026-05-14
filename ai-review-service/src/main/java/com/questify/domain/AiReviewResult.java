@@ -29,8 +29,15 @@ public class AiReviewResult {
     @Column(nullable = false, length = 32)
     private AiReviewRecommendation recommendation;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 24)
+    private AiReviewRunStatus status;
+
     @Column(nullable = false)
     private double confidence;
+
+    @Column
+    private double supportScore;
 
     @Column(nullable = false, length = 128)
     private String model;
@@ -83,6 +90,7 @@ public class AiReviewResult {
 
     @PrePersist
     void prePersist() {
+        if (status == null) status = AiReviewRunStatus.PENDING;
         if (reviewedAt == null) reviewedAt = Instant.now();
     }
 }

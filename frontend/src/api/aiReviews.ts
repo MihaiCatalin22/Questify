@@ -8,12 +8,16 @@ export type AiReviewRecommendation =
   | "UNSUPPORTED_MEDIA"
   | "AI_FAILED";
 
+export type AiReviewRunStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
+
 export type AiReviewDTO = {
   submissionId: number;
   questId: number;
   userId: string;
+  status: AiReviewRunStatus;
   recommendation: AiReviewRecommendation;
   confidence: number;
+  supportScore: number;
   reasons: string[];
   decisionNote?: string | null;
   matchedEvidence?: string[];
@@ -28,6 +32,18 @@ export type AiReviewDTO = {
   fallbackReason?: string | null;
   modelName?: string | null;
   rawStatus?: string | null;
+  reviewedAt?: string | null;
+};
+
+export type AiReviewRunAcceptedDTO = {
+  submissionId: number;
+  status: AiReviewRunStatus;
+  resultEndpoint: string;
+};
+
+export type AiReviewStatusDTO = {
+  submissionId: number;
+  status: AiReviewRunStatus;
   reviewedAt?: string | null;
 };
 
@@ -63,14 +79,26 @@ export const AiReviewsApi = {
     }
   },
 
-  async runForSubmission(submissionId: string | number): Promise<AiReviewDTO> {
+  async runForSubmission(submissionId: string | number): Promise<AiReviewRunAcceptedDTO> {
     console.info("[ai-review] run request", { submissionId, endpoint: `/ai-reviews/submissions/${submissionId}/run` });
     try {
-      const { data } = await http.post<AiReviewDTO>(`/ai-reviews/submissions/${submissionId}/run`);
+      const { data } = await http.post<AiReviewRunAcceptedDTO>(`/ai-reviews/submissions/${submissionId}/run`);
       console.info("[ai-review] run response", { submissionId, data });
       return data;
     } catch (error: unknown) {
       logAiReviewError("run", submissionId, error);
+      throw error;
+    }
+  },
+
+  async getStatus(submissionId: string | number): Promise<AiReviewStatusDTO> {
+    console.info("[ai-review] status request", { submissionId, endpoint: `/ai-reviews/submissions/${submissionId}/status` });
+    try {
+      const { data } = await http.get<AiReviewStatusDTO>(`/ai-reviews/submissions/${submissionId}/status`);
+      console.info("[ai-review] status response", { submissionId, data });
+      return data;
+    } catch (error: unknown) {
+      logAiReviewError("status", submissionId, error);
       throw error;
     }
   },

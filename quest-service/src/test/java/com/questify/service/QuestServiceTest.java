@@ -4,6 +4,7 @@ import com.questify.domain.*;
 import com.questify.dto.QuestDtos.CreateQuestReq;
 import com.questify.dto.QuestDtos.UpdateQuestReq;
 import com.questify.dto.QuestDtos.UpdateQuestStatusReq;
+import com.questify.dto.QuestDtos.VerificationPolicyDto;
 import com.questify.kafka.EventPublisher;
 import com.questify.repository.QuestParticipantRepository;
 import com.questify.repository.QuestRepository;
@@ -73,6 +74,16 @@ class QuestServiceTest {
                 .build();
     }
 
+    private VerificationPolicyDto policy() {
+        return new VerificationPolicyDto(
+                List.of("worksheet", "worked solution"),
+                List.of("date visible"),
+                List.of("game hud", "unrelated product"),
+                0.75,
+                "generic"
+        );
+    }
+
     /* =========================================================================================
      * CREATE
      * ========================================================================================= */
@@ -87,7 +98,7 @@ class QuestServiceTest {
                 Instant.parse("2025-02-10T23:59:59Z"),
                 QuestVisibility.PRIVATE,
                 "u7",
-                null
+                policy()
         );
 
         Quest out = service.create(req, "u7");
@@ -182,7 +193,7 @@ class QuestServiceTest {
                 Instant.parse("2025-01-02T00:00:00Z"),
                 Instant.parse("2025-12-30T23:59:59Z"),
                 QuestVisibility.PUBLIC,
-                null
+                policy()
         );
 
         Quest out = service.update(10L, req, "u3");

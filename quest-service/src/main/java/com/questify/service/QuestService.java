@@ -248,20 +248,30 @@ public class QuestService {
     }
 
     private static void applyVerificationPolicy(Quest quest, com.questify.dto.QuestDtos.VerificationPolicyDto policy) {
-        Set<String> required = normalizeSignals(policy == null ? null : policy.requiredEvidence());
-        Set<String> optional = normalizeSignals(policy == null ? null : policy.optionalEvidence());
-        Set<String> disqualifiers = normalizeSignals(policy == null ? null : policy.disqualifiers());
+        if (policy == null) {
+            throw new IllegalArgumentException("Verification policy is required.");
+        }
+        Set<String> required = normalizeSignals(policy.requiredEvidence());
+        Set<String> optional = normalizeSignals(policy.optionalEvidence());
+        Set<String> disqualifiers = normalizeSignals(policy.disqualifiers());
+
+        if (required.size() < 2) {
+            throw new IllegalArgumentException("Verification policy requires at least 2 required evidence signals.");
+        }
+        if (disqualifiers.size() < 2) {
+            throw new IllegalArgumentException("Verification policy requires at least 2 disqualifier signals.");
+        }
 
         quest.setVerificationRequiredEvidence(required);
         quest.setVerificationOptionalEvidence(optional);
         quest.setVerificationDisqualifiers(disqualifiers);
 
-        double minSupport = policy == null || policy.minSupportScore() == null
+        double minSupport = policy.minSupportScore() == null
                 ? 0.7
                 : clamp(policy.minSupportScore(), 0.0, 1.0);
         quest.setVerificationMinSupportScore(minSupport);
 
-        String taskType = policy == null || policy.taskType() == null ? null : policy.taskType().trim();
+        String taskType = policy.taskType() == null ? null : policy.taskType().trim();
         quest.setVerificationTaskType(taskType == null || taskType.isBlank() ? null : taskType);
     }
 
