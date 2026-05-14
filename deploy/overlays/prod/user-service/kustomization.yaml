@@ -7,7 +7,7 @@ resources:
 
 images:
   - name: ghcr.io/mihaicatalin22/questify-user-service
-    newTag: main-5cdf71d
+    newTag: main-3b0a28d
 
 patchesJson6902:
   - target:
