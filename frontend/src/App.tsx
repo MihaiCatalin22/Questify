@@ -61,6 +61,7 @@ export default function App() {
 
             <Route path="/quests" element={<QuestsList />} />
             <Route path="/quests/new" element={<QuestForm />} />
+            <Route path="/quests/:id/edit" element={<QuestForm />} />
             <Route path="/quests/:id" element={<QuestDetail />} />
             <Route path="/quests/discover" element={<DiscoverQuests />} />
 

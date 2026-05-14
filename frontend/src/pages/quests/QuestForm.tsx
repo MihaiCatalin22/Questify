@@ -1,13 +1,22 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuthContext } from '../../contexts/useAuthContext';
+import { useQuest, useUpdateQuest } from '../../hooks/useQuests';
 import { QuestsApi } from '../../api/quests';
-import type { CreateQuestInput, QuestCategory, QuestVisibility, VerificationPolicyDTO } from '../../types/quest';
+import type {
+  CreateQuestInput,
+  QuestCategory,
+  QuestVisibility,
+  UpdateQuestInput,
+  VerificationPolicyDTO,
+} from '../../types/quest';
 import { getErrorMessage } from '../../utils/errors';
 import {
   Button,
+  ErrorState,
   FieldLabel,
+  LoadingState,
   PageHeader,
   PageShell,
   Panel,
@@ -45,9 +54,31 @@ function parseSignalLines(value: string): string[] {
     .slice(0, 20);
 }
 
+function fieldValueFromSignals(values?: string[] | null): string {
+  if (!Array.isArray(values) || values.length === 0) return '';
+  return values.join('\n');
+}
+
+function isoDateOnly(value?: string | null): string {
+  if (!value) return '';
+  const raw = String(value).trim();
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) return match[1];
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
 export default function QuestForm() {
   const { user } = useAuthContext();
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const editQuestId = id && /^\d+$/.test(id) ? id : '';
+  const isEditing = Boolean(editQuestId);
+
+  const { data: existingQuest, isLoading: isLoadingQuest, isError: isQuestError, error: questError } =
+    useQuest(editQuestId);
+  const updateQuest = useUpdateQuest(editQuestId);
 
   const [title, setTitle] = React.useState('');
   const [description, setDescription] = React.useState('');
@@ -62,6 +93,31 @@ export default function QuestForm() {
   const [endDate, setEndDate] = React.useState('');     // yyyy-MM-dd
   const [saving, setSaving] = React.useState(false);
   const [errors, setErrors] = React.useState<FieldErrors>({});
+  const [initializedFromExisting, setInitializedFromExisting] = React.useState(false);
+
+  React.useEffect(() => {
+    setInitializedFromExisting(false);
+  }, [editQuestId]);
+
+  React.useEffect(() => {
+    if (!isEditing || !existingQuest || initializedFromExisting) return;
+
+    setTitle(existingQuest.title ?? '');
+    setDescription(existingQuest.description ?? '');
+    setCategory((existingQuest.category ?? 'OTHER') as QuestCategory);
+    setVisibility((existingQuest.visibility ?? 'PRIVATE') as QuestVisibility);
+
+    const policy = existingQuest.verificationPolicy ?? null;
+    setTaskType((policy?.taskType ?? 'generic').trim() || 'generic');
+    setMinSupportScore(String(policy?.minSupportScore ?? 0.75));
+    setRequiredEvidence(fieldValueFromSignals(policy?.requiredEvidence));
+    setOptionalEvidence(fieldValueFromSignals(policy?.optionalEvidence));
+    setDisqualifiers(fieldValueFromSignals(policy?.disqualifiers));
+
+    setStartDate(isoDateOnly(existingQuest.startDate));
+    setEndDate(isoDateOnly(existingQuest.endDate));
+    setInitializedFromExisting(true);
+  }, [isEditing, existingQuest, initializedFromExisting]);
 
   const validate = (): boolean => {
     const next: FieldErrors = {};
@@ -89,7 +145,7 @@ export default function QuestForm() {
     }
 
     const today = todayISODate();
-    if (startDate && startDate < today) next.startDate = 'Start date cannot be earlier than today.';
+    if (!isEditing && startDate && startDate < today) next.startDate = 'Start date cannot be earlier than today.';
     if (startDate && endDate && endDate < startDate) next.endDate = 'End date cannot be before start date.';
 
     setErrors(next);
@@ -100,6 +156,10 @@ export default function QuestForm() {
     e.preventDefault();
     if (!user) {
       toast.error('Please log in first.');
+      return;
+    }
+    if (isEditing && (!existingQuest || String(existingQuest.createdByUserId) !== String(user.id))) {
+      toast.error('Only the quest owner can edit this quest.');
       return;
     }
     if (!validate()) {
@@ -115,37 +175,81 @@ export default function QuestForm() {
       taskType: taskType.trim() || 'generic',
     };
 
-    const payload: CreateQuestInput = {
-      title: title.trim(),
-      description: description.trim(),
-      category,
-      startDate: dayStartUtcISO(startDate),
-      endDate: dayEndUtcISO(endDate),
-      createdByUserId: String(user.id),
-      visibility, // NEW
-      verificationPolicy,
-    };
-
     try {
       setSaving(true);
-      await QuestsApi.create(payload);
-      toast.success('Quest created!');
-      navigate('/quests');
+      if (isEditing) {
+        const payload: UpdateQuestInput = {
+          title: title.trim(),
+          description: description.trim(),
+          category,
+          startDate: dayStartUtcISO(startDate),
+          endDate: dayEndUtcISO(endDate),
+          visibility,
+          verificationPolicy,
+        };
+        await updateQuest.mutateAsync(payload);
+        toast.success('Quest updated!');
+        navigate(`/quests/${editQuestId}`);
+      } else {
+        const payload: CreateQuestInput = {
+          title: title.trim(),
+          description: description.trim(),
+          category,
+          startDate: dayStartUtcISO(startDate),
+          endDate: dayEndUtcISO(endDate),
+          createdByUserId: String(user.id),
+          visibility,
+          verificationPolicy,
+        };
+        await QuestsApi.create(payload);
+        toast.success('Quest created!');
+        navigate('/quests');
+      }
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err, 'Failed to create quest'));
+      toast.error(getErrorMessage(err, isEditing ? 'Failed to update quest' : 'Failed to create quest'));
     } finally {
       setSaving(false);
     }
   }
 
-  const minStart = todayISODate();
+  const minStart = isEditing ? undefined : todayISODate();
   const minEnd = startDate || undefined;
+  const isOwner = !!(user && existingQuest && String(existingQuest.createdByUserId) === String(user.id));
+  const submitBusy = saving || updateQuest.isPending;
+
+  if (isEditing && isLoadingQuest) {
+    return (
+      <PageShell className="mx-auto max-w-3xl">
+        <LoadingState label="Loading quest..." />
+      </PageShell>
+    );
+  }
+
+  if (isEditing && (isQuestError || !existingQuest)) {
+    return (
+      <PageShell className="mx-auto max-w-3xl">
+        <ErrorState message={getErrorMessage(questError, 'Failed to load quest for editing')} />
+      </PageShell>
+    );
+  }
+
+  if (isEditing && !isOwner) {
+    return (
+      <PageShell className="mx-auto max-w-3xl">
+        <ErrorState message="Only the quest owner can edit this quest." />
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell className="mx-auto max-w-3xl">
       <PageHeader
-        title="Create Quest"
-        description="Define the goal, timing, category, and visibility before people start submitting proof."
+        title={isEditing ? 'Edit Quest' : 'Create Quest'}
+        description={
+          isEditing
+            ? 'Update quest details, timing, visibility, and verification signals.'
+            : 'Define the goal, timing, category, and visibility before people start submitting proof.'
+        }
       />
 
       <form onSubmit={onSubmit}>
@@ -304,8 +408,8 @@ export default function QuestForm() {
             <Button type="button" onClick={() => navigate(-1)}>
               Cancel
             </Button>
-            <Button disabled={saving} variant="primary">
-              {saving ? 'Creating...' : 'Create'}
+            <Button disabled={submitBusy} variant="primary">
+              {submitBusy ? (isEditing ? 'Saving...' : 'Creating...') : isEditing ? 'Save changes' : 'Create'}
             </Button>
           </div>
         </div>

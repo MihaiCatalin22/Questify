@@ -159,11 +159,6 @@ export default function CoachPage() {
 
       try {
         const excludedSuggestionTitles = getShownSuggestionTitles(goalKey);
-        console.info("[coach] generate request", {
-          includeRecentHistory: nextIncludeRecentHistory,
-          excludedSuggestionTitles,
-          goalKey,
-        });
 
         const response = await generateM.mutateAsync({
           mode: "DEFAULT",
@@ -176,19 +171,11 @@ export default function CoachPage() {
           .filter((title) => title.length > 0);
         rememberShownSuggestionTitles(goalKey, mergeUniqueTitles(excludedSuggestionTitles, returnedTitles));
 
-        console.info("[coach] generate response", {
-          status: response.status,
-          source: response.source,
-          suggestions: response.suggestions.length,
-          generatedAt: response.generatedAt,
-        });
-
         setSuggestions(response);
         setStoredCoachResponse(response);
         setViewState(response.status === "FALLBACK" ? "fallback" : "success");
       } catch (error: unknown) {
         const message = extractApiMessage(error, "Failed to generate coach suggestions");
-        console.error("[coach] generate failed", error);
         setSuggestions(null);
         setStoredCoachResponse(null);
         setErrorMessage(message);
