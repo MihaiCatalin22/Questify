@@ -24,7 +24,7 @@ public class OllamaVisionClient implements ModelClient {
                               @Value("${ai-review.model-fallback:}") String fallbackModel,
                               @Value("${ai-review.timeout-ms:120000}") int timeoutMs,
                               @Value("${ai-review.keep-alive:10m}") String keepAlive,
-                              @Value("${ai-review.max-output-tokens:220}") int maxOutputTokens) {
+                              @Value("${ai-review.max-output-tokens:420}") int maxOutputTokens) {
         this.http = WebClient.builder().baseUrl(baseUrl).build();
         this.primaryModel = primaryModel;
         this.fallbackModel = fallbackModel;

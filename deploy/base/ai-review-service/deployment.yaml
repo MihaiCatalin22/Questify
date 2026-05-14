@@ -46,7 +46,7 @@ spec:
             - { name: AI_REVIEW_MODEL_FALLBACK, value: "" }
             - { name: AI_REVIEW_TIMEOUT_MS, value: "120000" }
             - { name: AI_REVIEW_KEEP_ALIVE, value: "10m" }
-            - { name: AI_REVIEW_MAX_OUTPUT_TOKENS, value: "220" }
+            - { name: AI_REVIEW_MAX_OUTPUT_TOKENS, value: "420" }
             - name: INTERNAL_TOKEN
               valueFrom: { secretKeyRef: { name: internal-token, key: token } }
             - { name: JAVA_OPTS, value: "-XX:MaxRAMPercentage=75 -XX:+AlwaysActAsServerClassMachine" }

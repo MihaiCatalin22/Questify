@@ -60,7 +60,7 @@ function recommendationTone(value: AiReviewRecommendation): React.ComponentProps
 
 function parseSupportScore(reasons?: string[]): number | null {
   if (!reasons || reasons.length === 0) return null;
-  const scoreLine = reasons.find((line) => /support score/i.test(line));
+  const scoreLine = reasons.find((line) => /support score|evidence support/i.test(line));
   if (!scoreLine) return null;
   const match = scoreLine.match(/([01](?:\.\d+)?)/);
   if (!match) return null;
@@ -467,7 +467,7 @@ export default function SubmissionDetail() {
                   <div className="font-semibold text-[rgb(var(--text))]">How to read this</div>
                   <div>AI review is advisory evidence only. Final decision is always the reviewer’s approve/reject action.</div>
                   <div className="mt-1">
-                    Confidence/support scale: <span className="font-medium">0.00 to 1.00</span> (shown as 0% to 100%).
+                    Evidence confidence reflects how strongly the proof appears tied to this quest.
                   </div>
                 </div>
 
@@ -477,7 +477,7 @@ export default function SubmissionDetail() {
                     {recommendationLabel(aiReview.data.recommendation)}
                   </Badge>
                   <span className="text-sm text-[rgb(var(--muted))]">
-                    Confidence {Math.round((aiReview.data.confidence ?? 0) * 100)}%
+                    Evidence confidence {Math.round((aiReview.data.confidence ?? 0) * 100)}%
                   </span>
                   {(aiReview.data.supportScore !== undefined || parseSupportScore(aiReview.data.reasons) !== null) && (
                     <span className="text-sm text-[rgb(var(--muted))]">
@@ -498,18 +498,6 @@ export default function SubmissionDetail() {
                   </div>
                 )}
 
-                {aiReview.data.generatedPolicy && (
-                  <div className="text-sm text-amber-300">
-                    This recommendation used an auto-generated verification policy from quest text and is conservative.
-                  </div>
-                )}
-
-                {!!aiReview.data.decisionPath && (
-                  <div className="text-xs text-[rgb(var(--faint))]">
-                    Decision path: {aiReview.data.decisionPath}
-                  </div>
-                )}
-
                 {(aiReview.data.modelUsed || aiReview.data.fallbackUsed) && (
                   <div className="text-xs text-[rgb(var(--faint))]">
                     Model used: {aiReview.data.modelUsed || aiReview.data.modelName || 'n/a'}
@@ -527,15 +515,15 @@ export default function SubmissionDetail() {
                 )}
 
                 <div className="rounded-md border border-[rgb(var(--border-soft))] p-3 text-xs leading-6 text-[rgb(var(--muted))]">
-                  <div><span className="font-semibold text-[rgb(var(--text))]">Matched evidence:</span> Signals from quest policy that AI found in proof/text.</div>
-                  <div><span className="font-semibold text-[rgb(var(--text))]">Missing evidence:</span> Signals expected by policy but not found in proof/text.</div>
-                  <div><span className="font-semibold text-[rgb(var(--text))]">Disqualifiers:</span> Contradicting signals (for example unrelated/game-like content).</div>
-                  <div><span className="font-semibold text-[rgb(var(--text))]">OCR snippets:</span> Text extracted from the uploaded image and used as evidence.</div>
+                  <div><span className="font-semibold text-[rgb(var(--text))]">Evidence found:</span> Visible proof details that appear tied to the quest.</div>
+                  <div><span className="font-semibold text-[rgb(var(--text))]">Still missing:</span> Expected proof details that were not visible enough.</div>
+                  <div><span className="font-semibold text-[rgb(var(--text))]">Concerns:</span> Visible details that point away from this quest.</div>
+                  <div><span className="font-semibold text-[rgb(var(--text))]">Readable text:</span> Text extracted from the uploaded image.</div>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Matched evidence</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Evidence found</div>
                     <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
                       {(aiReview.data.matchedEvidence ?? []).map((item, idx) => (
                         <li key={`match-${idx}`}>{item}</li>
@@ -544,7 +532,7 @@ export default function SubmissionDetail() {
                     </ul>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Missing evidence</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Still missing</div>
                     <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
                       {(aiReview.data.missingEvidence ?? []).map((item, idx) => (
                         <li key={`missing-${idx}`}>{item}</li>
@@ -553,7 +541,7 @@ export default function SubmissionDetail() {
                     </ul>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Disqualifiers</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Concerns</div>
                     <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
                       {(aiReview.data.matchedDisqualifiers ?? []).map((item, idx) => (
                         <li key={`disq-${idx}`}>{item}</li>
@@ -562,7 +550,7 @@ export default function SubmissionDetail() {
                     </ul>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">OCR snippets</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--faint))]">Readable text</div>
                     <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[rgb(var(--muted))]">
                       {(aiReview.data.ocrSnippets ?? []).map((item, idx) => (
                         <li key={`ocr-${idx}`}>{item}</li>
